@@ -1,0 +1,19 @@
+version: '{branch}-{build}'
+
+configuration:
+  - Debug
+  - Release
+
+skip_tags: true
+
+build:
+  project: Ruffles.sln
+  verbosity: minimal
+
+artifacts:
+  - path: 'Ruffles\bin\*\*\Ruffles.*'
+
+image: Visual Studio 2017
+
+before_build:
+  - nuget restore
