@@ -10,12 +10,12 @@ namespace Ruffles.Configuration
         public IPAddress IPv4ListenAddress = IPAddress.Any;
         public IPAddress IPv6ListenAddress = IPAddress.IPv6Any;
         public ushort DualListenPort = 5674;
-
+        public bool UseIPv6Dual = true;
 
         // Performance
         public ushort MaxSocketBlockMilliseconds = 5;
         public ulong MinConnectionPollDelay = 50;
-        public bool EnableThreadSafety = true;
+        public bool EnableThreadSafety = false;
 
         // Memory
         public ushort MaxBufferSize = ushort.MaxValue;

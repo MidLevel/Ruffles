@@ -57,7 +57,7 @@ namespace Ruffles.Core
             incomingBuffer = new byte[config.MaxBufferSize];
             Connections = new Connection[config.MaxConnections];
 
-            bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, true);
+            bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
         }
 
         private bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool ipv6Dual)
