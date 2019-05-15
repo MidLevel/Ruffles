@@ -10,5 +10,6 @@ namespace Ruffles.Threading
         public ThreadHopType Type;
         public HeapMemory Memory;
         public EndPoint Endpoint;
+        public bool NoDelay;
     }
 }

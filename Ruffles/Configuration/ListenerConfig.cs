@@ -17,6 +17,10 @@ namespace Ruffles.Configuration
         public ulong MinConnectionPollDelay = 50;
         public bool EnableThreadSafety = false;
 
+        // Bandwidth
+        public ushort MaxMergeMessageSize = 256;
+        public ulong MinMergeDelay = 250;
+
         // Memory
         public ushort MaxBufferSize = ushort.MaxValue;
         public ushort MaxConnections = ushort.MaxValue;

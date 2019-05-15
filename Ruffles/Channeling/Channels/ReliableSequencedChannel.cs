@@ -22,7 +22,10 @@ namespace Ruffles.Channeling.Channels
 
             public void DeAlloc()
             {
-                MemoryManager.DeAlloc(Memory);
+                if (IsAlloced)
+                {
+                    MemoryManager.DeAlloc(Memory);
+                }
             }
         }
 
@@ -36,7 +39,10 @@ namespace Ruffles.Channeling.Channels
 
             public void DeAlloc()
             {
-                MemoryManager.DeAlloc(Memory);
+                if (IsAlloced)
+                {
+                    MemoryManager.DeAlloc(Memory);
+                }
             }
         }
 
@@ -150,7 +156,7 @@ namespace Ruffles.Channeling.Channels
             HeapMemory memory = MemoryManager.Alloc(payload.Count + 4);
 
             // Write headers
-            memory.Buffer[0] = (byte)MessageType.Data;
+            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
             memory.Buffer[1] = channelId;
 
             // Write the sequence
@@ -226,7 +232,7 @@ namespace Ruffles.Channeling.Channels
             HeapMemory ackMemory = MemoryManager.Alloc(4);
 
             // Write header
-            ackMemory.Buffer[0] = (byte)MessageType.Ack;
+            ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
             ackMemory.Buffer[1] = (byte)channelId;
 
             // Write sequence
@@ -234,7 +240,7 @@ namespace Ruffles.Channeling.Channels
             ackMemory.Buffer[3] = (byte)(sequence >> 8);
 
             // Send ack
-            connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4));
+            connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false);
 
             // Return memory
             MemoryManager.DeAlloc(ackMemory);
@@ -265,7 +271,7 @@ namespace Ruffles.Channeling.Channels
                             Sequence = i
                         };
 
-                        connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Memory.Buffer, _sendSequencer[i].Memory.VirtualOffset, _sendSequencer[i].Memory.VirtualCount));
+                        connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Memory.Buffer, _sendSequencer[i].Memory.VirtualOffset, _sendSequencer[i].Memory.VirtualCount), false);
                     }
                 }
             }

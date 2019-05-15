@@ -117,13 +117,13 @@ namespace Ruffles.Example
                     }
                 }
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 1)
+                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 10)
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
                     byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
-                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0);
-                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1);
+                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0, false);
+                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
 
                     messageCounter++;
                     lastSent = DateTime.Now;
@@ -216,8 +216,8 @@ namespace Ruffles.Example
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
                     byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
-                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0);
-                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1);
+                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0, false);
+                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
 
                     messageCounter++;
                     lastSent = DateTime.Now;
@@ -307,8 +307,8 @@ namespace Ruffles.Example
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
                     byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
-                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0);
-                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1);
+                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0, false);
+                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
 
                     messageCounter++;
                     lastSent = DateTime.Now;

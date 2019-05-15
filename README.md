@@ -45,13 +45,15 @@ Ruffles is 100% dependency free, it's thus very portable and should run on most 
 ### IPv6 Dual Mode
 Ruffles supports IPv6 dual socket mode. It does this by using two sockets bound to the same port, thus accomplishing full dual stack functionality that is invisible to the user.
 
+### Small Packet Merging
+Small packets will be delayed for sending, this allows them to be merged into one larger packet. This can be disabled and enabled on a per packet basis. The delay and max merge size can also be configured.
+
 
 ## Roadmap
 This is stuff I want to and plan to add
 
 * Path MTU
 * Fragmentation
-* Packet Merging
 * Explicit Nack
 * Layer 4 DOS Prevention with an on-connect HashCash challenge
 * Unreliable channel without duplication prevention

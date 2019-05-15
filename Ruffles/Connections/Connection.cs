@@ -23,6 +23,7 @@ namespace Ruffles.Connections
         public DateTime ConnectionStarted;
         public double Roundtrip = 10;
         public readonly UnreliableSequencedChannel HeartbeatChannel;
+        public MessageMerger Merger;
 
         public IChannel[] Channels;
 
@@ -36,10 +37,10 @@ namespace Ruffles.Connections
             HeartbeatChannel = new UnreliableSequencedChannel(0, this);
         }
 
-        internal void SendRaw(ArraySegment<byte> payload)
+        internal void SendRaw(ArraySegment<byte> payload, bool noMerge)
         {
             // TODO: Dead & state safety
-            Listener.SendRaw(this, payload);
+            Listener.SendRaw(this, payload, noMerge);
         }
 
         internal void Disconnect(bool sendMessage)

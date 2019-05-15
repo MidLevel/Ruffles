@@ -32,7 +32,7 @@ namespace Ruffles.Channeling.Channels
             HeapMemory memory = MemoryManager.Alloc(payload.Count + 4);
 
             // Write headers
-            memory.Buffer[0] = (byte)MessageType.Data;
+            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
             memory.Buffer[1] = channelId;
 
             // Write the sequence
@@ -57,7 +57,7 @@ namespace Ruffles.Channeling.Channels
             HeapMemory memory = MemoryManager.Alloc(3);
 
             // Write headers
-            memory.Buffer[0] = (byte)MessageType.Heartbeat;
+            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Heartbeat, false);
 
             // Write the sequence
             memory.Buffer[1] = (byte)_lastOutboundSequenceNumber;

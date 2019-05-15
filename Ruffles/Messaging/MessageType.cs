@@ -10,6 +10,7 @@
         Heartbeat,
         Data,
         Disconnect,
-        Ack
+        Ack,
+        Merge
     }
 }

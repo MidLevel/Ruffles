@@ -82,7 +82,7 @@ namespace Ruffles.Messaging
             }
         }
 
-        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId)
+        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
         {
             // TODO: Safety
             IChannel channel = connection.Channels[channelId];
@@ -91,7 +91,7 @@ namespace Ruffles.Messaging
 
             if (messageMemory != null)
             {
-                connection.SendRaw(new ArraySegment<byte>(messageMemory.Buffer, messageMemory.VirtualOffset, messageMemory.VirtualCount));
+                connection.SendRaw(new ArraySegment<byte>(messageMemory.Buffer, messageMemory.VirtualOffset, messageMemory.VirtualCount), noDelay);
             }
 
             if (dealloc)
