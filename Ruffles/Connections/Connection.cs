@@ -47,7 +47,7 @@ namespace Ruffles.Connections
         internal void Disconnect(bool sendMessage)
         {
             // TODO: Dead & state safety
-            Listener.DisconnectConnection(this, sendMessage);
+            Listener.DisconnectConnection(this, sendMessage, false);
         }
 
         internal void AddRoundtripSample(ulong sample)

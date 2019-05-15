@@ -240,7 +240,7 @@ namespace Ruffles.Core
             else
             {
                 // TODO: Safety
-                DisconnectConnection(Connections[id], true);
+                DisconnectConnection(Connections[id], true, false);
             }
         }
 
@@ -319,7 +319,7 @@ namespace Ruffles.Core
                         case ThreadHopType.Disconnect:
                             {
                                 // TODO: Safety
-                                DisconnectConnection(Connections[@event.ConnectionId], true);
+                                DisconnectConnection(Connections[@event.ConnectionId], true, false);
                             }
                             break;
                         case ThreadHopType.Send:
@@ -443,7 +443,7 @@ namespace Ruffles.Core
                         if ((DateTime.Now - Connections[i].ConnectionStarted).TotalMilliseconds > config.HandshakeTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
-                            DisconnectConnection(Connections[i], false);
+                            DisconnectConnection(Connections[i], false, true);
 
                             // Send to userspace
                             EventQueueLock.EnterWriteLock();
@@ -467,23 +467,7 @@ namespace Ruffles.Core
                         if ((DateTime.Now - Connections[i].LastMessageIn).TotalMilliseconds > config.ConnectionTimeout)
                         {
                             // This client has not answered us in way too long. Let it go
-                            DisconnectConnection(Connections[i], false);
-
-                            // Send to userspace
-                            EventQueueLock.EnterWriteLock();
-                            try
-                            {
-                                UserEventQueue.Enqueue(new NetworkEvent()
-                                {
-                                    Connection = Connections[i],
-                                    Listener = this,
-                                    Type = NetworkEventType.Timeout
-                                });
-                            }
-                            finally
-                            {
-                                EventQueueLock.ExitWriteLock();
-                            }
+                            DisconnectConnection(Connections[i], false, true);
                         }
                     }
                 }
@@ -604,6 +588,8 @@ namespace Ruffles.Core
             // Unpack header, dont cast to MessageType enum for safety
             HeaderPacker.Unpack(payload.Array[payload.Offset], out byte messageType, out bool fragmented);
 
+            Console.WriteLine("MT: " + messageType);
+
             switch (messageType)
             {
                 case (byte)MessageType.Merge:
@@ -663,7 +649,7 @@ namespace Ruffles.Core
                             if (payload.Count < 10)
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
-                                DisconnectConnection(connection, false);
+                                DisconnectConnection(connection, false, false);
                                 return;
                             }
 
@@ -722,7 +708,7 @@ namespace Ruffles.Core
                             if (payload.Count < 9)
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
-                                DisconnectConnection(connection, false);
+                                DisconnectConnection(connection, false, false);
                                 return;
                             }
 
@@ -784,7 +770,7 @@ namespace Ruffles.Core
                             else
                             {
                                 // Failed, disconnect them
-                                DisconnectConnection(connection, false);
+                                DisconnectConnection(connection, false, false);
                             }
                         }
                     }
@@ -807,7 +793,7 @@ namespace Ruffles.Core
                             if (payload.Count < 2)
                             {
                                 // Invalid size.
-                                DisconnectConnection(pendingConnection, false);
+                                DisconnectConnection(pendingConnection, false, false);
                                 return;
                             }
 
@@ -819,7 +805,7 @@ namespace Ruffles.Core
                             if (payload.Count < channelCount + 2)
                             {
                                 // Invalid size.
-                                DisconnectConnection(pendingConnection, false);
+                                DisconnectConnection(pendingConnection, false, false);
                                 return;
                             }
 
@@ -861,7 +847,7 @@ namespace Ruffles.Core
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
-                                            DisconnectConnection(pendingConnection, false);
+                                            DisconnectConnection(pendingConnection, false, false);
                                         }
                                         break;
                                 }
@@ -915,7 +901,7 @@ namespace Ruffles.Core
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
-                                            DisconnectConnection(pendingConnection, false);
+                                            DisconnectConnection(pendingConnection, false, false);
                                         }
                                         break;
                                 }
@@ -963,6 +949,8 @@ namespace Ruffles.Core
                 case (byte)MessageType.Heartbeat:
                     {
                         Connection connection = GetConnection(endpoint);
+
+                        Console.WriteLine("GOT HEARTBEAT");
 
                         if (connection != null)
                         {
@@ -1015,6 +1003,9 @@ namespace Ruffles.Core
                         }
                     }
                     break;
+                default:
+                    Console.WriteLine("MessageType: " + messageType + "unknown");
+                    break;
             }
         }
 
@@ -1053,20 +1044,19 @@ namespace Ruffles.Core
             }
         }
 
-        internal void DisconnectConnection(Connection connection, bool sendMessage)
+        internal void DisconnectConnection(Connection connection, bool sendMessage, bool timeout)
         {
-            if (connection.State == ConnectionState.Connected && sendMessage)
+            Console.WriteLine(Environment.StackTrace.ToString());
+
+            if (connection.State == ConnectionState.Connected && sendMessage && !timeout)
             {
-                if (sendMessage)
-                {
-                    // Send disconnect message
+                // Send disconnect message
 
-                    // Write disconnect header
-                    outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Disconnect, false);
+                // Write disconnect header
+                outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Disconnect, false);
 
-                    // Send disconnect message
-                    connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
-                }
+                // Send disconnect message
+                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
             }
 
             if (config.ReuseConnections)
@@ -1102,6 +1092,22 @@ namespace Ruffles.Core
             else
             {
                 AddressConnectionLookup.Remove(connection.EndPoint);
+            }
+
+            // Send disconnect to userspace
+            EventQueueLock.EnterWriteLock();
+            try
+            {
+                UserEventQueue.Enqueue(new NetworkEvent()
+                {
+                    Connection = connection,
+                    Listener = this,
+                    Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect
+                });
+            }
+            finally
+            {
+                EventQueueLock.ExitWriteLock();
             }
         }
 
@@ -1186,7 +1192,7 @@ namespace Ruffles.Core
                                 {
                                     // Unknown channel type. Disconnect.
                                     // TODO: Fix
-                                    DisconnectConnection(connection, false);
+                                    DisconnectConnection(connection, false, false);
                                 }
                                 break;
                         }

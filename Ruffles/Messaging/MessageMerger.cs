@@ -27,9 +27,7 @@ namespace Ruffles.Messaging
 
         internal bool TryWrite(ArraySegment<byte> payload)
         {
-            int sizeRequiredToWriteSize = 2;
-
-            if (payload.Count + _position + sizeRequiredToWriteSize > _buffer.Length - 1)
+            if (payload.Count + _position + 2 > _buffer.Length)
             {
                 // Wont fit
                 return false;
@@ -39,13 +37,13 @@ namespace Ruffles.Messaging
                 // TODO: VarInt
                 // Write the segment size
                 _buffer[_position] = (byte)(payload.Count);
-                _buffer[_position + 1] = (byte)((payload.Count) >> 8);
+                _buffer[_position + 1] = (byte)(payload.Count >> 8);
 
                 // Copy the payload with the header
-                Buffer.BlockCopy(payload.Array, payload.Offset, _buffer, _position + sizeRequiredToWriteSize, payload.Count);
+                Buffer.BlockCopy(payload.Array, payload.Offset, _buffer, _position + 2, payload.Count);
 
                 // Update the position
-                _position += sizeRequiredToWriteSize + payload.Count;
+                _position += 2 + payload.Count;
 
                 return true;
             }
@@ -122,7 +120,7 @@ namespace Ruffles.Messaging
                 if (type != (byte)MessageType.Merge)
                 {
                     // Add the new segment
-                    _unpackSegments.Add(new ArraySegment<byte>(payload.Array, payload.Offset + packetOffset, size));
+                    _unpackSegments.Add(new ArraySegment<byte>(payload.Array, payload.Offset + packetOffset + 2, size));
                 }
 
                 // Increment the packetOffset
