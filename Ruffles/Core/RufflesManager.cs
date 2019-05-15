@@ -45,6 +45,11 @@ namespace Ruffles.Core
 
         public Listener AddListener(ListenerConfig config)
         {
+            if (Threaded && !config.EnableThreadSafety)
+            {
+                Console.WriteLine("Running a threaded manager without thread safety on the Listener is not recomended!");
+            }
+
             Listener listener = new Listener(config);
 
             lock (_listenersLock)
