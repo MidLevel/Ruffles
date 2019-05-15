@@ -1003,9 +1003,6 @@ namespace Ruffles.Core
                         }
                     }
                     break;
-                default:
-                    Console.WriteLine("MessageType: " + messageType + "unknown");
-                    break;
             }
         }
 
