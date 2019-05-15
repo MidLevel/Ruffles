@@ -5,6 +5,7 @@
         Reliable,
         Unreliable,
         UnreliableSequenced,
-        ReliableSequenced
+        ReliableSequenced,
+        UnreliableRaw
     }
 }

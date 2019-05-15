@@ -35,6 +35,8 @@ All messages are guaranteed to be delivered with the order also being guaranteed
 Delivery is not guaranteed, nor is the order. Duplicates are dropped.
 #### UnreliableSequenced
 Delivery is not guaranteed but the order is. Older packets and duplicate packets are dropped.
+#### UnreliableRaw
+Delivery is not guaranteed nor is the order. Duplicates are not dropped.
 
 ### Threading
 Ruffles can run in many different threading environments, it can be run passively single threaded, actively single threaded, or in a threaded environment where everything is done via message queues while remaining garbage free.
@@ -56,7 +58,6 @@ This is stuff I want to and plan to add
 * Fragmentation
 * Explicit Nack
 * Layer 4 DOS Prevention with an on-connect HashCash challenge
-* Unreliable channel without duplication prevention
 * Reliable StateUpdate / LastPacket channel
 * MLAPI.Relay Support
 * MLAPI.NAT (Holepuncher) support

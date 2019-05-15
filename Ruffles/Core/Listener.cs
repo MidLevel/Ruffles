@@ -855,6 +855,11 @@ namespace Ruffles.Core
                                             channelTypes[i] = ChannelType.ReliableSequenced;
                                         }
                                         break;
+                                    case (byte)ChannelType.UnreliableRaw:
+                                        {
+                                            channelTypes[i] = ChannelType.UnreliableRaw;
+                                        }
+                                        break;
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
@@ -902,6 +907,11 @@ namespace Ruffles.Core
                                     case ChannelType.ReliableSequenced:
                                         {
                                             pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, this, config);
+                                        }
+                                        break;
+                                    case ChannelType.UnreliableRaw:
+                                        {
+                                            pendingConnection.Channels[i] = new UnreliableRawChannel(i, pendingConnection, config);
                                         }
                                         break;
                                     default:
