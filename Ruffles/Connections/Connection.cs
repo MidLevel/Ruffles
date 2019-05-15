@@ -7,29 +7,30 @@ using Ruffles.Messaging;
 
 namespace Ruffles.Connections
 {
-    internal class Connection
+    public class Connection
     {
-        public ushort Id;
-        public bool Dead;
-        public ConnectionState State;
-        public MessageStatus HailStatus;
-        public EndPoint EndPoint;
-        public Listener Listener;
-        public ulong ConnectionChallenge;
-        public byte ChallengeDifficulty;
-        public ulong ChallengeAnswer;
-        public DateTime LastMessageOut;
-        public DateTime LastMessageIn;
-        public DateTime ConnectionStarted;
-        public double Roundtrip = 10;
-        public readonly UnreliableSequencedChannel HeartbeatChannel;
-        public MessageMerger Merger;
-
-        public IChannel[] Channels;
+        public ulong Id { get; internal set; }
+        public bool Dead { get; internal set; }
+        internal bool Recycled { get; set; }
+        public ConnectionState State { get; internal set; }
+        internal MessageStatus HailStatus;
+        public EndPoint EndPoint { get; internal set; }
+        public Listener Listener { get; internal set; }
+        internal ulong ConnectionChallenge { get; set; }
+        internal byte ChallengeDifficulty { get; set; }
+        internal ulong ChallengeAnswer { get; set; }
+        public DateTime LastMessageOut { get; internal set; }
+        public DateTime LastMessageIn { get; internal set; }
+        public DateTime ConnectionStarted { get; internal set; }
+        public double Roundtrip { get; internal set; } = 10;
+        internal readonly UnreliableSequencedChannel HeartbeatChannel;
+        internal MessageMerger Merger;
+        internal IChannel[] Channels;
+        internal ChannelType[] ChannelTypes;
 
         // Handshake resend values
-        public byte HandshakeResendAttempts;
-        public DateTime HandshakeLastSendTime;
+        internal byte HandshakeResendAttempts;
+        internal DateTime HandshakeLastSendTime;
 
 
         internal Connection()
@@ -53,6 +54,14 @@ namespace Ruffles.Connections
         {
             // TODO: Dead & state safety
             Roundtrip = 0.0125 * Roundtrip + (1 - 0.0125) * sample;
+        }
+
+        public void Recycle()
+        {
+            if (Dead && !Recycled)
+            {
+                Recycled = true;
+            }
         }
     }
 }

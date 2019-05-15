@@ -34,7 +34,7 @@ namespace Ruffles.Messaging
                 {
                     connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
                     {
-                        ConnectionId = connection.Id,
+                        Connection = connection,
                         Listener = connection.Listener,
                         Type = NetworkEventType.Data,
                         AllowUserRecycle = true,
@@ -64,7 +64,7 @@ namespace Ruffles.Messaging
                         {
                             connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
                             {
-                                ConnectionId = connection.Id,
+                                Connection = connection,
                                 Listener = connection.Listener,
                                 Type = NetworkEventType.Data,
                                 AllowUserRecycle = true,

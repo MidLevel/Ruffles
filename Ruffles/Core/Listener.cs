@@ -451,7 +451,7 @@ namespace Ruffles.Core
                             {
                                 UserEventQueue.Enqueue(new NetworkEvent()
                                 {
-                                    ConnectionId = Connections[i].Id,
+                                    Connection = Connections[i],
                                     Listener = this,
                                     Type = NetworkEventType.Timeout
                                 });
@@ -475,7 +475,7 @@ namespace Ruffles.Core
                             {
                                 UserEventQueue.Enqueue(new NetworkEvent()
                                 {
-                                    ConnectionId = Connections[i].Id,
+                                    Connection = Connections[i],
                                     Listener = this,
                                     Type = NetworkEventType.Timeout
                                 });
@@ -549,8 +549,11 @@ namespace Ruffles.Core
                 {
                     return new NetworkEvent()
                     {
-                        ConnectionId = 0,
+                        Connection = null,
                         Listener = this,
+                        Data = new ArraySegment<byte>(),
+                        AllowUserRecycle = false,
+                        InternalMemory = null,
                         Type = NetworkEventType.Nothing
                     };
                 }
@@ -774,7 +777,7 @@ namespace Ruffles.Core
                                 {
                                     UserEventQueue.Enqueue(new NetworkEvent()
                                     {
-                                        ConnectionId = connection.Id,
+                                        Connection = connection,
                                         Listener = this,
                                         Type = NetworkEventType.Connect
                                     });
@@ -827,7 +830,7 @@ namespace Ruffles.Core
                             }
 
                             // Alloc the types
-                            ChannelType[] channelTypes = new ChannelType[channelCount];
+                            pendingConnection.ChannelTypes = new ChannelType[channelCount];
 
                             // Read the types
                             for (byte i = 0; i < channelCount; i++)
@@ -838,27 +841,27 @@ namespace Ruffles.Core
                                 {
                                     case (byte)ChannelType.Reliable:
                                         {
-                                            channelTypes[i] = ChannelType.Reliable;
+                                            pendingConnection.ChannelTypes[i] = ChannelType.Reliable;
                                         }
                                         break;
                                     case (byte)ChannelType.Unreliable:
                                         {
-                                            channelTypes[i] = ChannelType.Unreliable;
+                                            pendingConnection.ChannelTypes[i] = ChannelType.Unreliable;
                                         }
                                         break;
                                     case (byte)ChannelType.UnreliableSequenced:
                                         {
-                                            channelTypes[i] = ChannelType.UnreliableSequenced;
+                                            pendingConnection.ChannelTypes[i] = ChannelType.UnreliableSequenced;
                                         }
                                         break;
                                     case (byte)ChannelType.ReliableSequenced:
                                         {
-                                            channelTypes[i] = ChannelType.ReliableSequenced;
+                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableSequenced;
                                         }
                                         break;
                                     case (byte)ChannelType.UnreliableRaw:
                                         {
-                                            channelTypes[i] = ChannelType.UnreliableRaw;
+                                            pendingConnection.ChannelTypes[i] = ChannelType.UnreliableRaw;
                                         }
                                         break;
                                     default:
@@ -886,9 +889,9 @@ namespace Ruffles.Core
                             pendingConnection.Channels = new IChannel[channelCount];
 
                             // Alloc the channels
-                            for (byte i = 0; i < channelTypes.Length; i++)
+                            for (byte i = 0; i < pendingConnection.ChannelTypes.Length; i++)
                             {
-                                switch (channelTypes[i])
+                                switch (pendingConnection.ChannelTypes[i])
                                 {
                                     case ChannelType.Reliable:
                                         {
@@ -932,7 +935,7 @@ namespace Ruffles.Core
                             {
                                 UserEventQueue.Enqueue(new NetworkEvent()
                                 {
-                                    ConnectionId = pendingConnection.Id,
+                                    Connection = pendingConnection,
                                     Listener = this,
                                     Type = NetworkEventType.Connect
                                 });
@@ -1072,13 +1075,27 @@ namespace Ruffles.Core
                 }
             }
 
-            // Mark as dead, this will allow it to be reclaimed
-            connection.Dead = true;
-
-            // Reset all channels, releasing memory etc
-            for (int i = 0; i < connection.Channels.Length; i++)
+            if (config.ReuseConnections)
             {
-                connection.Channels[i].Reset();
+                // Mark as dead, this will allow it to be reclaimed
+                connection.Dead = true;
+
+                // Reset all channels, releasing memory etc
+                for (int i = 0; i < connection.Channels.Length; i++)
+                {
+                    connection.Channels[i].Reset();
+                }
+
+                // Release all memory from the heartbeat channel
+                connection.HeartbeatChannel.Reset();
+
+                // Clean the merger
+                connection.Merger.Clear();
+            }
+            else
+            {
+                // Release to GC unless user has a hold of it
+                Connections[connection.Id] = null;
             }
 
             // Remove connection lookups
@@ -1112,6 +1129,7 @@ namespace Ruffles.Core
                     connection = new Connection
                     {
                         Dead = false,
+                        Recycled = false,
                         Id = i,
                         State = state,
                         HailStatus = new MessageStatus(),
@@ -1125,6 +1143,7 @@ namespace Ruffles.Core
                         HandshakeResendAttempts = 0,
                         ChallengeAnswer = 0,
                         Channels = new IChannel[0],
+                        ChannelTypes = new ChannelType[0],
                         HandshakeLastSendTime = DateTime.Now,
                         Roundtrip = 10,
                         Merger = new MessageMerger(config.MaxMergeMessageSize, config.MinMergeDelay)
@@ -1186,11 +1205,12 @@ namespace Ruffles.Core
 
                     break;
                 }
-                else if (Connections[i].Dead)
+                else if (Connections[i].Dead && Connections[i].Recycled)
                 {
                     // This is no longer used, reuse it
                     connection = Connections[i];
                     connection.Dead = false;
+                    connection.Recycled = false;
                     connection.State = state;
                     connection.HailStatus = new MessageStatus();
                     connection.Id = i;
@@ -1204,17 +1224,6 @@ namespace Ruffles.Core
                     connection.ChallengeAnswer = 0;
                     connection.HandshakeLastSendTime = DateTime.Now;
                     connection.Roundtrip = 10;
-                    connection.HeartbeatChannel.Reset();
-                    connection.Merger.Clear();
-
-                    if (Connections[i].Channels != null)
-                    {
-                        for (int x = 0; x < Connections[i].Channels.Length; x++)
-                        {
-                            // Reset the channels, releasing memory etc
-                            Connections[i].Channels[x].Reset();
-                        }
-                    }
 
                     AddressPendingConnectionLookup.Add(endpoint, connection);
 

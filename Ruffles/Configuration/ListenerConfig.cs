@@ -16,6 +16,7 @@ namespace Ruffles.Configuration
         public ushort MaxSocketBlockMilliseconds = 5;
         public ulong MinConnectionPollDelay = 50;
         public bool EnableThreadSafety = false;
+        public bool ReuseConnections = true;
 
         // Bandwidth
         public ushort MaxMergeMessageSize = 256;

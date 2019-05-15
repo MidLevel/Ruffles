@@ -1,6 +1,6 @@
 ﻿namespace Ruffles.Connections
 {
-    internal enum ConnectionState : byte
+    public enum ConnectionState : byte
     {
         RequestingConnection,
         RequestingChallenge,

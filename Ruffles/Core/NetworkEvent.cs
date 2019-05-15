@@ -1,4 +1,5 @@
 ﻿using System;
+using Ruffles.Connections;
 using Ruffles.Exceptions;
 using Ruffles.Memory;
 
@@ -6,10 +7,11 @@ namespace Ruffles.Core
 {
     public struct NetworkEvent
     {
-        public NetworkEventType Type;
-        public Listener Listener;
-        public ushort ConnectionId;
-        public ArraySegment<byte> Data;
+        public NetworkEventType Type { get; internal set; }
+        public Listener Listener { get; internal set; }
+        public Connection Connection { get; internal set; }
+        public ArraySegment<byte> Data { get; internal set; }
+
         internal HeapMemory InternalMemory;
         internal bool AllowUserRecycle;
 

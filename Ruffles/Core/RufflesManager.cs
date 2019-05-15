@@ -89,8 +89,11 @@ namespace Ruffles.Core
 
             return new NetworkEvent()
             {
-                ConnectionId = 0,
+                Connection = null,
                 Listener = null,
+                Data = new ArraySegment<byte>(),
+                AllowUserRecycle = false,
+                InternalMemory = null,
                 Type = NetworkEventType.Nothing
             };
         }
