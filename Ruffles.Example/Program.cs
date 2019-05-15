@@ -93,7 +93,7 @@ namespace Ruffles.Example
 
                     if (serverEvent.Type == NetworkEventType.Connect)
                     {
-                        clientId = serverEvent.ConnectionId;
+                        clientId = serverEvent.Connection.Id;
                     }
                 }
 
@@ -106,7 +106,7 @@ namespace Ruffles.Example
 
                     if (clientEvent.Type == NetworkEventType.Connect)
                     {
-                        serverId = clientEvent.ConnectionId;
+                        serverId = clientEvent.Connection.Id;
                     }
 
                     if (clientEvent.Type == NetworkEventType.Data)
@@ -187,7 +187,7 @@ namespace Ruffles.Example
 
                     if (serverEvent.Type == NetworkEventType.Connect)
                     {
-                        clientId = serverEvent.ConnectionId;
+                        clientId = serverEvent.Connection.Id;
                     }
                 }
 
@@ -200,7 +200,7 @@ namespace Ruffles.Example
 
                     if (clientEvent.Type == NetworkEventType.Connect)
                     {
-                        serverId = clientEvent.ConnectionId;
+                        serverId = clientEvent.Connection.Id;
                     }
 
                     if (clientEvent.Type == NetworkEventType.Data)
@@ -278,7 +278,7 @@ namespace Ruffles.Example
 
                     if (serverEvent.Type == NetworkEventType.Connect)
                     {
-                        clientId = serverEvent.ConnectionId;
+                        clientId = serverEvent.Connection.Id;
                     }
                 }
 
@@ -291,7 +291,7 @@ namespace Ruffles.Example
 
                     if (clientEvent.Type == NetworkEventType.Connect)
                     {
-                        serverId = clientEvent.ConnectionId;
+                        serverId = clientEvent.Connection.Id;
                     }
 
                     if (clientEvent.Type == NetworkEventType.Data)
