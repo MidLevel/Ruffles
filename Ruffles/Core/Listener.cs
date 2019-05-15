@@ -634,12 +634,6 @@ namespace Ruffles.Core
                             return;
                         }
 
-                        if (AddressConnectionLookup.ContainsKey(endpoint) || AddressPendingConnectionLookup.ContainsKey(endpoint))
-                        {
-                            // This endpoint already has a active or pending connection. Prevent slot filling by being silent
-                            return;
-                        }
-
                         Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingChallenge);
 
                         if (connection != null)
