@@ -1163,6 +1163,11 @@ namespace Ruffles.Core
                                     connection.Channels[x] = new ReliableSequencedChannel(x, connection, this, config);
                                 }
                                 break;
+                            case ChannelType.UnreliableRaw:
+                                {
+                                    connection.Channels[x] = new UnreliableRawChannel(x, connection, config);
+                                }
+                                break;
                             default:
                                 {
                                     // Unknown channel type. Disconnect.
