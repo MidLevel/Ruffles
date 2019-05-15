@@ -4,16 +4,34 @@ using System.Text;
 using Ruffles.Channeling;
 using Ruffles.Configuration;
 using Ruffles.Core;
-using Ruffles.Simulation;
 
 namespace Ruffles.Example
 {
-    class Program
+    public class Program
     {
-        static void Main(string[] args)
+        internal static readonly ListenerConfig ServerConfig = new ListenerConfig()
         {
-            // Uncomment the one you want to run.
+            ChallengeDifficulty = 25, // Difficulty 25 is fairly hard
+            ChannelTypes = new ChannelType[]
+            {
+                ChannelType.Reliable,
+                ChannelType.ReliableSequenced,
+                ChannelType.Unreliable,
+                ChannelType.UnreliableSequenced
+            },
+            DualListenPort = 5674
+        };
 
+        internal static readonly ListenerConfig ClientConfig = new ListenerConfig()
+        {
+            ChallengeDifficulty = 25, // Difficulty 25 is fairly hard
+            DualListenPort = 0 // Port 0 means we get a port by the operating system
+        };
+
+
+        public static void Main(string[] args)
+        {
+            // Uncomment the thread mode you want to run.
 
             NoRufflesManager();
             // RufflesManagerSingleThreaded();
@@ -22,81 +40,47 @@ namespace Ruffles.Example
 
         private static void NoRufflesManager()
         {
-            Listener server = new Listener(new ListenerConfig()
-            {
-                ChallengeDifficulty = 25,
-                IPv4ListenAddress = IPAddress.Any,
-                IPv6ListenAddress = IPAddress.IPv6Any,
-                DualListenPort = 5674,
-                MaxBufferSize = 4096,
-                MaxConnections = 200,
-                MaxPendingConnections = 200,
-                MaxSocketBlockMilliseconds = 5,
-                MinConnectionPollDelay = 50,
-                ConnectionTimeout = 60000,
-                HandshakeMinResendDelay = 1000,
-                MaxConnectionRequestResends = 100,
-                MinHeartbeatDelay = 5000,
-                HandshakeTimeout = 60000,
-                ConnectionRequestMinResendDelay = 1000,
-                MaxHandshakeResends = 100,
-                EnableThreadSafety = false,
-                ChannelTypes = new ChannelType[] { ChannelType.ReliableSequenced, ChannelType.Reliable },
-                UseSimulator = true,
-                SimulatorConfig = new SimulatorConfig()
-                {
-                    DropPercentage = 0.1f,
-                    MaxLatency = 300,
-                    MinLatency = 50
-                }
-            });
+            // Since we run single threaded. We dont need thread safety. It will slow down Ruffles
+            ServerConfig.EnableThreadSafety = false;
+            ClientConfig.EnableThreadSafety = false;
 
-            Listener client = new Listener(new ListenerConfig()
-            {
-                ChallengeDifficulty = 25,
-                IPv4ListenAddress = IPAddress.Any,
-                IPv6ListenAddress = IPAddress.IPv6Any,
-                DualListenPort = 0,
-                MaxBufferSize = 4096,
-                MaxConnections = 200,
-                MaxPendingConnections = 200,
-                MaxSocketBlockMilliseconds = 5,
-                MinConnectionPollDelay = 50,
-                ConnectionTimeout = 60000,
-                HandshakeMinResendDelay = 1000,
-                MaxConnectionRequestResends = 100,
-                MinHeartbeatDelay = 5000,
-                HandshakeTimeout = 60000,
-                ConnectionRequestMinResendDelay = 1000,
-                MaxHandshakeResends = 100,
-                EnableThreadSafety = false,
-                UseSimulator = true,
-                SimulatorConfig = new SimulatorConfig()
-                {
-                    DropPercentage = 0.1f,
-                    MaxLatency = 300,
-                    MinLatency = 50
-                }
-            });
+            Listener server = new Listener(ServerConfig);
 
+            Listener client = new Listener(ClientConfig);
+
+            // IPv4 Connect
             //client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
+
+            // IPv6 Connect
             client.Connect(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
 
-
+            // The server stores the clients id here
             ulong clientId = 0;
+            // The client stores the servers id here
             ulong serverId = 0;
 
+            // The time when the connection started
             DateTime started = DateTime.Now;
+
+            // The time when the last message was sent
             DateTime lastSent = DateTime.MinValue;
+
+            // The amount of message that has been received
             int messagesReceived = 0;
+
+            // The amount of messages that has been sent
             int messageCounter = 0;
 
             while (true)
             {
+                // Runs all the internals
                 client.RunInternalLoop();
+                // Runs all the internals
                 server.RunInternalLoop();
 
+                // Polls server for events
                 NetworkEvent serverEvent = server.Poll();
+                // Polls client for events
                 NetworkEvent clientEvent = client.Poll();
 
 
@@ -128,18 +112,19 @@ namespace Ruffles.Example
                     if (clientEvent.Type == NetworkEventType.Data)
                     {
                         messagesReceived++;
-                        Console.WriteLine("Payload: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"" + " Total: " + messagesReceived);
+                        Console.WriteLine("Got message: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"");
                         clientEvent.Recycle();
                     }
                 }
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalMilliseconds >= 50)
+                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 1)
                 {
-                    byte[] helloReliable = Encoding.ASCII.GetBytes("RELIABLE HELLO WORLD" + messageCounter);
-                    byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("RELIABLE SEQUENCED HELLO WORLD" + messageCounter);
+                    byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
+                    byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
                     server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0);
                     server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1);
+
                     messageCounter++;
                     lastSent = DateTime.Now;
                 }
@@ -148,83 +133,49 @@ namespace Ruffles.Example
 
         private static void RufflesManagerSingleThreaded()
         {
+            // Create a ruffles manager
             RufflesManager manager = new RufflesManager(false);
 
-            Listener server = manager.AddListener(new ListenerConfig()
-            {
-                ChallengeDifficulty = 25,
-                IPv4ListenAddress = IPAddress.Any,
-                IPv6ListenAddress = IPAddress.IPv6Any,
-                DualListenPort = 5674,
-                MaxBufferSize = 4096,
-                MaxConnections = 200,
-                MaxPendingConnections = 200,
-                MaxSocketBlockMilliseconds = 5,
-                MinConnectionPollDelay = 50,
-                ConnectionTimeout = 60000,
-                HandshakeMinResendDelay = 1000,
-                MaxConnectionRequestResends = 100,
-                MinHeartbeatDelay = 5000,
-                HandshakeTimeout = 60000,
-                ConnectionRequestMinResendDelay = 1000,
-                MaxHandshakeResends = 100,
-                EnableThreadSafety = false,
-                ChannelTypes = new ChannelType[] { ChannelType.ReliableSequenced, ChannelType.Reliable },
-                UseSimulator = true,
-                SimulatorConfig = new SimulatorConfig()
-                {
-                    DropPercentage = 0.1f,
-                    MaxLatency = 300,
-                    MinLatency = 50
-                }
-            });
+            // Since we run single threaded. We dont need thread safety. It will slow down Ruffles
+            ServerConfig.EnableThreadSafety = false;
+            ClientConfig.EnableThreadSafety = false;
 
-            Listener client = manager.AddListener(new ListenerConfig()
-            {
-                ChallengeDifficulty = 25,
-                IPv4ListenAddress = IPAddress.Any,
-                IPv6ListenAddress = IPAddress.IPv6Any,
-                DualListenPort = 0,
-                MaxBufferSize = 4096,
-                MaxConnections = 200,
-                MaxPendingConnections = 200,
-                MaxSocketBlockMilliseconds = 5,
-                MinConnectionPollDelay = 50,
-                ConnectionTimeout = 60000,
-                HandshakeMinResendDelay = 1000,
-                MaxConnectionRequestResends = 100,
-                MinHeartbeatDelay = 5000,
-                HandshakeTimeout = 60000,
-                ConnectionRequestMinResendDelay = 1000,
-                MaxHandshakeResends = 100,
-                EnableThreadSafety = false,
-                UseSimulator = true,
-                SimulatorConfig = new SimulatorConfig()
-                {
-                    DropPercentage = 0.1f,
-                    MaxLatency = 300,
-                    MinLatency = 50
-                }
-            });
+            Listener server = manager.AddListener(ServerConfig);
 
+            Listener client = manager.AddListener(ClientConfig);
+
+            // IPv4 Connect
             //client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
+
+            // IPv6 Connect
             client.Connect(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
 
+            // The server stores the clients id here
             ulong clientId = 0;
+            // The client stores the servers id here
             ulong serverId = 0;
 
+            // The time when the connection started
             DateTime started = DateTime.Now;
+
+            // The time when the last message was sent
             DateTime lastSent = DateTime.MinValue;
+
+            // The amount of message that has been received
             int messagesReceived = 0;
+
+            // The amount of messages that has been sent
             int messageCounter = 0;
 
             while (true)
             {
-                NetworkEvent serverEvent = server.Poll();
-                NetworkEvent clientEvent = client.Poll();
-
-                // We need to run all internals manually since we never poll the manager, only the listeners themselves.
+                // Runs all the internals
                 manager.RunInternals();
+
+                // Polls server for events
+                NetworkEvent serverEvent = server.Poll();
+                // Polls client for events
+                NetworkEvent clientEvent = client.Poll();
 
 
                 if (serverEvent.Type != NetworkEventType.Nothing)
@@ -255,18 +206,19 @@ namespace Ruffles.Example
                     if (clientEvent.Type == NetworkEventType.Data)
                     {
                         messagesReceived++;
-                        Console.WriteLine("Payload: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"" + " Total: " + messagesReceived);
+                        Console.WriteLine("Got message: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"");
                         clientEvent.Recycle();
                     }
                 }
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalMilliseconds >= 50)
+                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 1)
                 {
-                    byte[] helloReliable = Encoding.ASCII.GetBytes("RELIABLE HELLO WORLD" + messageCounter);
-                    byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("RELIABLE SEQUENCED HELLO WORLD" + messageCounter);
+                    byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
+                    byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
                     server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0);
                     server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1);
+
                     messageCounter++;
                     lastSent = DateTime.Now;
                 }
@@ -275,77 +227,45 @@ namespace Ruffles.Example
 
         private static void RufflesManagerThreaded()
         {
+            // Create a ruffles manager
             RufflesManager manager = new RufflesManager(true);
 
-            Listener server = manager.AddListener(new ListenerConfig()
-            {
-                ChallengeDifficulty = 25,
-                IPv4ListenAddress = IPAddress.Any,
-                IPv6ListenAddress = IPAddress.IPv6Any,
-                DualListenPort = 5674,
-                MaxBufferSize = 4096,
-                MaxConnections = 200,
-                MaxPendingConnections = 200,
-                MaxSocketBlockMilliseconds = 5,
-                MinConnectionPollDelay = 50,
-                ConnectionTimeout = 60000,
-                HandshakeMinResendDelay = 1000,
-                MaxConnectionRequestResends = 100,
-                MinHeartbeatDelay = 5000,
-                HandshakeTimeout = 60000,
-                ConnectionRequestMinResendDelay = 1000,
-                MaxHandshakeResends = 100,
-                ChannelTypes = new ChannelType[] { ChannelType.ReliableSequenced, ChannelType.Reliable },
-                UseSimulator = true,
-                SimulatorConfig = new SimulatorConfig()
-                {
-                    DropPercentage = 0.1f,
-                    MaxLatency = 300,
-                    MinLatency = 50
-                }
-            });
+            // Since we run multi threaded. We need thread safety.
+            ServerConfig.EnableThreadSafety = true;
+            ClientConfig.EnableThreadSafety = true;
 
-            Listener client = manager.AddListener(new ListenerConfig()
-            {
-                ChallengeDifficulty = 25,
-                IPv4ListenAddress = IPAddress.Any,
-                IPv6ListenAddress = IPAddress.IPv6Any,
-                DualListenPort = 0,
-                MaxBufferSize = 4096,
-                MaxConnections = 200,
-                MaxPendingConnections = 200,
-                MaxSocketBlockMilliseconds = 5,
-                MinConnectionPollDelay = 50,
-                ConnectionTimeout = 60000,
-                HandshakeMinResendDelay = 1000,
-                MaxConnectionRequestResends = 100,
-                MinHeartbeatDelay = 5000,
-                HandshakeTimeout = 60000,
-                ConnectionRequestMinResendDelay = 1000,
-                MaxHandshakeResends = 100,
-                UseSimulator = true,
-                SimulatorConfig = new SimulatorConfig()
-                {
-                    DropPercentage = 0.1f,
-                    MaxLatency = 300,
-                    MinLatency = 50
-                }
-            });
+            Listener server = manager.AddListener(ServerConfig);
 
+            Listener client = manager.AddListener(ClientConfig);
+
+            // IPv4 Connect
             //client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
+
+            // IPv6 Connect
             client.Connect(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
 
+            // The server stores the clients id here
             ulong clientId = 0;
+            // The client stores the servers id here
             ulong serverId = 0;
 
+            // The time when the connection started
             DateTime started = DateTime.Now;
+
+            // The time when the last message was sent
             DateTime lastSent = DateTime.MinValue;
+
+            // The amount of message that has been received
             int messagesReceived = 0;
+
+            // The amount of messages that has been sent
             int messageCounter = 0;
 
             while (true)
             {
+                // Polls server for events
                 NetworkEvent serverEvent = server.Poll();
+                // Polls client for events
                 NetworkEvent clientEvent = client.Poll();
 
 
@@ -377,18 +297,19 @@ namespace Ruffles.Example
                     if (clientEvent.Type == NetworkEventType.Data)
                     {
                         messagesReceived++;
-                        Console.WriteLine("Payload: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"" + " Total: " + messagesReceived);
+                        Console.WriteLine("Got message: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"");
                         clientEvent.Recycle();
                     }
                 }
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalMilliseconds >= 50)
+                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 1)
                 {
-                    byte[] helloReliable = Encoding.ASCII.GetBytes("RELIABLE HELLO WORLD" + messageCounter);
-                    byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("RELIABLE SEQUENCED HELLO WORLD" + messageCounter);
+                    byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
+                    byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
                     server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0);
                     server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1);
+
                     messageCounter++;
                     lastSent = DateTime.Now;
                 }
