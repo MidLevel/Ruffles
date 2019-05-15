@@ -605,8 +605,6 @@ namespace Ruffles.Core
             {
                 case (byte)MessageType.Merge:
                     {
-                        Console.WriteLine("MERGE PACKET");
-                        //List<ArraySegment<byte>> packetParts = 
                         Connection connection = GetConnection(endpoint);
 
                         if (connection != null)
@@ -614,11 +612,8 @@ namespace Ruffles.Core
                             // Unpack the merged packet
                             List<ArraySegment<byte>> segments = connection.Merger.Unpack(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1));
 
-                            Console.WriteLine("IsSegNull: " + (segments == null));
-
                             if (segments != null)
                             {
-                                Console.WriteLine("Merged segments: " + segments.Count);
                                 for (int i = 0; i < segments.Count; i++)
                                 {
                                     // Handle the segment
