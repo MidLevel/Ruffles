@@ -7,32 +7,64 @@ namespace Ruffles.Core
 {
     public class RufflesManager
     {
-        private readonly bool Threaded = true;
-        private readonly Thread _thread;
-
         private readonly List<Listener> _listeners = new List<Listener>();
         private readonly object _listenersLock = new object();
 
+        private Thread _thread = null;
+
+        public bool IsThreaded { get; }
+        public bool IsRunning { get; private set; }
 
         public RufflesManager(bool threaded = true)
         {
-            this.Threaded = threaded;
+            this.IsThreaded = threaded;
+        }
 
-            if (Threaded)
+        public void Init()
+        {
+            if (IsRunning)
+            {
+                throw new InvalidOperationException("Manager is already started");
+            }
+
+            IsRunning = true;
+
+            if (IsThreaded)
             {
                 _thread = new Thread(() =>
                 {
-                    while (true)
+                    while (IsRunning)
                     {
                         RunAllInternals();
                     }
                 });
+
                 _thread.Start();
+            }
+        }
+
+        public void Shutdown()
+        {
+            if (!IsRunning)
+            {
+                throw new InvalidOperationException("Manager is not started");
+            }
+
+            IsRunning = false;
+
+            if (IsThreaded)
+            {
+                _thread.Join();
             }
         }
 
         private void RunAllInternals()
         {
+            if (!IsRunning)
+            {
+                throw new InvalidOperationException("Manager is not started");
+            }
+
             lock (_listenersLock)
             {
                 for (int i = 0; i < _listeners.Count; i++)
@@ -44,7 +76,12 @@ namespace Ruffles.Core
 
         public Listener AddListener(ListenerConfig config)
         {
-            if (Threaded && !config.EnableThreadSafety)
+            if (!IsRunning)
+            {
+                throw new InvalidOperationException("Manager is not started");
+            }
+
+            if (IsThreaded && !config.EnableThreadSafety)
             {
                 Console.WriteLine("Running a threaded manager without thread safety on the Listener is not recomended!");
             }
@@ -61,7 +98,12 @@ namespace Ruffles.Core
 
         public void RunInternals()
         {
-            if (Threaded)
+            if (!IsRunning)
+            {
+                throw new InvalidOperationException("Manager is not started");
+            }
+
+            if (IsThreaded)
             {
                 throw new InvalidOperationException("Cannot run the internals when using a threaded manager");
             }
@@ -71,7 +113,12 @@ namespace Ruffles.Core
 
         public NetworkEvent PollAllListeners()
         {
-            if (!Threaded)
+            if (!IsRunning)
+            {
+                throw new InvalidOperationException("Manager is not started");
+            }
+
+            if (!IsThreaded)
             {
                 RunInternals();
             }
