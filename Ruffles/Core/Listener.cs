@@ -831,6 +831,9 @@ namespace Ruffles.Core
                                 // They failed the challenge
                                 return;
                             }
+
+                            // Save the IV to the sliding window
+                            challengeInitializationVectors[userIv] = true;
                         }
 
                         Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingChallenge);
