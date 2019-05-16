@@ -25,7 +25,6 @@ namespace Ruffles.Core
                     while (true)
                     {
                         RunAllInternals();
-                        Thread.Sleep(1);
                     }
                 });
                 _thread.Start();
