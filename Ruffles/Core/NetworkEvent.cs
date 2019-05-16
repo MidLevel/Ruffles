@@ -11,6 +11,7 @@ namespace Ruffles.Core
         public Listener Listener { get; internal set; }
         public Connection Connection { get; internal set; }
         public ArraySegment<byte> Data { get; internal set; }
+        public DateTime SocketReceiveTime { get; internal set; }
 
         internal HeapMemory InternalMemory;
         internal bool AllowUserRecycle;

@@ -39,7 +39,8 @@ namespace Ruffles.Messaging
                         Type = NetworkEventType.Data,
                         AllowUserRecycle = true,
                         Data = new ArraySegment<byte>(memory.Buffer, memory.VirtualOffset, memory.VirtualCount),
-                        InternalMemory = memory
+                        InternalMemory = memory,
+                        SocketReceiveTime = DateTime.Now
                     });
                 }
                 finally
@@ -69,7 +70,8 @@ namespace Ruffles.Messaging
                                 Type = NetworkEventType.Data,
                                 AllowUserRecycle = true,
                                 Data = new ArraySegment<byte>(messageMemory.Buffer, messageMemory.VirtualOffset, messageMemory.VirtualCount),
-                                InternalMemory = messageMemory
+                                InternalMemory = messageMemory,
+                                SocketReceiveTime = DateTime.Now
                             });
                         }
                         finally
