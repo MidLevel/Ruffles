@@ -950,8 +950,6 @@ namespace Ruffles.Core
                     {
                         Connection connection = GetConnection(endpoint);
 
-                        Console.WriteLine("GOT HEARTBEAT");
-
                         if (connection != null)
                         {
                             // Heartbeats are sequenced to not properly handle network congestion
