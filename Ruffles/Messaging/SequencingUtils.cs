@@ -4,7 +4,7 @@
     {
         internal static long Distance(ulong from, ulong to, byte bytes)
         {
-            int _shift = (sizeof(ulong) - bytes) * sizeof(byte);
+            int _shift = (sizeof(ulong) - bytes) * 8;
 
             to <<= _shift;
             from <<= _shift;
