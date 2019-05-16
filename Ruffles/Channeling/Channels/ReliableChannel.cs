@@ -35,7 +35,7 @@ namespace Ruffles.Channeling.Channels
 
         // Outgoing sequencing
         private ushort _lastOutboundSequenceNumber;
-        private readonly MessageSequencer<PendingOutgoingPacket> _sendSequencer;
+        private readonly HeapableSlidingWindow<PendingOutgoingPacket> _sendSequencer;
 
         // Channel info
         private readonly byte channelId;
@@ -48,7 +48,7 @@ namespace Ruffles.Channeling.Channels
             this.connection = connection;
             this.config = config;
 
-            _sendSequencer = new MessageSequencer<PendingOutgoingPacket>(config.ReliabilityWindowSize);
+            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
         }
 
         public HeapMemory HandlePoll()

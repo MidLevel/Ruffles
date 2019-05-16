@@ -48,11 +48,11 @@ namespace Ruffles.Channeling.Channels
 
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
-        private readonly MessageSequencer<PendingIncomingPacket> _receiveSequencer;
+        private readonly HeapableSlidingWindow<PendingIncomingPacket> _receiveSequencer;
 
         // Outgoing sequencing
         private ushort _lastOutboundSequenceNumber;
-        private readonly MessageSequencer<PendingOutgoingPacket> _sendSequencer;
+        private readonly HeapableSlidingWindow<PendingOutgoingPacket> _sendSequencer;
 
         // Channel info
         private readonly byte channelId;
@@ -68,8 +68,8 @@ namespace Ruffles.Channeling.Channels
             this.config = config;
 
             // Alloc the in flight windows for receive and send
-            _receiveSequencer = new MessageSequencer<PendingIncomingPacket>(config.ReliabilityWindowSize);
-            _sendSequencer = new MessageSequencer<PendingOutgoingPacket>(config.ReliabilityWindowSize);
+            _receiveSequencer = new HeapableSlidingWindow<PendingIncomingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
+            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
         }
 
         public HeapMemory HandlePoll()

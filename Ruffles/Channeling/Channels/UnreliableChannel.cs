@@ -25,7 +25,7 @@ namespace Ruffles.Channeling.Channels
             this.connection = connection;
             this.config = config;
 
-            _incomingAckedPackets = new SlidingWindow<bool>(config.ReliabilityWindowSize);
+            _incomingAckedPackets = new SlidingWindow<bool>(config.ReliabilityWindowSize, true, sizeof(ushort));
         }
 
         public HeapMemory CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
