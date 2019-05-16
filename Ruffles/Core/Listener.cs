@@ -43,6 +43,8 @@ namespace Ruffles.Core
         private readonly byte[] outgoingInternalBuffer;
         private readonly byte[] incomingBuffer;
 
+        private readonly SlidingSet<ulong> challengeInitializationVectors;
+
         public Listener(ListenerConfig config)
         {
             this.config = config;
@@ -55,6 +57,7 @@ namespace Ruffles.Core
             outgoingInternalBuffer = new byte[Math.Max((int)config.AmplificationPreventionHandshakePadding, 128)];
             incomingBuffer = new byte[config.MaxBufferSize];
             Connections = new Connection[config.MaxConnections];
+            challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
 
             bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
         }
@@ -212,7 +215,51 @@ namespace Ruffles.Core
 
                     outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
-                    connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1, (int)config.AmplificationPreventionHandshakePadding)), true);
+                    if (config.TimeBasedConnectionChallenge)
+                    {
+                        // Current unix time
+                        ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+
+                        // Save for resends
+                        connection.PreConnectionChallengeTimestamp = unixTimestamp;
+
+                        // Write the current unix time
+                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
+
+                        ulong counter = 0;
+                        ulong iv = RandomProvider.GetRandomULong();
+
+                        // Save for resends
+                        connection.PreConnectionChallengeIV = iv;
+
+                        // Find collision
+                        ulong hash;
+                        do
+                        {
+                            // Attempt to calculate a new hash collision
+                            hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
+
+                            // Increment counter
+                            counter++;
+                        }
+                        while ((hash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty) != 0);
+
+                        // Make counter 1 less
+                        counter--;
+
+                        // Save for resends
+                        connection.PreConnectionChallengeCounter = counter;
+
+                        // Write counter
+                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
+
+                        // Write IV
+                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + i] = ((byte)(iv >> (i * 8)));
+                    }
+
+                    int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+
+                    connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
                 }
             }
         }
@@ -332,7 +379,51 @@ namespace Ruffles.Core
 
                                     outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
-                                    connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1, (int)config.AmplificationPreventionHandshakePadding)), true);
+                                    if (config.TimeBasedConnectionChallenge)
+                                    {
+                                        // Current unix time
+                                        ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+
+                                        // Save for resends
+                                        connection.PreConnectionChallengeTimestamp = unixTimestamp;
+
+                                        // Write the current unix time
+                                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
+
+                                        ulong counter = 0;
+                                        ulong iv = RandomProvider.GetRandomULong();
+
+                                        // Save for resends
+                                        connection.PreConnectionChallengeIV = iv;
+
+                                        // Find collision
+                                        ulong hash;
+                                        do
+                                        {
+                                            // Attempt to calculate a new hash collision
+                                            hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
+
+                                            // Increment counter
+                                            counter++;
+                                        }
+                                        while ((hash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty) != 0);
+
+                                        // Make counter 1 less
+                                        counter--;
+
+                                        // Save for resends
+                                        connection.PreConnectionChallengeCounter = counter;
+
+                                        // Write counter
+                                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
+
+                                        // Write IV
+                                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + i] = ((byte)(iv >> (i * 8)));
+                                    }
+
+                                    int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+
+                                    connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
                                 }
                             }
                             break;
@@ -392,7 +483,21 @@ namespace Ruffles.Core
 
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
-                            Connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1, (int)config.AmplificationPreventionHandshakePadding)), true);
+                            if (config.TimeBasedConnectionChallenge)
+                            {
+                                // Write the response unix time
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].PreConnectionChallengeTimestamp >> (i * 8)));
+
+                                // Write counter
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(Connections[i].PreConnectionChallengeCounter >> (i * 8)));
+
+                                // Write IV
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + x] = ((byte)(Connections[i].PreConnectionChallengeIV >> (i * 8)));
+                            }
+
+                            int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+
+                            Connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
                         }
                     }
                     else if (Connections[i].State == ConnectionState.RequestingChallenge)
@@ -656,12 +761,76 @@ namespace Ruffles.Core
                         }
                     }
                     break;
-                case (byte)MessageType.ConnectionRequest: // Connection Request
+                case (byte)MessageType.ConnectionRequest:
                     {
                         if (payload.Count < config.AmplificationPreventionHandshakePadding)
                         {
                             // This message is too small. They might be trying to use us for amplification. 
                             return;
+                        }
+
+                        if (config.TimeBasedConnectionChallenge)
+                        {
+                            // Get the current unix time seconds
+                            ulong currentUnixTime = (ulong)DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
+
+                            // Read the time they used
+                            ulong challengeUnixTime = (((ulong)payload.Array[payload.Offset + 1]) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + 1] << 8) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + 2] << 16) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + 3] << 24) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + 4] << 32) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + 5] << 40) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + 6] << 48) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + 7] << 56));
+
+                            // The seconds diff
+                            long secondsDiff = (long)currentUnixTime - (long)challengeUnixTime;
+
+                            if (secondsDiff > (long)config.ConnectionChallengeTimeWindow || secondsDiff < -(long)config.ConnectionChallengeTimeWindow)
+                            {
+                                // Outside the allowed window
+                                return;
+                            }
+
+                            // Read the counter they used to collide the hash
+                            ulong counter = (((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong)]) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 1] << 8) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 2] << 16) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 3] << 24) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 4] << 32) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 5] << 40) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 6] << 48) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 7] << 56));
+
+                            // Read the initialization vector they used
+                            ulong userIv = (((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2]) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 1] << 8) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 2] << 16) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 3] << 24) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 4] << 32) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 5] << 40) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 6] << 48) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 7] << 56));
+
+                            // Ensure they dont reuse a IV
+                            if (challengeInitializationVectors[userIv])
+                            {
+                                // This IV is being reused.
+                                return;
+                            }
+
+                            // Calculate the hash the user claims have a collision
+                            ulong claimedHash = HashProvider.GetStableHash64(challengeUnixTime, counter, userIv);
+
+                            // Check if the hash collides
+                            bool isCollided = ((claimedHash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty)) == 0;
+
+                            if (!isCollided)
+                            {
+                                // They failed the challenge
+                                return;
+                            }
                         }
 
                         Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingChallenge);

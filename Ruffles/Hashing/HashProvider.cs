@@ -40,5 +40,36 @@
                 return hash;
             }
         }
+
+        internal static ulong GetStableHash64(ulong value1, ulong value2, ulong value3)
+        {
+            unchecked
+            {
+                ulong hash = FNV_offset_basis64;
+
+                for (byte i = 0; i < sizeof(ulong); i++)
+                {
+                    ulong bt = ((byte)(value1 >> (i * 8)));
+                    hash = hash * FNV_prime64;
+                    hash = hash ^ bt;
+                }
+
+                for (byte i = 0; i < sizeof(ulong); i++)
+                {
+                    ulong bt = ((byte)(value2 >> (i * 8)));
+                    hash = hash * FNV_prime64;
+                    hash = hash ^ bt;
+                }
+
+                for (byte i = 0; i < sizeof(ulong); i++)
+                {
+                    ulong bt = ((byte)(value3 >> (i * 8)));
+                    hash = hash * FNV_prime64;
+                    hash = hash ^ bt;
+                }
+
+                return hash;
+            }
+        }
     }
 }

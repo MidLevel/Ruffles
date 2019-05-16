@@ -29,6 +29,12 @@ namespace Ruffles.Connections
         internal IChannel[] Channels;
         internal ChannelType[] ChannelTypes;
 
+        // Pre connection challenge values
+        internal ulong PreConnectionChallengeTimestamp;
+        internal ulong PreConnectionChallengeCounter;
+        internal ulong PreConnectionChallengeIV;
+
+
         // Handshake resend values
         internal byte HandshakeResendAttempts;
         internal DateTime HandshakeLastSendTime;

@@ -41,6 +41,9 @@ namespace Ruffles.Configuration
 
         // Security
         public byte ChallengeDifficulty = 10;
+        public uint ConnectionChallengeHistory = 2048;
+        public ulong ConnectionChallengeTimeWindow = 30;
+        public bool TimeBasedConnectionChallenge = true;
 
         // Denial Of Service
         public ushort MaxPendingConnections = ushort.MaxValue;
