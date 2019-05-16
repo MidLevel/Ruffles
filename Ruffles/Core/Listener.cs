@@ -446,7 +446,13 @@ namespace Ruffles.Core
                             DisconnectConnection(Connections[i], false, true);
 
                             // Send to userspace
-                            EventQueueLock.EnterWriteLock();
+
+                            if (config.EnableThreadSafety)
+                            {
+                                // Get lock to ensure thread safety when adding event
+                                EventQueueLock.EnterWriteLock();
+                            }
+
                             try
                             {
                                 UserEventQueue.Enqueue(new NetworkEvent()
@@ -458,7 +464,11 @@ namespace Ruffles.Core
                             }
                             finally
                             {
-                                EventQueueLock.ExitWriteLock();
+                                // Exit the write lock
+                                if (config.EnableThreadSafety)
+                                {
+                                    EventQueueLock.ExitWriteLock();
+                                }
                             }
                         }
                     }
@@ -520,7 +530,12 @@ namespace Ruffles.Core
 
         public NetworkEvent Poll()
         {
-            EventQueueLock.EnterWriteLock();
+            if (config.EnableThreadSafety)
+            {
+                // Enter a write lock to poll the elements
+                EventQueueLock.EnterWriteLock();
+            }
+
             try
             {
                 if (UserEventQueue.Count > 0)
@@ -544,7 +559,11 @@ namespace Ruffles.Core
             }
             finally
             {
-                EventQueueLock.ExitWriteLock();
+                if (config.EnableThreadSafety)
+                {
+                    // Exit the write lock
+                    EventQueueLock.ExitWriteLock();
+                }
             }
         }
 
@@ -750,7 +769,13 @@ namespace Ruffles.Core
                                 connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
 
                                 // Send to userspace
-                                EventQueueLock.EnterWriteLock();
+
+                                if (config.EnableThreadSafety)
+                                {
+                                    // Grab lock to enqueue event
+                                    EventQueueLock.EnterWriteLock();
+                                }
+
                                 try
                                 {
                                     UserEventQueue.Enqueue(new NetworkEvent()
@@ -762,7 +787,11 @@ namespace Ruffles.Core
                                 }
                                 finally
                                 {
-                                    EventQueueLock.ExitWriteLock();
+                                    if (config.EnableThreadSafety)
+                                    {
+                                        // Release write lock
+                                        EventQueueLock.ExitWriteLock();
+                                    }
                                 }
                             }
                             else
@@ -908,7 +937,12 @@ namespace Ruffles.Core
                             // Set state to connected
                             ConnectPendingConnection(pendingConnection);
 
-                            EventQueueLock.EnterWriteLock();
+                            if (config.EnableThreadSafety)
+                            {
+                                // Grab write lock to enqueue connect event
+                                EventQueueLock.EnterWriteLock();
+                            }
+
                             try
                             {
                                 UserEventQueue.Enqueue(new NetworkEvent()
@@ -920,7 +954,11 @@ namespace Ruffles.Core
                             }
                             finally
                             {
-                                EventQueueLock.ExitWriteLock();
+                                if (config.EnableThreadSafety)
+                                {
+                                    // Release write lock
+                                    EventQueueLock.ExitWriteLock();
+                                }
                             }
 
                             // Send the confirmation
@@ -967,7 +1005,7 @@ namespace Ruffles.Core
                         {
                             connection.LastMessageIn = DateTime.Now;
 
-                            PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection);
+                            PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config);
                         }
                     }
                     break;
@@ -1088,7 +1126,13 @@ namespace Ruffles.Core
             }
 
             // Send disconnect to userspace
-            EventQueueLock.EnterWriteLock();
+
+            if (config.EnableThreadSafety)
+            {
+                // Grab write lock to enqueue disconnect
+                EventQueueLock.EnterWriteLock();
+            }
+
             try
             {
                 UserEventQueue.Enqueue(new NetworkEvent()
@@ -1100,7 +1144,11 @@ namespace Ruffles.Core
             }
             finally
             {
-                EventQueueLock.ExitWriteLock();
+                if (config.EnableThreadSafety)
+                {
+                    // Release write lock
+                    EventQueueLock.ExitWriteLock();
+                }
             }
         }
 

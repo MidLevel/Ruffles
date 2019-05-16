@@ -1,5 +1,6 @@
 ﻿using System;
 using Ruffles.Channeling;
+using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Core;
 using Ruffles.Memory;
@@ -8,7 +9,7 @@ namespace Ruffles.Messaging
 {
     internal static class PacketHandler
     {
-        internal static void HandleIncomingMessage(ArraySegment<byte> payload, Connection connection)
+        internal static void HandleIncomingMessage(ArraySegment<byte> payload, Connection connection, ListenerConfig activeConfig)
         {
             // This is where all data packets arrive after passing the connection handling.
 
@@ -29,7 +30,13 @@ namespace Ruffles.Messaging
                 Buffer.BlockCopy(incomingMessage.Value.Array, incomingMessage.Value.Offset, memory.Buffer, 0, incomingMessage.Value.Count);
 
                 // Send to userspace
-                connection.Listener.EventQueueLock.EnterWriteLock();
+
+                if (activeConfig.EnableThreadSafety)
+                {
+                    // Grab write lock to enqueue the data
+                    connection.Listener.EventQueueLock.EnterWriteLock();
+                }
+
                 try
                 {
                     connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
@@ -45,7 +52,11 @@ namespace Ruffles.Messaging
                 }
                 finally
                 {
-                    connection.Listener.EventQueueLock.ExitWriteLock();
+                    if (activeConfig.EnableThreadSafety)
+                    {
+                        // Release write lock
+                        connection.Listener.EventQueueLock.ExitWriteLock();
+                    }
                 }
             }
 
@@ -60,7 +71,13 @@ namespace Ruffles.Messaging
                     if (messageMemory != null)
                     {
                         // Send to userspace
-                        connection.Listener.EventQueueLock.EnterWriteLock();
+
+                        if (activeConfig.EnableThreadSafety)
+                        {
+                            // Grab write lock to enqueue data
+                            connection.Listener.EventQueueLock.EnterWriteLock();
+                        }
+
                         try
                         {
                             connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
@@ -76,7 +93,11 @@ namespace Ruffles.Messaging
                         }
                         finally
                         {
-                            connection.Listener.EventQueueLock.ExitWriteLock();
+                            if (activeConfig.EnableThreadSafety)
+                            {
+                                // Release write lock
+                                connection.Listener.EventQueueLock.ExitWriteLock();
+                            }
                         }
                     }
                 }
