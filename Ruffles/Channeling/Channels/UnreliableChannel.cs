@@ -10,7 +10,6 @@ namespace Ruffles.Channeling.Channels
     {
         // Incoming sequencing
         private readonly SlidingWindow<bool> _incomingAckedPackets;
-        private ushort _incomingLowestAckedSequence;
 
         // Outgoing sequencing
         private ushort _lastOutboundSequenceNumber;
@@ -67,37 +66,16 @@ namespace Ruffles.Channeling.Channels
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
-            if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _incomingAckedPackets[sequence])
+            if (_incomingAckedPackets[sequence])
             {
                 // We have already received this message. Ignore it.
                 return null;
             }
-            else if (sequence == _incomingLowestAckedSequence + 1)
-            {
-                // This is the "next" packet
+            
+            // Add to sequencer
+            _incomingAckedPackets[sequence] = true;
 
-                do
-                {
-                    // Remove previous
-                    _incomingAckedPackets[_incomingLowestAckedSequence] = false;
-
-                    _incomingLowestAckedSequence++;
-                }
-                while (_incomingAckedPackets[(ushort)(_incomingLowestAckedSequence + 1)]);
-
-                return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
-            }
-            else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0 && !_incomingAckedPackets[sequence])
-            {
-                // This is a future packet
-
-                // Add to sequencer
-                _incomingAckedPackets[sequence] = true;
-
-                return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
-            }
-
-            return null;
+            return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
         }
 
         public HeapMemory HandlePoll()
@@ -114,7 +92,6 @@ namespace Ruffles.Channeling.Channels
         {
             // Clear all incoming states
             _incomingAckedPackets.Release();
-            _incomingLowestAckedSequence = 0;
 
             // Clear all outgoing states
             _lastOutboundSequenceNumber = 0;
