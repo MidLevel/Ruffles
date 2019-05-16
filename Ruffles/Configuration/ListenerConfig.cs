@@ -52,7 +52,7 @@ namespace Ruffles.Configuration
         // Channel performance
         public ushort ReliabilityWindowSize = 512;
         public ulong ReliabilityMaxResendAttempts = 30;
-        public ulong ReliabilityResendExtraDelay = 10;
+        public double ReliabilityResendRoundtripMultiplier = 1.2;
 
         // Simulation
         public bool UseSimulator = false;
@@ -62,5 +62,13 @@ namespace Ruffles.Configuration
             MaxLatency = 2000,
             MinLatency = 50
         };
+
+        // Advanced protocol settings (usually these shoudl NOT be fucked with. Please understand their full meaning before changing)
+        public bool EnableHeartbeats = true;
+        public bool EnableTimeouts = true;
+        public bool EnableChannelUpdates = true;
+        public bool EnableConnectionRequestResends = true;
+        // This one has to be the same on both ends.
+        public bool EnablePacketMerging = true;
     }
 }

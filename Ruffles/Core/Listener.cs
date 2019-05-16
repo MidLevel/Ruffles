@@ -264,11 +264,31 @@ namespace Ruffles.Core
             // Run timeout loop once every ConnectionPollDelay ms
             if ((DateTime.Now - _lastTimeoutCheckRan).TotalMilliseconds >= config.MinConnectionPollDelay)
             {
-                CheckMergedPackets();
-                CheckConnectionTimeouts();
-                CheckConnectionHeartbeats();
-                CheckConnectionResends();
-                RunChannelInternalUpdate();
+                if (config.EnablePacketMerging)
+                {
+                    CheckMergedPackets();
+                }
+
+                if (config.EnableTimeouts)
+                {
+                    CheckConnectionTimeouts();
+                }
+
+                if (config.EnableHeartbeats)
+                {
+                    CheckConnectionHeartbeats();
+                }
+
+                if (config.EnableConnectionRequestResends)
+                {
+                    CheckConnectionResends();
+                }
+
+                if (config.EnableChannelUpdates)
+                {
+                    RunChannelInternalUpdate();
+                }
+
                 _lastTimeoutCheckRan = DateTime.Now;
             }
         }
@@ -571,7 +591,7 @@ namespace Ruffles.Core
         {
             connection.LastMessageOut = DateTime.Now;
 
-            if (noMerge || !connection.Merger.TryWrite(payload))
+            if (!config.EnablePacketMerging || noMerge || !connection.Merger.TryWrite(payload))
             {
                 if (simulator != null)
                 {
@@ -615,6 +635,13 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
+                            if (!config.EnablePacketMerging)
+                            {
+                                // Big missmatch here.
+                                DisconnectConnection(connection, false, false);
+                                return;
+                            }
+
                             // Unpack the merged packet
                             List<ArraySegment<byte>> segments = connection.Merger.Unpack(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1));
 
@@ -984,6 +1011,13 @@ namespace Ruffles.Core
                     break;
                 case (byte)MessageType.Heartbeat:
                     {
+                        if (!config.EnableHeartbeats)
+                        {
+                            // TODO: Handle
+                            // This is a missmatch.
+                            return;
+                        }
+
                         Connection connection = GetConnection(endpoint);
 
                         if (connection != null)
@@ -1101,11 +1135,17 @@ namespace Ruffles.Core
                     connection.Channels[i].Reset();
                 }
 
-                // Release all memory from the heartbeat channel
-                connection.HeartbeatChannel.Reset();
+                if (config.EnableHeartbeats)
+                {
+                    // Release all memory from the heartbeat channel
+                    connection.HeartbeatChannel.Reset();
+                }
 
-                // Clean the merger
-                connection.Merger.Clear();
+                if (config.EnablePacketMerging)
+                {
+                    // Clean the merger
+                    connection.Merger.Clear();
+                }
             }
             else
             {
@@ -1187,7 +1227,7 @@ namespace Ruffles.Core
                         ChannelTypes = new ChannelType[0],
                         HandshakeLastSendTime = DateTime.Now,
                         Roundtrip = 10,
-                        Merger = new MessageMerger(config.MaxMergeMessageSize, config.MinMergeDelay)
+                        Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MinMergeDelay) : null
                     };
 
                     // Make sure the array is not null

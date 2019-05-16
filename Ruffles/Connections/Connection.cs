@@ -2,6 +2,7 @@
 using System.Net;
 using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
+using Ruffles.Configuration;
 using Ruffles.Core;
 using Ruffles.Messaging;
 
@@ -33,8 +34,12 @@ namespace Ruffles.Connections
         internal DateTime HandshakeLastSendTime;
 
 
-        internal Connection()
+        internal Connection(ListenerConfig config)
         {
+            if (config.EnableHeartbeats)
+            {
+
+            }
             HeartbeatChannel = new UnreliableSequencedChannel(0, this);
         }
 

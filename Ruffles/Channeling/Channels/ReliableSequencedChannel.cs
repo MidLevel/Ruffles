@@ -259,7 +259,7 @@ namespace Ruffles.Channeling.Channels
                         // If they don't ack the message, disconnect them
                         connection.Disconnect(false);
                     }
-                    else if ((DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.Roundtrip + config.ReliabilityResendExtraDelay)
+                    else if ((DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.Roundtrip * config.ReliabilityResendRoundtripMultiplier)
                     {
                         _sendSequencer[i] = new PendingOutgoingPacket()
                         {
