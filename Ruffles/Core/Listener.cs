@@ -588,8 +588,6 @@ namespace Ruffles.Core
             // Unpack header, dont cast to MessageType enum for safety
             HeaderPacker.Unpack(payload.Array[payload.Offset], out byte messageType, out bool fragmented);
 
-            Console.WriteLine("MT: " + messageType);
-
             switch (messageType)
             {
                 case (byte)MessageType.Merge:
