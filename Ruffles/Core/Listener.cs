@@ -1207,7 +1207,7 @@ namespace Ruffles.Core
                 if (Connections[i] == null)
                 {
                     // Alloc on the heap
-                    connection = new Connection
+                    connection = new Connection(config)
                     {
                         Dead = false,
                         Recycled = false,

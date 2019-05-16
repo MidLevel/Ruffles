@@ -38,9 +38,8 @@ namespace Ruffles.Connections
         {
             if (config.EnableHeartbeats)
             {
-
+                HeartbeatChannel = new UnreliableSequencedChannel(0, this);
             }
-            HeartbeatChannel = new UnreliableSequencedChannel(0, this);
         }
 
         internal void SendRaw(ArraySegment<byte> payload, bool noMerge)
