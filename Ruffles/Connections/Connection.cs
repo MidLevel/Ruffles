@@ -53,7 +53,13 @@ namespace Ruffles.Connections
         internal void AddRoundtripSample(ulong sample)
         {
             // TODO: Dead & state safety
-            Roundtrip = 0.0125 * Roundtrip + (1 - 0.0125) * sample;
+
+            // Old TCP:
+            // Roundtrip = 0.0125 * Roundtrip + (1 - 0.0125) * sample;
+
+
+            double rttDistance = sample - Roundtrip;
+            Roundtrip += (rttDistance * 0.1d);
         }
 
         public void Recycle()
