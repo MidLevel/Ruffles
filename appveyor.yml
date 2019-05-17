@@ -38,7 +38,7 @@ install:
 - semantic-release --dry-run
 
 before_deploy:
-  - ps: package-nuget.ps1
+  - powershell "& "".\package-nuget.ps1"""
 
 artifacts:
 - path: 'Ruffles\bin\Release\*\*'
