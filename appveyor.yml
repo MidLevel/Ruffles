@@ -28,25 +28,22 @@ build:
   verbosity: minimal
 
 
-for:
--
-  matrix:
-    only:
-      - configuration: Release
-  cache:
-  - '%APPDATA%\npm'
-  install:
-  - npm install -g semantic-release
-  - semantic-release --dry-run
-  before_deploy:
-    - ps: package-nuget.ps1
-  deploy_script:
-  - semantic-release
-  artifacts:
-  - path: 'Ruffles\bin\Release\*\*'
-  deploy:
-    provider: NuGet
-    api_key:
-      secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
-    skip_symbols: false
+cache:
+- '%APPDATA%\npm'
+install:
+- npm install -g semantic-release
+- semantic-release --dry-run
+before_deploy:
+  - ps: package-nuget.ps1
+artifacts:
+- path: 'Ruffles\bin\Release\*\*'
+deploy:
+  on:
+    branch: master
+  provider: NuGet
+  api_key:
+    secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
+  skip_symbols: false
     artifact: '**\*.nupkg'
+deploy_script:
+- semantic-release
