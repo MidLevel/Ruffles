@@ -1,19 +1,70 @@
 version: '{branch}-{build}'
 
+image: Visual Studio 2017
+
 configuration:
-  - Debug
   - Release
 
+branches:
+  only:
+    - master
+
 skip_tags: true
+
+dotnet_csproj:
+  patch: true
+  file: '**\*.csproj'
+  version: '$(version)'
+  package_version: '$(version)'
+  assembly_version: '$(version)'
+  file_version: '$(version)'
+  informational_version: '$(version)'
+
+before_build:
+  - nuget restore
 
 build:
   project: Ruffles.sln
   verbosity: minimal
 
-artifacts:
-  - path: 'Ruffles\bin\*\*\Ruffles.*'
 
-image: Visual Studio 2017
+for:
+-
+  matrix:
+    only:
+      - configuration: Release
+  cache:
+  - '%APPDATA%\npm'
+  install:
+  - npm install -g semantic-release
+  - semantic-release --dry-run
+  before_deploy:
+    - ps: "$version;
+          if (Test-Path env:SEMANTIC_NEXT_VERSION)
+          {
+              $version = "$env:SEMANTIC_NEXT_VERSION"
+          }
+          elseif (Test-Path env:SEMANTIC_LAST_VERSION)
+          {
+              $version = "$env:SEMANTIC_LAST_VERSION"
+          }
+          else
+          {
+              $version = "0.1.0"
+          }
 
-before_build:
-  - nuget restore
+          $releaseNoteUrl = -join ("https://github.com/MidLevel/Ruffles/releases/tag/v", $version) 
+
+          $args = -join("pack Ruffles.nuspec -Version ", $version, " -Properties Configuration=Release;releaseNotes=", $releaseNoteUrl);
+
+          Start-Process -FilePath "nuget" -ArgumentList $args"
+  deploy_script:
+  - semantic-release
+  artifacts:
+  - path: 'Ruffles\bin\Release\*\*'
+  - deploy:
+    provider: NuGet
+    api_key:
+      secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
+    skip_symbols: false
+    artifact: '**\*.nupkg'
