@@ -8,7 +8,8 @@
         "@semantic-release/release-notes-generator",
         ["@semantic-release/exec", {
             "analyzeCommitsCmd": "set SEMANTIC_LAST_VERSION=${lastRelease.version}",
-            "verifyReleaseCmd": "set SEMANTIC_NEXT_VERSION=${nextRelease.version}"
+            "verifyReleaseCmd": "set SEMANTIC_NEXT_VERSION=${nextRelease.version}",
+            "publishCmd": "nuget push *.nupkg -ApiKey %nuget_key% -NonInteractive",
         }],
         ["@semantic-release/github", {
             "assets": [

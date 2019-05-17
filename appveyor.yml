@@ -2,6 +2,11 @@ version: '{branch}-{build}'
 
 image: Visual Studio 2017
 
+environment:
+  nuget_key:
+    secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
+
+
 configuration:
   - Release
 
@@ -48,15 +53,6 @@ before_deploy:
 
 artifacts:
 - path: '*net*.zip'
-
-deploy:
-  on:
-    branch: master
-  provider: NuGet
-  api_key:
-    secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
-  skip_symbols: false
-  artifact: '**\*.nupkg'
 
 deploy_script:
 - semantic-release
