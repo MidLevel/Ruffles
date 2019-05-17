@@ -10,8 +10,28 @@ namespace Ruffles.Memory
         private static bool _hasWarnedAboutLeak = false;
         private static readonly Queue<HeapMemory> _pooledMemory = new Queue<HeapMemory>();
 
-        internal static HeapMemory Alloc(int size)
+        private const uint minBufferSize = 64;
+        private const uint bufferMultiple = 64;
+
+        private static uint CalculateMultiple(uint minSize, uint multiple)
         {
+            uint remainder = minSize % multiple;
+
+            uint result = minSize - remainder;
+
+            if (remainder > (multiple / 2))
+                result += multiple;
+
+            if (result < minSize)
+                result += multiple;
+
+            return result;
+        }
+
+        internal static HeapMemory Alloc(uint size)
+        {
+            uint allocSize = Math.Max(minBufferSize, CalculateMultiple(size, bufferMultiple));
+
             if (_pooledMemory.Count == 0)
             {
                 _createdPools++;
@@ -22,15 +42,15 @@ namespace Ruffles.Memory
                     _hasWarnedAboutLeak = true;
                 }
 
-                return new HeapMemory(size);
+                return new HeapMemory(allocSize);
             }
 
             HeapMemory memory = _pooledMemory.Dequeue();
 
-            memory.EnsureSize(size);
+            memory.EnsureSize(allocSize);
 
             memory.isDead = false;
-            memory.VirtualCount = size;
+            memory.VirtualCount = allocSize;
             memory.VirtualOffset = 0;
 
             return memory;

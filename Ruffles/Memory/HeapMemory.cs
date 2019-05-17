@@ -17,20 +17,20 @@ namespace Ruffles.Memory
             }
         }
 
-        public int VirtualOffset { get; set; }
-        public int VirtualCount { get; set; }
+        public uint VirtualOffset { get; set; }
+        public uint VirtualCount { get; set; }
 
         private byte[] _buffer;
         internal bool isDead;
 
-        public HeapMemory(int size)
+        public HeapMemory(uint size)
         {
             _buffer = new byte[size];
             VirtualOffset = 0;
             VirtualCount = size;
         }
 
-        public void EnsureSize(int size)
+        public void EnsureSize(uint size)
         {
             if (_buffer.Length < size)
             {
