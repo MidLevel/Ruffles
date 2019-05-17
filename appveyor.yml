@@ -44,7 +44,7 @@ for:
   - semantic-release
   artifacts:
   - path: 'Ruffles\bin\Release\*\*'
-  - deploy:
+  deploy:
     provider: NuGet
     api_key:
       secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
