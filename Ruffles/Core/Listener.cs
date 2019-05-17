@@ -502,7 +502,7 @@ namespace Ruffles.Core
                     }
                     else if (Connections[i].State == ConnectionState.RequestingChallenge)
                     {
-                        if ((DateTime.Now - Connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeMinResendDelay && Connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
+                        if ((DateTime.Now - Connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && Connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
                         {
                             Connections[i].HandshakeResendAttempts++;
                             Connections[i].HandshakeLastSendTime = DateTime.Now;
@@ -518,7 +518,7 @@ namespace Ruffles.Core
                     }
                     else if (Connections[i].State == ConnectionState.SolvingChallenge)
                     {
-                        if ((DateTime.Now - Connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeMinResendDelay && Connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
+                        if ((DateTime.Now - Connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && Connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
                         {
                             Connections[i].HandshakeResendAttempts++;
                             Connections[i].HandshakeLastSendTime = DateTime.Now;
@@ -533,7 +533,7 @@ namespace Ruffles.Core
                     }
                     else if (Connections[i].State == ConnectionState.Connected)
                     {
-                        if (!Connections[i].HailStatus.Completed && (DateTime.Now - Connections[i].HailStatus.LastAttempt).TotalMilliseconds > config.HandshakeMinResendDelay && Connections[i].HailStatus.Attempts < config.MaxHandshakeResends)
+                        if (!Connections[i].HailStatus.Completed && (DateTime.Now - Connections[i].HailStatus.LastAttempt).TotalMilliseconds > config.HandshakeResendDelay && Connections[i].HailStatus.Attempts < config.MaxHandshakeResends)
                         {
                             // Send the response
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Hail, false);
@@ -615,7 +615,7 @@ namespace Ruffles.Core
             {
                 if (Connections[i] != null && !Connections[i].Dead && Connections[i].State == ConnectionState.Connected)
                 {
-                    if ((DateTime.Now - Connections[i].LastMessageOut).TotalMilliseconds > config.MinHeartbeatDelay)
+                    if ((DateTime.Now - Connections[i].LastMessageOut).TotalMilliseconds > config.HeartbeatDelay)
                     {
                         // This client has not been talked to in a long time. Send a heartbeat.
 
@@ -1399,7 +1399,7 @@ namespace Ruffles.Core
                         ChannelTypes = new ChannelType[0],
                         HandshakeLastSendTime = DateTime.Now,
                         Roundtrip = 10,
-                        Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MinMergeDelay) : null
+                        Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null
                     };
 
                     // Make sure the array is not null
