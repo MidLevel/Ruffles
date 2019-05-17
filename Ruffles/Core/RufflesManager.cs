@@ -34,10 +34,7 @@ namespace Ruffles.Core
                 {
                     while (IsRunning)
                     {
-                        lock (ThreadLock)
-                        {
-                            RunAllInternals();
-                        }
+                        RunAllInternals();
                     }
                 });
 
