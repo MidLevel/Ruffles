@@ -8,7 +8,6 @@
     <owners>TwoTen</owners>
     <licenseUrl>https://github.com/MidLevel/Ruffles/blob/master/LICENCE</licenseUrl>
     <projectUrl>https://github.com/MidLevel/Ruffles</projectUrl>
-    <releaseNotes>$releaseNotes$</releaseNotes>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Lightweight high performance reliable UDP library</description>
     <copyright>Copyright © 2019 Albin Corén</copyright>
