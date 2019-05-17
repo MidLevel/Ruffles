@@ -12,7 +12,7 @@ else
     $version = "0.1.0"
 }
 
-$releaseNoteUrl = -join ("https://github.com/MidLevel/Ruffles/releases/tag/v", $version
+$releaseNoteUrl = -join ("https://github.com/MidLevel/Ruffles/releases/tag/v", $version)
 
 $args = -join("pack Ruffles.nuspec -Version ", $version, " -Properties Configuration=Release;releaseNotes=", $releaseNoteUrl)
 
