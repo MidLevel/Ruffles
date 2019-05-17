@@ -7,8 +7,8 @@
         }],
         "@semantic-release/release-notes-generator",
         ["@semantic-release/exec", {
-            "analyzeCommitsCmd": "set SEMANTIC_LAST_VERSION=${lastRelease.version}",
-            "verifyReleaseCmd": "set SEMANTIC_NEXT_VERSION=${nextRelease.version}",
+            "analyzeCommitsCmd": "setx MACHINE SEMANTIC_LAST_VERSION ${lastRelease.version}",
+            "verifyReleaseCmd": "setx MACHINE SEMANTIC_NEXT_VERSION ${nextRelease.version}",
             "publishCmd": "nuget push *.nupkg -ApiKey %nuget_key% -NonInteractive -Source https://api.nuget.org/v3/index.json",
         }],
         ["@semantic-release/github", {
