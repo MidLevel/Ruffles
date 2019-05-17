@@ -4,7 +4,7 @@ using Ruffles.Simulation;
 
 namespace Ruffles.Configuration
 {
-    public class ListenerConfig
+    public class SocketConfig
     {
         // Connection
         /// <summary>
@@ -158,7 +158,7 @@ namespace Ruffles.Configuration
             MinLatency = 50
         };
 
-        // Advanced protocol settings (usually these shoudl NOT be fucked with. Please understand their full meaning before changing)
+        // Advanced protocol settings (usually these should NOT be fucked with. Please understand their full meaning before changing)
         /// <summary>
         /// Whether or not heartbeats should be sent and processed. 
         /// Disabling this requires you to ensure the connection stays alive by sending constant packets yourself.

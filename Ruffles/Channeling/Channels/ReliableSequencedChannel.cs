@@ -57,14 +57,14 @@ namespace Ruffles.Channeling.Channels
         // Channel info
         private readonly byte channelId;
         private readonly Connection connection;
-        private readonly Listener listener;
-        private readonly ListenerConfig config;
+        private readonly RuffleSocket socket;
+        private readonly SocketConfig config;
 
-        internal ReliableSequencedChannel(byte channelId, Connection connection, Listener listener, ListenerConfig config)
+        internal ReliableSequencedChannel(byte channelId, Connection connection, RuffleSocket socket, SocketConfig config)
         {
             this.channelId = channelId;
             this.connection = connection;
-            this.listener = listener;
+            this.socket = socket;
             this.config = config;
 
             // Alloc the in flight windows for receive and send

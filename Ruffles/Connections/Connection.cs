@@ -8,21 +8,60 @@ using Ruffles.Messaging;
 
 namespace Ruffles.Connections
 {
+    /// <summary>
+    /// A connection between two RuffleSockets.
+    /// </summary>
     public class Connection
     {
+        /// <summary>
+        /// Gets the id of the connection. This is reused for connections by the RuffleSocket.
+        /// </summary>
+        /// <value>The connectionId.</value>
         public ulong Id { get; internal set; }
+        /// <summary>
+        /// Gets a value indicating whether this <see cref="T:Ruffles.Connections.Connection"/> is dead.
+        /// </summary>
+        /// <value><c>true</c> if dead; otherwise, <c>false</c>.</value>
         public bool Dead { get; internal set; }
         internal bool Recycled { get; set; }
+        /// <summary>
+        /// Gets the connection state.
+        /// </summary>
+        /// <value>The connection state.</value>
         public ConnectionState State { get; internal set; }
         internal MessageStatus HailStatus;
+        /// <summary>
+        /// Gets the current connection end point.
+        /// </summary>
+        /// <value>The connection end point.</value>
         public EndPoint EndPoint { get; internal set; }
-        public Listener Listener { get; internal set; }
+        /// <summary>
+        /// Gets the RuffleSocket the connection belongs to.
+        /// </summary>
+        /// <value>The RuffleSocket the connection belongs to.</value>
+        public RuffleSocket Socket { get; internal set; }
         internal ulong ConnectionChallenge { get; set; }
         internal byte ChallengeDifficulty { get; set; }
         internal ulong ChallengeAnswer { get; set; }
+        /// <summary>
+        /// Gets the time of the last outbound message.
+        /// </summary>
+        /// <value>The time of the last outbound message.</value>
         public DateTime LastMessageOut { get; internal set; }
+        /// <summary>
+        /// Gets the time of the last incoming message.
+        /// </summary>
+        /// <value>The time of the last incoming message.</value>
         public DateTime LastMessageIn { get; internal set; }
+        /// <summary>
+        /// Gets the time the connection was started.
+        /// </summary>
+        /// <value>The time the connection started.</value>
         public DateTime ConnectionStarted { get; internal set; }
+        /// <summary>
+        /// Gets the estimated roundtrip.
+        /// </summary>
+        /// <value>The estimated roundtrip.</value>
         public double Roundtrip { get; internal set; } = 10;
         internal readonly UnreliableSequencedChannel HeartbeatChannel;
         internal MessageMerger Merger;
@@ -40,7 +79,7 @@ namespace Ruffles.Connections
         internal DateTime HandshakeLastSendTime;
 
 
-        internal Connection(ListenerConfig config)
+        internal Connection(SocketConfig config)
         {
             if (config.EnableHeartbeats)
             {
@@ -51,13 +90,13 @@ namespace Ruffles.Connections
         internal void SendRaw(ArraySegment<byte> payload, bool noMerge)
         {
             // TODO: Dead & state safety
-            Listener.SendRaw(this, payload, noMerge);
+            Socket.SendRaw(this, payload, noMerge);
         }
 
         internal void Disconnect(bool sendMessage)
         {
             // TODO: Dead & state safety
-            Listener.DisconnectConnection(this, sendMessage, false);
+            Socket.DisconnectConnection(this, sendMessage, false);
         }
 
         internal void AddRoundtripSample(ulong sample)
@@ -72,6 +111,9 @@ namespace Ruffles.Connections
             Roundtrip += (rttDistance * 0.1d);
         }
 
+        /// <summary>
+        /// Recycle this connection so that it can be reused by Ruffles.
+        /// </summary>
         public void Recycle()
         {
             if (Dead && !Recycled)

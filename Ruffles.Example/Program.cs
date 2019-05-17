@@ -9,7 +9,7 @@ namespace Ruffles.Example
 {
     public class Program
     {
-        internal static readonly ListenerConfig ServerConfig = new ListenerConfig()
+        internal static readonly SocketConfig ServerConfig = new SocketConfig()
         {
             ChallengeDifficulty = 25, // Difficulty 25 is fairly hard
             ChannelTypes = new ChannelType[]
@@ -22,7 +22,7 @@ namespace Ruffles.Example
             DualListenPort = 5674
         };
 
-        internal static readonly ListenerConfig ClientConfig = new ListenerConfig()
+        internal static readonly SocketConfig ClientConfig = new SocketConfig()
         {
             ChallengeDifficulty = 25, // Difficulty 25 is fairly hard
             DualListenPort = 0 // Port 0 means we get a port by the operating system
@@ -40,9 +40,9 @@ namespace Ruffles.Example
 
         private static void NoRufflesManager()
         {
-            Listener server = new Listener(ServerConfig);
+            RuffleSocket server = new RuffleSocket(ServerConfig);
 
-            Listener client = new Listener(ClientConfig);
+            RuffleSocket client = new RuffleSocket(ClientConfig);
 
             // IPv4 Connect
             //client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
@@ -142,9 +142,9 @@ namespace Ruffles.Example
             // Create a ruffles manager
             RufflesManager manager = new RufflesManager(false);
 
-            Listener server = manager.AddListener(ServerConfig);
+            RuffleSocket server = manager.AddSocket(ServerConfig);
 
-            Listener client = manager.AddListener(ClientConfig);
+            RuffleSocket client = manager.AddSocket(ClientConfig);
 
             // IPv4 Connect
             //client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
@@ -242,9 +242,9 @@ namespace Ruffles.Example
             // Create a ruffles manager
             RufflesManager manager = new RufflesManager(true);
 
-            Listener server = manager.AddListener(ServerConfig);
+            RuffleSocket server = manager.AddSocket(ServerConfig);
 
-            Listener client = manager.AddListener(ClientConfig);
+            RuffleSocket client = manager.AddSocket(ClientConfig);
 
             // IPv4 Connect
             //client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));

@@ -4,7 +4,7 @@ using Ruffles.Connections;
 
 namespace Ruffles.Simulation
 {
-    public class NetworkSimulator
+    internal class NetworkSimulator
     {
         internal struct OutgoingPacket
         {

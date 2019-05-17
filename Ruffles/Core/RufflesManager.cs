@@ -5,20 +5,43 @@ using Ruffles.Configuration;
 
 namespace Ruffles.Core
 {
+    /// <summary>
+    /// A socket manager that can run Ruffles in a threaded mode.
+    /// </summary>
     public class RufflesManager
     {
-        private readonly List<Listener> _listeners = new List<Listener>();
+        private readonly List<RuffleSocket> _sockets = new List<RuffleSocket>();
         private Thread _thread;
 
+        /// <summary>
+        /// The thread lock that has to be grabbed to modify the underlying connections when running in threaded mode.
+        /// Modifications includes all connection APIs.
+        /// </summary>
+        /// <value>The object to lock.</value>
         public object ThreadLock { get; } = new object();
+        /// <summary>
+        /// Gets a value indicating whether this <see cref="T:Ruffles.Core.RufflesManager"/> is threaded.
+        /// </summary>
+        /// <value><c>true</c> if is threaded; otherwise, <c>false</c>.</value>
         public bool IsThreaded { get; }
+        /// <summary>
+        /// Gets a value indicating whether this <see cref="T:Ruffles.Core.RufflesManager"/> is running.
+        /// </summary>
+        /// <value><c>true</c> if is running; otherwise, <c>false</c>.</value>
         public bool IsRunning { get; private set; }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="T:Ruffles.Core.RufflesManager"/> class.
+        /// </summary>
+        /// <param name="threaded">If set to <c>true</c> threaded.</param>
         public RufflesManager(bool threaded = true)
         {
             this.IsThreaded = threaded;
         }
 
+        /// <summary>
+        /// Init this manager instance.
+        /// </summary>
         public void Init()
         {
             if (IsRunning)
@@ -42,6 +65,9 @@ namespace Ruffles.Core
             }
         }
 
+        /// <summary>
+        /// Stops this instance.
+        /// </summary>
         public void Shutdown()
         {
             if (!IsRunning)
@@ -64,46 +90,55 @@ namespace Ruffles.Core
                 throw new InvalidOperationException("Manager is not started");
             }
 
-            for (int i = 0; i < _listeners.Count; i++)
+            for (int i = 0; i < _sockets.Count; i++)
             {
                 if (IsThreaded)
                 {
                     lock (ThreadLock)
                     {
-                        _listeners[i].RunInternalLoop();
+                        _sockets[i].RunInternalLoop();
                     }
                 }
                 else
                 {
-                    _listeners[i].RunInternalLoop();
+                    _sockets[i].RunInternalLoop();
                 }
             }
         }
 
-        public Listener AddListener(ListenerConfig config)
+        /// <summary>
+        /// Adds a local socket to the manager.
+        /// </summary>
+        /// <returns>The local socket.</returns>
+        /// <param name="config">The socket configuration.</param>
+        public RuffleSocket AddSocket(SocketConfig config)
         {
             if (!IsRunning)
             {
                 throw new InvalidOperationException("Manager is not started");
             }
 
-            Listener listener = new Listener(config);
+            RuffleSocket socket = new RuffleSocket(config);
 
             if (IsThreaded)
             {
                 lock (ThreadLock)
                 {
-                    _listeners.Add(listener);
+                    _sockets.Add(socket);
                 }
             }
             else
             {
-                _listeners.Add(listener);
+                _sockets.Add(socket);
             }
 
-            return listener;
+            return socket;
         }
 
+        /// <summary>
+        /// Runs all the internals. Only usable when not using a threaded manager.
+        /// Calling this is not neccecary, the PollAllSockets will do it for you.
+        /// </summary>
         public void RunInternals()
         {
             if (!IsRunning)
@@ -119,7 +154,12 @@ namespace Ruffles.Core
             RunAllInternals();
         }
 
-        public NetworkEvent PollAllListeners()
+
+        /// <summary>
+        /// Runs all the internals and polls all the sockets for events.
+        /// </summary>
+        /// <returns>The first event.</returns>
+        public NetworkEvent PollAllSockets()
         {
             if (!IsRunning)
             {
@@ -135,9 +175,9 @@ namespace Ruffles.Core
             {
                 lock (ThreadLock)
                 {
-                    for (int i = 0; i < _listeners.Count; i++)
+                    for (int i = 0; i < _sockets.Count; i++)
                     {
-                        NetworkEvent @event = _listeners[i].Poll();
+                        NetworkEvent @event = _sockets[i].Poll();
 
                         if (@event.Type != NetworkEventType.Nothing)
                         {
@@ -148,9 +188,9 @@ namespace Ruffles.Core
             }
             else
             {
-                for (int i = 0; i < _listeners.Count; i++)
+                for (int i = 0; i < _sockets.Count; i++)
                 {
-                    NetworkEvent @event = _listeners[i].Poll();
+                    NetworkEvent @event = _sockets[i].Poll();
 
                     if (@event.Type != NetworkEventType.Nothing)
                     {
@@ -162,7 +202,7 @@ namespace Ruffles.Core
             return new NetworkEvent()
             {
                 Connection = null,
-                Listener = null,
+                Socket = null,
                 Data = new ArraySegment<byte>(),
                 AllowUserRecycle = false,
                 InternalMemory = null,

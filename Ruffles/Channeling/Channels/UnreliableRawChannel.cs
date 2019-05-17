@@ -11,9 +11,9 @@ namespace Ruffles.Channeling.Channels
         // Channel info
         private readonly byte channelId;
         private readonly Connection connection;
-        private readonly ListenerConfig config;
+        private readonly SocketConfig config;
 
-        internal UnreliableRawChannel(byte channelId, Connection connection, ListenerConfig config)
+        internal UnreliableRawChannel(byte channelId, Connection connection, SocketConfig config)
         {
             this.channelId = channelId;
             this.connection = connection;

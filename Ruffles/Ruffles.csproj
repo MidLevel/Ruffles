@@ -16,7 +16,6 @@
     <Folder Include="Exceptions\" />
     <Folder Include="Channeling\Channels\" />
     <Folder Include="Random\" />
-    <Folder Include="Threading\" />
     <Folder Include="Utils\" />
   </ItemGroup>
 </Project>
