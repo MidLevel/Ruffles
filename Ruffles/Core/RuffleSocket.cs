@@ -1049,7 +1049,12 @@ namespace Ruffles.Core
 
                             byte channelId = payload.Array[payload.Offset + 1];
 
-                            // TODO: Safety
+                            if (channelId < 0 || channelId >= connection.Channels.Length)
+                            {
+                                // Invalid channelId
+                                return;
+                            }
+
                             IChannel channel = connection.Channels[channelId];
 
                             // Handle ack

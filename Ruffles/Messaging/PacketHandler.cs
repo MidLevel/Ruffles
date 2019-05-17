@@ -19,6 +19,12 @@ namespace Ruffles.Messaging
 
             byte channelId = payload.Array[payload.Offset];
 
+            if (channelId < 0 || channelId >= connection.Channels.Length)
+            {
+                // ChannelId out of range
+                return;
+            }
+
             ArraySegment<byte>? incomingMessage = connection.Channels[channelId].HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out bool hasMore);
 
             if (incomingMessage != null)
@@ -71,7 +77,11 @@ namespace Ruffles.Messaging
 
         internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
         {
-            // TODO: Safety
+            if (channelId < 0 || channelId >= connection.Channels.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(channelId), channelId, "ChannelId was out of range");
+            }
+
             IChannel channel = connection.Channels[channelId];
 
             HeapMemory messageMemory = channel.CreateOutgoingMessage(payload, out bool dealloc);
