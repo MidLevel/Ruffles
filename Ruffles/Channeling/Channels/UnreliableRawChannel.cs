@@ -23,7 +23,7 @@ namespace Ruffles.Channeling.Channels
         public HeapMemory CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc(payload.Count + 2);
+            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 2);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);

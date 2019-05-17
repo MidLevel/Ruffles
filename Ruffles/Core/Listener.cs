@@ -423,7 +423,7 @@ namespace Ruffles.Core
                         HeapMemory heartbeatMemory = Connections[i].HeartbeatChannel.CreateOutgoingHeartbeatMessage();
 
                         // Send heartbeat
-                        Connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, heartbeatMemory.VirtualOffset, heartbeatMemory.VirtualCount), false);
+                        Connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
 
                         // DeAlloc the memory
                         MemoryManager.DeAlloc(heartbeatMemory);

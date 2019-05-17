@@ -111,7 +111,7 @@ namespace Ruffles.Channeling.Channels
             _lastOutboundSequenceNumber++;
 
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc(payload.Count + 4);
+            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 4);
             
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
@@ -198,7 +198,7 @@ namespace Ruffles.Channeling.Channels
                             Sequence = i
                         };
 
-                        connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Memory.Buffer, _sendSequencer[i].Memory.VirtualOffset, _sendSequencer[i].Memory.VirtualCount), false);
+                        connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Memory.Buffer, (int)_sendSequencer[i].Memory.VirtualOffset, (int)_sendSequencer[i].Memory.VirtualCount), false);
                     }
                 }
             }

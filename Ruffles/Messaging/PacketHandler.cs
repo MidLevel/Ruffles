@@ -24,7 +24,7 @@ namespace Ruffles.Messaging
             if (incomingMessage != null)
             {
                 // Alloc memory that can be borrowed to userspace
-                HeapMemory memory = MemoryManager.Alloc(incomingMessage.Value.Count);
+                HeapMemory memory = MemoryManager.Alloc((uint)incomingMessage.Value.Count);
 
                 // Copy payload to borrowed memory
                 Buffer.BlockCopy(incomingMessage.Value.Array, incomingMessage.Value.Offset, memory.Buffer, 0, incomingMessage.Value.Count);
@@ -36,7 +36,7 @@ namespace Ruffles.Messaging
                     Listener = connection.Listener,
                     Type = NetworkEventType.Data,
                     AllowUserRecycle = true,
-                    Data = new ArraySegment<byte>(memory.Buffer, memory.VirtualOffset, memory.VirtualCount),
+                    Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
                     InternalMemory = memory,
                     SocketReceiveTime = DateTime.Now
                 });
@@ -59,7 +59,7 @@ namespace Ruffles.Messaging
                             Listener = connection.Listener,
                             Type = NetworkEventType.Data,
                             AllowUserRecycle = true,
-                            Data = new ArraySegment<byte>(messageMemory.Buffer, messageMemory.VirtualOffset, messageMemory.VirtualCount),
+                            Data = new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset, (int)messageMemory.VirtualCount),
                             InternalMemory = messageMemory,
                             SocketReceiveTime = DateTime.Now
                         });
@@ -78,7 +78,7 @@ namespace Ruffles.Messaging
 
             if (messageMemory != null)
             {
-                connection.SendRaw(new ArraySegment<byte>(messageMemory.Buffer, messageMemory.VirtualOffset, messageMemory.VirtualCount), noDelay);
+                connection.SendRaw(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset, (int)messageMemory.VirtualCount), noDelay);
             }
 
             if (dealloc)

@@ -29,7 +29,7 @@ namespace Ruffles.Channeling.Channels
             _lastOutboundSequenceNumber++;
 
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc(payload.Count + 4);
+            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 4);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
