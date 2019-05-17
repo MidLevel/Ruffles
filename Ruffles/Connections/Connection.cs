@@ -89,24 +89,16 @@ namespace Ruffles.Connections
 
         internal void SendRaw(ArraySegment<byte> payload, bool noMerge)
         {
-            // TODO: Dead & state safety
             Socket.SendRaw(this, payload, noMerge);
         }
 
         internal void Disconnect(bool sendMessage)
         {
-            // TODO: Dead & state safety
             Socket.DisconnectConnection(this, sendMessage, false);
         }
 
         internal void AddRoundtripSample(ulong sample)
         {
-            // TODO: Dead & state safety
-
-            // Old TCP:
-            // Roundtrip = 0.0125 * Roundtrip + (1 - 0.0125) * sample;
-
-
             double rttDistance = sample - Roundtrip;
             Roundtrip += (rttDistance * 0.1d);
         }
