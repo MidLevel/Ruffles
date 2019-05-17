@@ -32,7 +32,9 @@ cache:
 - '%APPDATA%\npm'
 
 install:
-- npm install -g semantic-release
+- npm install -g semantic-release@15
+- npm install -g @semantic-release/github
+- npm install -g @semantic-release/exec
 - semantic-release --dry-run
 
 before_deploy:
