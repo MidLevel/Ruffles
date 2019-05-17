@@ -6,7 +6,6 @@ environment:
   nuget_key:
     secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
 
-
 configuration:
   - Release
 
@@ -15,15 +14,6 @@ branches:
     - master
 
 skip_tags: true
-
-dotnet_csproj:
-  patch: true
-  file: '**\*.csproj'
-  version: '$(version)'
-  package_version: '$(version)'
-  assembly_version: '$(version)'
-  file_version: '$(version)'
-  informational_version: '$(version)'
 
 before_build:
   - nuget restore
@@ -53,6 +43,14 @@ before_deploy:
 
 artifacts:
 - path: '*net*.zip'
+
+deploy:
+  provider: NuGet
+  api_key:
+    secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
+  skip_symbols: false
+  artifact: '*.nupkg'
+
 
 deploy_script:
 - semantic-release
