@@ -30,34 +30,16 @@ namespace Ruffles.Messaging
                 Buffer.BlockCopy(incomingMessage.Value.Array, incomingMessage.Value.Offset, memory.Buffer, 0, incomingMessage.Value.Count);
 
                 // Send to userspace
-
-                if (activeConfig.EnableThreadSafety)
+                connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
                 {
-                    // Grab write lock to enqueue the data
-                    connection.Listener.EventQueueLock.EnterWriteLock();
-                }
-
-                try
-                {
-                    connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
-                    {
-                        Connection = connection,
-                        Listener = connection.Listener,
-                        Type = NetworkEventType.Data,
-                        AllowUserRecycle = true,
-                        Data = new ArraySegment<byte>(memory.Buffer, memory.VirtualOffset, memory.VirtualCount),
-                        InternalMemory = memory,
-                        SocketReceiveTime = DateTime.Now
-                    });
-                }
-                finally
-                {
-                    if (activeConfig.EnableThreadSafety)
-                    {
-                        // Release write lock
-                        connection.Listener.EventQueueLock.ExitWriteLock();
-                    }
-                }
+                    Connection = connection,
+                    Listener = connection.Listener,
+                    Type = NetworkEventType.Data,
+                    AllowUserRecycle = true,
+                    Data = new ArraySegment<byte>(memory.Buffer, memory.VirtualOffset, memory.VirtualCount),
+                    InternalMemory = memory,
+                    SocketReceiveTime = DateTime.Now
+                });
             }
 
             if (hasMore)
@@ -71,34 +53,16 @@ namespace Ruffles.Messaging
                     if (messageMemory != null)
                     {
                         // Send to userspace
-
-                        if (activeConfig.EnableThreadSafety)
+                        connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
                         {
-                            // Grab write lock to enqueue data
-                            connection.Listener.EventQueueLock.EnterWriteLock();
-                        }
-
-                        try
-                        {
-                            connection.Listener.UserEventQueue.Enqueue(new NetworkEvent()
-                            {
-                                Connection = connection,
-                                Listener = connection.Listener,
-                                Type = NetworkEventType.Data,
-                                AllowUserRecycle = true,
-                                Data = new ArraySegment<byte>(messageMemory.Buffer, messageMemory.VirtualOffset, messageMemory.VirtualCount),
-                                InternalMemory = messageMemory,
-                                SocketReceiveTime = DateTime.Now
-                            });
-                        }
-                        finally
-                        {
-                            if (activeConfig.EnableThreadSafety)
-                            {
-                                // Release write lock
-                                connection.Listener.EventQueueLock.ExitWriteLock();
-                            }
-                        }
+                            Connection = connection,
+                            Listener = connection.Listener,
+                            Type = NetworkEventType.Data,
+                            AllowUserRecycle = true,
+                            Data = new ArraySegment<byte>(messageMemory.Buffer, messageMemory.VirtualOffset, messageMemory.VirtualCount),
+                            InternalMemory = messageMemory,
+                            SocketReceiveTime = DateTime.Now
+                        });
                     }
                 }
                 while (messageMemory != null);

@@ -35,10 +35,6 @@ namespace Ruffles.Configuration
         /// </summary>
         public ulong MinConnectionPollDelay = 50;
         /// <summary>
-        /// Whether or not thread safety should be enabled.
-        /// </summary>
-        public bool EnableThreadSafety = false;
-        /// <summary>
         /// Whether or not to reuse connections. Disabling this has a impact on memory and CPU.
         /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.
         /// </summary>

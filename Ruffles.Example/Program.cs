@@ -40,10 +40,6 @@ namespace Ruffles.Example
 
         private static void NoRufflesManager()
         {
-            // Since we run single threaded. We dont need thread safety. It will slow down Ruffles
-            ServerConfig.EnableThreadSafety = false;
-            ClientConfig.EnableThreadSafety = false;
-
             Listener server = new Listener(ServerConfig);
 
             Listener client = new Listener(ClientConfig);
@@ -127,7 +123,7 @@ namespace Ruffles.Example
                     }
                 }
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 10)
+                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 1)
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
                     byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
@@ -145,10 +141,6 @@ namespace Ruffles.Example
         {
             // Create a ruffles manager
             RufflesManager manager = new RufflesManager(false);
-
-            // Since we run single threaded. We dont need thread safety. It will slow down Ruffles
-            ServerConfig.EnableThreadSafety = false;
-            ClientConfig.EnableThreadSafety = false;
 
             Listener server = manager.AddListener(ServerConfig);
 
@@ -250,10 +242,6 @@ namespace Ruffles.Example
             // Create a ruffles manager
             RufflesManager manager = new RufflesManager(true);
 
-            // Since we run multi threaded. We need thread safety.
-            ServerConfig.EnableThreadSafety = true;
-            ClientConfig.EnableThreadSafety = true;
-
             Listener server = manager.AddListener(ServerConfig);
 
             Listener client = manager.AddListener(ClientConfig);
@@ -283,10 +271,16 @@ namespace Ruffles.Example
 
             while (true)
             {
-                // Polls server for events
-                NetworkEvent serverEvent = server.Poll();
-                // Polls client for events
-                NetworkEvent clientEvent = client.Poll();
+                NetworkEvent serverEvent;
+                NetworkEvent clientEvent;
+
+                lock (manager.ThreadLock)
+                {
+                    // Polls server for events
+                    serverEvent = server.Poll();
+                    // Polls client for events
+                    clientEvent = client.Poll();
+                }
 
 
                 if (serverEvent.Type != NetworkEventType.Nothing)
@@ -303,7 +297,10 @@ namespace Ruffles.Example
 
                     if (serverEvent.Type == NetworkEventType.Disconnect || serverEvent.Type == NetworkEventType.Timeout)
                     {
-                        serverEvent.Connection.Recycle();
+                        lock (manager.ThreadLock)
+                        {
+                            serverEvent.Connection.Recycle();
+                        }
                     }
                 }
 
@@ -323,12 +320,19 @@ namespace Ruffles.Example
                     {
                         messagesReceived++;
                         Console.WriteLine("Got message: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"");
-                        clientEvent.Recycle();
+
+                        lock (manager.ThreadLock)
+                        {
+                            clientEvent.Recycle();
+                        }
                     }
 
                     if (clientEvent.Type == NetworkEventType.Disconnect || clientEvent.Type == NetworkEventType.Timeout)
                     {
-                        clientEvent.Connection.Recycle();
+                        lock (manager.ThreadLock)
+                        {
+                            clientEvent.Connection.Recycle();
+                        }
                     }
                 }
 
@@ -337,8 +341,11 @@ namespace Ruffles.Example
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
                     byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
-                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0, false);
-                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
+                    lock (manager.ThreadLock)
+                    {
+                        server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0, false);
+                        server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
+                    }
 
                     messageCounter++;
                     lastSent = DateTime.Now;

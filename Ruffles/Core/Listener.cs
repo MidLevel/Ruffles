@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading;
 using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
 using Ruffles.Configuration;
@@ -12,7 +11,6 @@ using Ruffles.Memory;
 using Ruffles.Messaging;
 using Ruffles.Random;
 using Ruffles.Simulation;
-using Ruffles.Threading;
 
 // TODO: Make sure only connection receiver send hails to prevent a hacked client sending messed up channel configs and the receiver applying them.
 // Might actually already be enforced via the state? Verify
@@ -27,10 +25,6 @@ namespace Ruffles.Core
         private readonly Dictionary<EndPoint, Connection> AddressPendingConnectionLookup = new Dictionary<EndPoint, Connection>();
 
         internal readonly Queue<NetworkEvent> UserEventQueue = new Queue<NetworkEvent>();
-        internal readonly ReaderWriterLockSlim EventQueueLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
-
-        private readonly Queue<ThreadHopEvent> ThreadHopQueue = new Queue<ThreadHopEvent>();
-        private readonly ReaderWriterLockSlim ThreadHopQueueLock = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
 
         private ushort PendingConnections = 0;
 
@@ -153,142 +147,74 @@ namespace Ruffles.Core
 
         public void Send(ArraySegment<byte> payload, ulong id, byte channelId, bool noDelay)
         {
-            if (config.EnableThreadSafety)
-            {
-                // Alloc some memory
-                HeapMemory memory = MemoryManager.Alloc(payload.Count);
-
-                // Copy payload
-                Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 0, payload.Count);
-
-                ThreadHopQueueLock.EnterWriteLock();
-                try
-                {
-                    ThreadHopQueue.Enqueue(new ThreadHopEvent()
-                    {
-                        Type = ThreadHopType.Send,
-                        ConnectionId = id,
-                        ChannelId = channelId,
-                        Memory = memory,
-                        NoDelay = noDelay
-                    });
-                }
-                finally
-                {
-                    ThreadHopQueueLock.ExitWriteLock();
-                }
-            }
-            else
-            {
-                // TODO: Safety
-                PacketHandler.SendMessage(payload, Connections[id], channelId, noDelay);
-            }
+            // TODO: Safety
+            PacketHandler.SendMessage(payload, Connections[id], channelId, noDelay);
         }
 
         public void Connect(EndPoint endpoint)
         {
-            if (config.EnableThreadSafety)
+            Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingConnection);
+
+            if (connection != null)
             {
-                ThreadHopQueueLock.EnterWriteLock();
-                try
+                // Set resend values
+                connection.HandshakeResendAttempts = 1;
+                connection.HandshakeLastSendTime = DateTime.Now;
+
+                outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
+
+                if (config.TimeBasedConnectionChallenge)
                 {
-                    ThreadHopQueue.Enqueue(new ThreadHopEvent()
+                    // Current unix time
+                    ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+
+                    // Save for resends
+                    connection.PreConnectionChallengeTimestamp = unixTimestamp;
+
+                    // Write the current unix time
+                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
+
+                    ulong counter = 0;
+                    ulong iv = RandomProvider.GetRandomULong();
+
+                    // Save for resends
+                    connection.PreConnectionChallengeIV = iv;
+
+                    // Find collision
+                    ulong hash;
+                    do
                     {
-                        Type = ThreadHopType.Connect,
-                        Endpoint = endpoint
-                    });
-                }
-                finally
-                {
-                    ThreadHopQueueLock.ExitWriteLock();
-                }
-            }
-            else
-            {
-                Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingConnection);
+                        // Attempt to calculate a new hash collision
+                        hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
 
-                if (connection != null)
-                {
-                    // Set resend values
-                    connection.HandshakeResendAttempts = 1;
-                    connection.HandshakeLastSendTime = DateTime.Now;
-
-                    outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
-
-                    if (config.TimeBasedConnectionChallenge)
-                    {
-                        // Current unix time
-                        ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-
-                        // Save for resends
-                        connection.PreConnectionChallengeTimestamp = unixTimestamp;
-
-                        // Write the current unix time
-                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
-
-                        ulong counter = 0;
-                        ulong iv = RandomProvider.GetRandomULong();
-
-                        // Save for resends
-                        connection.PreConnectionChallengeIV = iv;
-
-                        // Find collision
-                        ulong hash;
-                        do
-                        {
-                            // Attempt to calculate a new hash collision
-                            hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
-
-                            // Increment counter
-                            counter++;
-                        }
-                        while ((hash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty) != 0);
-
-                        // Make counter 1 less
-                        counter--;
-
-                        // Save for resends
-                        connection.PreConnectionChallengeCounter = counter;
-
-                        // Write counter
-                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
-
-                        // Write IV
-                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + i] = ((byte)(iv >> (i * 8)));
+                        // Increment counter
+                        counter++;
                     }
+                    while ((hash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty) != 0);
 
-                    int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+                    // Make counter 1 less
+                    counter--;
 
-                    connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
+                    // Save for resends
+                    connection.PreConnectionChallengeCounter = counter;
+
+                    // Write counter
+                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
+
+                    // Write IV
+                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + i] = ((byte)(iv >> (i * 8)));
                 }
+
+                int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+
+                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
             }
         }
 
-        public void Disconnect(ulong id)
+        public void Disconnect(ulong id, bool sendMessage)
         {
-            if (config.EnableThreadSafety)
-            {
-                ThreadHopQueueLock.EnterWriteLock();
-                try
-                {
-                    ThreadHopQueue.Enqueue(new ThreadHopEvent()
-                    {
-                        Type = ThreadHopType.Send,
-                        ConnectionId = id,
-                        ChannelId = 0,
-                        Memory = null,
-                    });
-                }
-                finally
-                {
-                    ThreadHopQueueLock.ExitWriteLock();
-                }
-            }
-            else
-            {
-                // TODO: Safety
-                DisconnectConnection(Connections[id], true, false);
-            }
+            // TODO: Safety
+            DisconnectConnection(Connections[id], sendMessage, false);
         }
 
 
@@ -296,11 +222,6 @@ namespace Ruffles.Core
 
         public void RunInternalLoop()
         {
-            if (config.EnableThreadSafety)
-            {
-                RunUserHops();
-            }
-
             InternalPollSocket();
 
             if (simulator != null)
@@ -353,101 +274,6 @@ namespace Ruffles.Core
                         Connections[i].SendRaw(mergedPayload.Value, true);
                     }
                 }
-            }
-        }
-
-        private void RunUserHops()
-        {
-            ThreadHopQueueLock.EnterWriteLock();
-            try
-            {
-                while (ThreadHopQueue.Count > 0)
-                {
-                    ThreadHopEvent @event = ThreadHopQueue.Dequeue();
-
-                    switch (@event.Type)
-                    {
-                        case ThreadHopType.Connect:
-                            {
-                                Connection connection = AddNewConnection(@event.Endpoint, ConnectionState.RequestingConnection);
-
-                                if (connection != null)
-                                {
-                                    // Set resend values
-                                    connection.HandshakeResendAttempts = 1;
-                                    connection.HandshakeLastSendTime = DateTime.Now;
-
-                                    outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
-
-                                    if (config.TimeBasedConnectionChallenge)
-                                    {
-                                        // Current unix time
-                                        ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-
-                                        // Save for resends
-                                        connection.PreConnectionChallengeTimestamp = unixTimestamp;
-
-                                        // Write the current unix time
-                                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
-
-                                        ulong counter = 0;
-                                        ulong iv = RandomProvider.GetRandomULong();
-
-                                        // Save for resends
-                                        connection.PreConnectionChallengeIV = iv;
-
-                                        // Find collision
-                                        ulong hash;
-                                        do
-                                        {
-                                            // Attempt to calculate a new hash collision
-                                            hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
-
-                                            // Increment counter
-                                            counter++;
-                                        }
-                                        while ((hash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty) != 0);
-
-                                        // Make counter 1 less
-                                        counter--;
-
-                                        // Save for resends
-                                        connection.PreConnectionChallengeCounter = counter;
-
-                                        // Write counter
-                                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
-
-                                        // Write IV
-                                        for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + i] = ((byte)(iv >> (i * 8)));
-                                    }
-
-                                    int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
-
-                                    connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
-                                }
-                            }
-                            break;
-                        case ThreadHopType.Disconnect:
-                            {
-                                // TODO: Safety
-                                DisconnectConnection(Connections[@event.ConnectionId], true, false);
-                            }
-                            break;
-                        case ThreadHopType.Send:
-                            {
-                                // TODO: Safety
-                                PacketHandler.SendMessage(new ArraySegment<byte>(@event.Memory.Buffer, @event.Memory.VirtualOffset, @event.Memory.VirtualCount), Connections[@event.ConnectionId], @event.ChannelId, @event.NoDelay);
-
-                                // Dealloc the message memory
-                                MemoryManager.DeAlloc(@event.Memory);
-                            }
-                            break;
-                    }
-                }
-            }
-            finally
-            {
-                ThreadHopQueueLock.ExitWriteLock();
             }
         }
 
@@ -569,32 +395,6 @@ namespace Ruffles.Core
                         {
                             // This client has taken too long to connect. Let it go.
                             DisconnectConnection(Connections[i], false, true);
-
-                            // Send to userspace
-
-                            if (config.EnableThreadSafety)
-                            {
-                                // Get lock to ensure thread safety when adding event
-                                EventQueueLock.EnterWriteLock();
-                            }
-
-                            try
-                            {
-                                UserEventQueue.Enqueue(new NetworkEvent()
-                                {
-                                    Connection = Connections[i],
-                                    Listener = this,
-                                    Type = NetworkEventType.Timeout
-                                });
-                            }
-                            finally
-                            {
-                                // Exit the write lock
-                                if (config.EnableThreadSafety)
-                                {
-                                    EventQueueLock.ExitWriteLock();
-                                }
-                            }
                         }
                     }
                     else
@@ -655,40 +455,23 @@ namespace Ruffles.Core
 
         public NetworkEvent Poll()
         {
-            if (config.EnableThreadSafety)
+            if (UserEventQueue.Count > 0)
             {
-                // Enter a write lock to poll the elements
-                EventQueueLock.EnterWriteLock();
-            }
+                NetworkEvent @event = UserEventQueue.Dequeue();
 
-            try
-            {
-                if (UserEventQueue.Count > 0)
-                {
-                    NetworkEvent @event = UserEventQueue.Dequeue();
-
-                    return @event;
-                }
-                else
-                {
-                    return new NetworkEvent()
-                    {
-                        Connection = null,
-                        Listener = this,
-                        Data = new ArraySegment<byte>(),
-                        AllowUserRecycle = false,
-                        InternalMemory = null,
-                        Type = NetworkEventType.Nothing
-                    };
-                }
+                return @event;
             }
-            finally
+            else
             {
-                if (config.EnableThreadSafety)
+                return new NetworkEvent()
                 {
-                    // Exit the write lock
-                    EventQueueLock.ExitWriteLock();
-                }
+                    Connection = null,
+                    Listener = this,
+                    Data = new ArraySegment<byte>(),
+                    AllowUserRecycle = false,
+                    InternalMemory = null,
+                    Type = NetworkEventType.Nothing
+                };
             }
         }
 
@@ -968,30 +751,12 @@ namespace Ruffles.Core
                                 connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
 
                                 // Send to userspace
-
-                                if (config.EnableThreadSafety)
+                                UserEventQueue.Enqueue(new NetworkEvent()
                                 {
-                                    // Grab lock to enqueue event
-                                    EventQueueLock.EnterWriteLock();
-                                }
-
-                                try
-                                {
-                                    UserEventQueue.Enqueue(new NetworkEvent()
-                                    {
-                                        Connection = connection,
-                                        Listener = this,
-                                        Type = NetworkEventType.Connect
-                                    });
-                                }
-                                finally
-                                {
-                                    if (config.EnableThreadSafety)
-                                    {
-                                        // Release write lock
-                                        EventQueueLock.ExitWriteLock();
-                                    }
-                                }
+                                    Connection = connection,
+                                    Listener = this,
+                                    Type = NetworkEventType.Connect
+                                });
                             }
                             else
                             {
@@ -1136,29 +901,13 @@ namespace Ruffles.Core
                             // Set state to connected
                             ConnectPendingConnection(pendingConnection);
 
-                            if (config.EnableThreadSafety)
+                            // Send to userspace
+                            UserEventQueue.Enqueue(new NetworkEvent()
                             {
-                                // Grab write lock to enqueue connect event
-                                EventQueueLock.EnterWriteLock();
-                            }
-
-                            try
-                            {
-                                UserEventQueue.Enqueue(new NetworkEvent()
-                                {
-                                    Connection = pendingConnection,
-                                    Listener = this,
-                                    Type = NetworkEventType.Connect
-                                });
-                            }
-                            finally
-                            {
-                                if (config.EnableThreadSafety)
-                                {
-                                    // Release write lock
-                                    EventQueueLock.ExitWriteLock();
-                                }
-                            }
+                                Connection = pendingConnection,
+                                Listener = this,
+                                Type = NetworkEventType.Connect
+                            });
 
                             // Send the confirmation
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.HailConfirmed, false);
@@ -1338,30 +1087,12 @@ namespace Ruffles.Core
             }
 
             // Send disconnect to userspace
-
-            if (config.EnableThreadSafety)
+            UserEventQueue.Enqueue(new NetworkEvent()
             {
-                // Grab write lock to enqueue disconnect
-                EventQueueLock.EnterWriteLock();
-            }
-
-            try
-            {
-                UserEventQueue.Enqueue(new NetworkEvent()
-                {
-                    Connection = connection,
-                    Listener = this,
-                    Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect
-                });
-            }
-            finally
-            {
-                if (config.EnableThreadSafety)
-                {
-                    // Release write lock
-                    EventQueueLock.ExitWriteLock();
-                }
-            }
+                Connection = connection,
+                Listener = this,
+                Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect
+            });
         }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)

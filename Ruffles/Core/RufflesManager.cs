@@ -8,10 +8,9 @@ namespace Ruffles.Core
     public class RufflesManager
     {
         private readonly List<Listener> _listeners = new List<Listener>();
-        private readonly object _listenersLock = new object();
+        private Thread _thread;
 
-        private Thread _thread = null;
-
+        public object ThreadLock { get; } = new object();
         public bool IsThreaded { get; }
         public bool IsRunning { get; private set; }
 
@@ -35,7 +34,10 @@ namespace Ruffles.Core
                 {
                     while (IsRunning)
                     {
-                        RunAllInternals();
+                        lock (ThreadLock)
+                        {
+                            RunAllInternals();
+                        }
                     }
                 });
 
@@ -65,9 +67,16 @@ namespace Ruffles.Core
                 throw new InvalidOperationException("Manager is not started");
             }
 
-            lock (_listenersLock)
+            for (int i = 0; i < _listeners.Count; i++)
             {
-                for (int i = 0; i < _listeners.Count; i++)
+                if (IsThreaded)
+                {
+                    lock (ThreadLock)
+                    {
+                        _listeners[i].RunInternalLoop();
+                    }
+                }
+                else
                 {
                     _listeners[i].RunInternalLoop();
                 }
@@ -81,14 +90,16 @@ namespace Ruffles.Core
                 throw new InvalidOperationException("Manager is not started");
             }
 
-            if (IsThreaded && !config.EnableThreadSafety)
-            {
-                Console.WriteLine("Running a threaded manager without thread safety on the Listener is not recomended!");
-            }
-
             Listener listener = new Listener(config);
 
-            lock (_listenersLock)
+            if (IsThreaded)
+            {
+                lock (ThreadLock)
+                {
+                    _listeners.Add(listener);
+                }
+            }
+            else
             {
                 _listeners.Add(listener);
             }
@@ -123,13 +134,31 @@ namespace Ruffles.Core
                 RunInternals();
             }
 
-            for (int i = 0; i < _listeners.Count; i++)
+            if (IsThreaded)
             {
-                NetworkEvent @event = _listeners[i].Poll();
-
-                if (@event.Type != NetworkEventType.Nothing)
+                lock (ThreadLock)
                 {
-                    return @event;
+                    for (int i = 0; i < _listeners.Count; i++)
+                    {
+                        NetworkEvent @event = _listeners[i].Poll();
+
+                        if (@event.Type != NetworkEventType.Nothing)
+                        {
+                            return @event;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < _listeners.Count; i++)
+                {
+                    NetworkEvent @event = _listeners[i].Poll();
+
+                    if (@event.Type != NetworkEventType.Nothing)
+                    {
+                        return @event;
+                    }
                 }
             }
 
