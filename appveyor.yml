@@ -27,6 +27,12 @@ build:
   project: Ruffles.sln
   verbosity: minimal
 
+after_build:
+  - 7z a net35.zip %APPVEYOR_BUILD_FOLDER%\Ruffles\bin\Release\net35\*
+  - 7z a net45.zip %APPVEYOR_BUILD_FOLDER%\Ruffles\bin\Release\net45\*
+  - 7z a net471.zip %APPVEYOR_BUILD_FOLDER%\Ruffles\bin\Release\net471\*
+  - 7z a netcoreapp20.zip %APPVEYOR_BUILD_FOLDER%\Ruffles\bin\Release\netcoreapp2.0\*
+  - 7z a netstandard20.zip %APPVEYOR_BUILD_FOLDER%\Ruffles\bin\Release\netstandard2.0\*
 
 cache:
 - '%APPDATA%\npm'
@@ -41,7 +47,7 @@ before_deploy:
   - powershell "& "".\package-nuget.ps1"""
 
 artifacts:
-- path: 'Ruffles\bin\Release\*\*'
+- path: '*net*.zip'
 
 deploy:
   on:

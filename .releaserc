@@ -12,11 +12,7 @@
         }],
         ["@semantic-release/github", {
             "assets": [
-                {"path": "Ruffles/bin/Release/net35/*"},
-                {"path": "Ruffles/bin/Release/net45/*"},
-                {"path": "Ruffles/bin/Release/net471/*"},
-                {"path": "Ruffles/bin/Release/netcoreapp2.0/*"},
-                {"path": "Ruffles/bin/Release/netstandard2.0/*"},
+                {"path": "*net*.zip"}
             ]
         }]
     ]
