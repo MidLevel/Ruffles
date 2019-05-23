@@ -8,7 +8,7 @@ namespace Ruffles.Core
     /// <summary>
     /// A socket manager that can run Ruffles in a threaded mode.
     /// </summary>
-    public class RufflesManager
+    public class SocketManager
     {
         private readonly List<RuffleSocket> _sockets = new List<RuffleSocket>();
         private Thread _thread;
@@ -34,7 +34,7 @@ namespace Ruffles.Core
         /// Initializes a new instance of the <see cref="T:Ruffles.Core.RufflesManager"/> class.
         /// </summary>
         /// <param name="threaded">If set to <c>true</c> threaded.</param>
-        public RufflesManager(bool threaded = true)
+        public SocketManager(bool threaded = true)
         {
             this.IsThreaded = threaded;
         }

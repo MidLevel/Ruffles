@@ -140,7 +140,7 @@ namespace Ruffles.Example
         private static void RufflesManagerSingleThreaded()
         {
             // Create a ruffles manager
-            RufflesManager manager = new RufflesManager(false);
+            SocketManager manager = new SocketManager(false);
 
             RuffleSocket server = manager.AddSocket(ServerConfig);
 
@@ -240,7 +240,7 @@ namespace Ruffles.Example
         private static void RufflesManagerThreaded()
         {
             // Create a ruffles manager
-            RufflesManager manager = new RufflesManager(true);
+            SocketManager manager = new SocketManager(true);
 
             RuffleSocket server = manager.AddSocket(ServerConfig);
 
