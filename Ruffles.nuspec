@@ -12,6 +12,13 @@
     <description>Lightweight high performance reliable UDP library</description>
     <copyright>Copyright © 2019 Albin Corén</copyright>
     <tags>lightweight high performance reliable udp protocol game network networking</tags>
+    <dependencies>
+      <group targetFramework="net35"/>
+      <group targetFramework="net45"/>
+      <group targetFramework="net471"/>
+      <group targetFramework="netcoreapp2.0" />
+      <group targetFramework="netstandard2.0" />
+  </dependencies>
   </metadata>
   <files>
     <file src="LICENCE" target="LICENCE" />
