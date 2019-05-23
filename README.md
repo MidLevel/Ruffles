@@ -1,4 +1,7 @@
-# Ruffles [![Build Status](https://img.shields.io/appveyor/ci/midlevel/ruffles/master.svg?logo=appveyor)](https://ci.appveyor.com/project/MidLevel/ruffles/branch/master)
+# Ruffles 
+[![Build Status](https://img.shields.io/appveyor/ci/midlevel/ruffles/master.svg?logo=appveyor)](https://ci.appveyor.com/project/MidLevel/ruffles/branch/master)
+[![NuGet](https://img.shields.io/nuget/v/Ruffles.svg?logo=nuget)](https://www.nuget.org/packages/Ruffles)
+
 Ruffles is a fully managed UDP library designed for high performance and low latency.
 
 ## Why another reliable UDP library?
