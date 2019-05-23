@@ -37,6 +37,11 @@ namespace Ruffles.Core
         /// </summary>
         /// <value>The socket receive time.</value>
         public DateTime SocketReceiveTime { get; internal set; }
+        /// <summary>
+        /// Gets the channelId the message was sent over.
+        /// </summary>
+        /// <value>The channelId the message was sent over.</value>
+        public byte ChannelId { get; internal set; }
 
         internal HeapMemory InternalMemory;
         internal bool AllowUserRecycle;

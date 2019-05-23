@@ -44,7 +44,8 @@ namespace Ruffles.Messaging
                     AllowUserRecycle = true,
                     Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
                     InternalMemory = memory,
-                    SocketReceiveTime = DateTime.Now
+                    SocketReceiveTime = DateTime.Now,
+                    ChannelId = channelId
                 });
             }
 
@@ -67,7 +68,8 @@ namespace Ruffles.Messaging
                             AllowUserRecycle = true,
                             Data = new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset, (int)messageMemory.VirtualCount),
                             InternalMemory = messageMemory,
-                            SocketReceiveTime = DateTime.Now
+                            SocketReceiveTime = DateTime.Now,
+                            ChannelId = channelId
                         });
                     }
                 }

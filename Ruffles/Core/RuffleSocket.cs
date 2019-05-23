@@ -546,7 +546,9 @@ namespace Ruffles.Core
                 Data = new ArraySegment<byte>(),
                 AllowUserRecycle = false,
                 InternalMemory = null,
-                Type = NetworkEventType.Nothing
+                Type = NetworkEventType.Nothing,
+                ChannelId = 0,
+                SocketReceiveTime = DateTime.Now
             };
         }
 
@@ -830,7 +832,12 @@ namespace Ruffles.Core
                                 {
                                     Connection = connection,
                                     Socket = this,
-                                    Type = NetworkEventType.Connect
+                                    Type = NetworkEventType.Connect,
+                                    AllowUserRecycle = false,
+                                    ChannelId = 0,
+                                    Data = new ArraySegment<byte>(),
+                                    InternalMemory = null,
+                                    SocketReceiveTime = DateTime.Now
                                 });
                             }
                             else
@@ -981,7 +988,12 @@ namespace Ruffles.Core
                             {
                                 Connection = pendingConnection,
                                 Socket = this,
-                                Type = NetworkEventType.Connect
+                                Type = NetworkEventType.Connect,
+                                AllowUserRecycle = false,
+                                ChannelId = 0,
+                                Data = new ArraySegment<byte>(),
+                                InternalMemory = null,
+                                SocketReceiveTime = DateTime.Now
                             });
 
                             // Send the confirmation
@@ -1171,7 +1183,12 @@ namespace Ruffles.Core
             {
                 Connection = connection,
                 Socket = this,
-                Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect
+                Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect,
+                AllowUserRecycle = false,
+                ChannelId = 0,
+                Data = new ArraySegment<byte>(),
+                InternalMemory = null,
+                SocketReceiveTime = DateTime.Now
             });
         }
 

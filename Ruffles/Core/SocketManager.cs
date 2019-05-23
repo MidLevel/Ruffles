@@ -206,7 +206,9 @@ namespace Ruffles.Core
                 Data = new ArraySegment<byte>(),
                 AllowUserRecycle = false,
                 InternalMemory = null,
-                Type = NetworkEventType.Nothing
+                Type = NetworkEventType.Nothing,
+                ChannelId = 0,
+                SocketReceiveTime = DateTime.Now
             };
         }
     }
