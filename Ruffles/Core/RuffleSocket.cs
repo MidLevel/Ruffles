@@ -1124,8 +1124,6 @@ namespace Ruffles.Core
 
         internal void DisconnectConnection(Connection connection, bool sendMessage, bool timeout)
         {
-            Console.WriteLine(Environment.StackTrace.ToString());
-
             if (connection.State == ConnectionState.Connected && sendMessage && !timeout)
             {
                 // Send disconnect message
