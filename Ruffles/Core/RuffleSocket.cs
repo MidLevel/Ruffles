@@ -11,6 +11,7 @@ using Ruffles.Memory;
 using Ruffles.Messaging;
 using Ruffles.Random;
 using Ruffles.Simulation;
+using Ruffles.Utils;
 
 // TODO: Make sure only connection receiver send hails to prevent a hacked client sending messed up channel configs and the receiver applying them.
 // Might actually already be enforced via the state? Verify
@@ -57,6 +58,15 @@ namespace Ruffles.Core
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
 
             bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
+
+            if (!bindSuccess)
+            {
+                Logging.Error("Failed to bind socket");
+            }
+            else
+            {
+                Logging.Info("Socket was bound");
+            }
         }
 
         private bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool ipv6Dual)
@@ -125,8 +135,9 @@ namespace Ruffles.Core
                                     socket.SetSocketOption(SocketOptionLevel.IPv6, (SocketOptionName)27, true);
                                     socket.Bind(endpoint);
                                 }
-                                catch (SocketException)
+                                catch (SocketException e)
                                 {
+                                    Logging.Error("Socket bind failed after setting dual mode with exception: " + e);
                                     // TODO: Handle
                                     return false;
                                 }
@@ -142,6 +153,7 @@ namespace Ruffles.Core
                         }
                 }
 
+                Logging.Error("Socket bind with exception: " + bindException);
                 return false;
             }
 
@@ -193,6 +205,8 @@ namespace Ruffles.Core
         /// <param name="endpoint">The endpoint to connect to.</param>
         public Connection Connect(EndPoint endpoint)
         {
+            Logging.Info("Starting connect to " + endpoint);
+
             Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingConnection);
 
             if (connection != null)
@@ -247,7 +261,13 @@ namespace Ruffles.Core
 
                 int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
+                Logging.Info("Sending connection request to " + endpoint);
+
                 connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
+            }
+            else
+            {
+                Logging.Error("Failed to allocate connection to " + endpoint);
             }
 
             return connection;
@@ -586,11 +606,14 @@ namespace Ruffles.Core
             if (payload.Count < 1)
             {
                 // Invalid size
+                Logging.Error("Got packet of size " + payload.Count + " from " + endpoint + ". Packet is too small");
                 return;
             }
 
             // Unpack header, dont cast to MessageType enum for safety
             HeaderPacker.Unpack(payload.Array[payload.Offset], out byte messageType, out bool fragmented);
+
+            Logging.Info("Unpacked packet. [MessageType=" + (MessageType)messageType + "] [Fragmented=" + fragmented + "]");
 
             switch (messageType)
             {
@@ -650,6 +673,7 @@ namespace Ruffles.Core
                             if (secondsDiff > (long)config.ConnectionChallengeTimeWindow || secondsDiff < -(long)config.ConnectionChallengeTimeWindow)
                             {
                                 // Outside the allowed window
+                                Logging.Error("Client " + endpoint + " failed the connection request. They were outside of their allowed window. The diff was " + Math.Abs(secondsDiff) + " seconds");
                                 return;
                             }
 
@@ -677,6 +701,7 @@ namespace Ruffles.Core
                             if (challengeInitializationVectors[userIv])
                             {
                                 // This IV is being reused.
+                                Logging.Error("Client " + endpoint + " failed the connection request. They were trying to reuse an IV");
                                 return;
                             }
 
@@ -689,12 +714,15 @@ namespace Ruffles.Core
                             if (!isCollided)
                             {
                                 // They failed the challenge
+                                Logging.Error("Client " + endpoint + " failed the connection request. They submitted an invalid answer");
                                 return;
                             }
 
                             // Save the IV to the sliding window
                             challengeInitializationVectors[userIv] = true;
                         }
+
+                        Logging.Info("Client " + endpoint + " is being challenged");
 
                         Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingChallenge);
 
@@ -713,6 +741,12 @@ namespace Ruffles.Core
 
                             // Send the challenge
                             connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true);
+
+                            Logging.Info("Client " + endpoint + " was sent a challenge of difficulty " + connection.ChallengeDifficulty);
+                        }
+                        else
+                        {
+                            Logging.Error("Client " + endpoint + " could not be challenged. Allocation failed");
                         }
                     }
                     break;
@@ -725,6 +759,7 @@ namespace Ruffles.Core
                             if (payload.Count < 10)
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
+                                Logging.Error("Server " + endpoint + " sent us a payload that was too small. Disconnecting");
                                 DisconnectConnection(connection, false, false);
                                 return;
                             }
@@ -763,9 +798,10 @@ namespace Ruffles.Core
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeResponse, false);
                             for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(additionsRequired >> (i * 8)));
 
-
                             // Send the challenge response
                             connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true);
+
+                            Logging.Info("Server " + endpoint + " challenge of difficulty " + connection.ChallengeDifficulty + " was solved. Answer was sent");
                         }
                     }
                     break;
@@ -774,6 +810,7 @@ namespace Ruffles.Core
                         if (payload.Count < config.AmplificationPreventionHandshakePadding)
                         {
                             // This message is too small. They might be trying to use us for amplification
+                            Logging.Error("Client " + endpoint + " sent a challenge response that was smaller than the amplification padding");
                             return;
                         }
 
@@ -807,7 +844,11 @@ namespace Ruffles.Core
                             {
                                 // Success, they completed the hashcash challenge
 
+                                Logging.Info("Client " + endpoint + " successfully completed challenge of difficulty " + connection.ChallengeDifficulty);
+
                                 ConnectPendingConnection(connection);
+
+                                Logging.Info("Client " + endpoint + " state changed to connected");
 
                                 connection.HailStatus.Attempts = 1;
                                 connection.HailStatus.HasAcked = false;
@@ -827,6 +868,8 @@ namespace Ruffles.Core
 
                                 connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
 
+                                Logging.Info("Client " + endpoint + " was sent a hail");
+
                                 // Send to userspace
                                 UserEventQueue.Enqueue(new NetworkEvent()
                                 {
@@ -843,8 +886,14 @@ namespace Ruffles.Core
                             else
                             {
                                 // Failed, disconnect them
+                                Logging.Error("Client " + endpoint + " failed the challenge. Disconnecting");
+
                                 DisconnectConnection(connection, false, false);
                             }
+                        }
+                        else
+                        {
+                            Logging.Warning("Client " + endpoint + " sent a challenge response but they were either not connected or were not in a RequestingChallenge state. Delayed packets?");
                         }
                     }
                     break;
@@ -860,12 +909,16 @@ namespace Ruffles.Core
 
                             // Send confirmation
                             connectedConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
+
+                            Logging.Info("Hail confirmation sent to " + endpoint);
                         }
                         else if (pendingConnection != null && pendingConnection.State == ConnectionState.SolvingChallenge)
                         {
                             if (payload.Count < 2)
                             {
                                 // Invalid size.
+                                Logging.Error("Client " + endpoint + " sent a payload that was too small. Disconnecting");
+
                                 DisconnectConnection(pendingConnection, false, false);
                                 return;
                             }
@@ -878,6 +931,7 @@ namespace Ruffles.Core
                             if (payload.Count < channelCount + 2)
                             {
                                 // Invalid size.
+                                Logging.Error("Client " + endpoint + " sent a payload that was too small. Disconnecting");
                                 DisconnectConnection(pendingConnection, false, false);
                                 return;
                             }
@@ -920,9 +974,10 @@ namespace Ruffles.Core
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
+                                            Logging.Error("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
                                             DisconnectConnection(pendingConnection, false, false);
+                                            return;
                                         }
-                                        break;
                                 }
                             }
 
@@ -974,14 +1029,17 @@ namespace Ruffles.Core
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
+                                            Logging.Error("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
                                             DisconnectConnection(pendingConnection, false, false);
+                                            return;
                                         }
-                                        break;
                                 }
                             }
 
                             // Set state to connected
                             ConnectPendingConnection(pendingConnection);
+
+                            Logging.Info("Client " + endpoint + " state changed to connected");
 
                             // Send to userspace
                             UserEventQueue.Enqueue(new NetworkEvent()
@@ -1001,6 +1059,8 @@ namespace Ruffles.Core
 
                             // Send confirmation
                             pendingConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
+
+                            Logging.Info("Client " + endpoint + " was sent hail confimrations");
                         }
                     }
                     break;
@@ -1015,6 +1075,10 @@ namespace Ruffles.Core
                                 connection.HailStatus.HasAcked = true;
                             }
                         }
+                        else
+                        {
+                            Logging.Error("Client " + endpoint + " connection could not be found");
+                        }
                     }
                     break;
                 case (byte)MessageType.Heartbeat:
@@ -1023,6 +1087,7 @@ namespace Ruffles.Core
                         {
                             // TODO: Handle
                             // This is a missmatch.
+                            Logging.Error("Heartbeat received from " + endpoint + " but the we do not have heartbeats enabled. Configuration missmatch?");
                             return;
                         }
 
@@ -1037,6 +1102,10 @@ namespace Ruffles.Core
                                 connection.LastMessageIn = DateTime.Now;
                             }
                         }
+                        else
+                        {
+                            Logging.Error("Client " + endpoint + " connection could not be found");
+                        }
                     }
                     break;
                 case (byte)MessageType.Data:
@@ -1048,6 +1117,10 @@ namespace Ruffles.Core
                             connection.LastMessageIn = DateTime.Now;
 
                             PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config);
+                        }
+                        else
+                        {
+                            Logging.Error("Client " + endpoint + " connection could not be found");
                         }
                     }
                     break;
@@ -1072,6 +1145,10 @@ namespace Ruffles.Core
                             // Handle ack
                             channel.HandleAck(new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2));
                         }
+                        else
+                        {
+                            Logging.Error("Client " + endpoint + " connection could not be found");
+                        }
                     }
                     break;
                 case (byte)MessageType.Disconnect:
@@ -1081,6 +1158,10 @@ namespace Ruffles.Core
                         if (connection != null)
                         {
                             connection.Disconnect(false);
+                        }
+                        else
+                        {
+                            Logging.Error("Client " + endpoint + " connection could not be found");
                         }
                     }
                     break;
@@ -1271,6 +1352,7 @@ namespace Ruffles.Core
                                 {
                                     // Unknown channel type. Disconnect.
                                     // TODO: Fix
+                                    Logging.Error("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
                                     DisconnectConnection(connection, false, false);
                                 }
                                 break;
