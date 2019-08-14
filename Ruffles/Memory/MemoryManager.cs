@@ -13,7 +13,7 @@ namespace Ruffles.Memory
         private const uint minBufferSize = 64;
         private const uint bufferMultiple = 64;
 
-        private static uint CalculateMultiple(uint minSize, uint multiple)
+        internal static uint CalculateMultiple(uint minSize, uint multiple)
         {
             uint remainder = minSize % multiple;
 

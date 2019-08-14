@@ -50,6 +50,7 @@ namespace Ruffles.Configuration
         /// The maximum delay before merged packets are sent.
         /// </summary>
         public ulong MaxMergeDelay = 250;
+        public ushort MaxMessageSize = 1450;
 
         // Memory
         /// <summary>
