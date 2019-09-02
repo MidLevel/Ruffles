@@ -86,17 +86,23 @@ namespace Ruffles.Messaging
 
             IChannel channel = connection.Channels[channelId];
 
-            HeapMemory messageMemory = channel.CreateOutgoingMessage(payload, out bool dealloc);
+            HeapMemory[] messageMemory = channel.CreateOutgoingMessage(payload, out bool dealloc);
 
             if (messageMemory != null)
             {
-                connection.SendRaw(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset, (int)messageMemory.VirtualCount), noDelay);
+                for (int i = 0; i < messageMemory.Length; i++)
+                {
+                    connection.SendRaw(new ArraySegment<byte>(messageMemory[i].Buffer, (int)messageMemory[i].VirtualOffset, (int)messageMemory[i].VirtualCount), noDelay);
+                }
             }
 
             if (dealloc)
             {
                 // DeAlloc the memory again. This is done for unreliable channels that need the message after the initial send.
-                MemoryManager.DeAlloc(messageMemory);
+                for (int i = 0; i < messageMemory.Length; i++)
+                {
+                    MemoryManager.DeAlloc(messageMemory[i]);
+                }
             }
         }
     }

@@ -50,7 +50,7 @@ namespace Ruffles.Configuration
         /// The maximum delay before merged packets are sent.
         /// </summary>
         public ulong MaxMergeDelay = 250;
-        public ushort MaxMessageSize = 1450;
+        public ushort MaxMessageSize = 1400;
 
         // Memory
         /// <summary>
@@ -66,15 +66,15 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The amount of milliseconds from the connection request that the connection has to solve the challenge and complete the connection handshake.
         /// </summary>
-        public ulong HandshakeTimeout = 10000;
+        public ulong HandshakeTimeout = 30_000;
         /// <summary>
         /// The amount of milliseconds of packet silence before a already connected connection will be disconnected.
         /// </summary>
-        public ulong ConnectionTimeout = 10000;
+        public ulong ConnectionTimeout = 30_000;
         /// <summary>
         /// The amount milliseconds between heartbeat keep-alive packets are sent.
         /// </summary>
-        public ulong HeartbeatDelay = 2000;
+        public ulong HeartbeatDelay = 20_000;
 
         // Handshake resends
         /// <summary>

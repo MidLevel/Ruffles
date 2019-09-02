@@ -147,7 +147,9 @@ namespace Ruffles.Channeling.Channels
             return null;
         }
 
-        public HeapMemory CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
+
+        public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
             // Increment the sequence number
             _lastOutboundSequenceNumber++;
@@ -180,7 +182,10 @@ namespace Ruffles.Channeling.Channels
             // Tell the caller NOT to dealloc the memory, the channel needs it for resend purposes.
             dealloc = false;
 
-            return memory;
+            // Assign memory
+            SINGLE_MESSAGE_ARRAY[0] = memory;
+
+            return SINGLE_MESSAGE_ARRAY;
         }
 
         public void HandleAck(ArraySegment<byte> payload)

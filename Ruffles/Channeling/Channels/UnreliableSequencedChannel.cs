@@ -23,7 +23,9 @@ namespace Ruffles.Channeling.Channels
             this.connection = connection;
         }
 
-        public HeapMemory CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
+
+        public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
             // Increment the sequence number
             _lastOutboundSequenceNumber++;
@@ -45,7 +47,10 @@ namespace Ruffles.Channeling.Channels
             // Tell the caller to deallc the memory
             dealloc = true;
 
-            return memory;
+            // Assign memory
+            SINGLE_MESSAGE_ARRAY[0] = memory;
+
+            return SINGLE_MESSAGE_ARRAY;
         }
 
         internal HeapMemory CreateOutgoingHeartbeatMessage()

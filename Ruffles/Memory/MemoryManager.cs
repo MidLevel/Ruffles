@@ -42,18 +42,26 @@ namespace Ruffles.Memory
                     _hasWarnedAboutLeak = true;
                 }
 
-                return new HeapMemory(allocSize);
+                HeapMemory memory = new HeapMemory(allocSize);
+
+                memory.isDead = false;
+                memory.VirtualCount = size;
+                memory.VirtualOffset = 0;
+
+                return memory;
             }
+            else
+            {
+                HeapMemory memory = _pooledMemory.Dequeue();
 
-            HeapMemory memory = _pooledMemory.Dequeue();
+                memory.EnsureSize(allocSize);
 
-            memory.EnsureSize(allocSize);
+                memory.isDead = false;
+                memory.VirtualCount = size;
+                memory.VirtualOffset = 0;
 
-            memory.isDead = false;
-            memory.VirtualCount = allocSize;
-            memory.VirtualOffset = 0;
-
-            return memory;
+                return memory;
+            }
         }
 
         internal static void DeAlloc(HeapMemory memory)

@@ -17,15 +17,30 @@ namespace Ruffles.Example
                 ChannelType.Reliable,
                 ChannelType.ReliableSequenced,
                 ChannelType.Unreliable,
-                ChannelType.UnreliableSequenced
+                ChannelType.UnreliableSequenced,
+                ChannelType.ReliableSequencedFragmented
             },
-            DualListenPort = 5674
+            DualListenPort = 5674,
+            SimulatorConfig = new Simulation.SimulatorConfig()
+            {
+                DropPercentage = 0.1f,
+                MaxLatency = 1000,
+                MinLatency = 300
+            },
+            UseSimulator = true
         };
 
         internal static readonly SocketConfig ClientConfig = new SocketConfig()
         {
             ChallengeDifficulty = 25, // Difficulty 25 is fairly hard
-            DualListenPort = 0 // Port 0 means we get a port by the operating system
+            DualListenPort = 0, // Port 0 means we get a port by the operating system
+            SimulatorConfig = new Simulation.SimulatorConfig()
+            {
+                DropPercentage = 0.1f,
+                MaxLatency = 1000,
+                MinLatency = 300
+            },
+            UseSimulator = true
         };
 
 
@@ -112,8 +127,11 @@ namespace Ruffles.Example
 
                     if (clientEvent.Type == NetworkEventType.Data)
                     {
+                        Console.WriteLine("IsCorrect: " + (clientEvent.Data.Count == (1024 + 1024 * (messagesReceived % 5))) + ", Expected: " + (1024 + 1024 * (messagesReceived % 5)) + ", got: " + clientEvent.Data.Count);
+
                         messagesReceived++;
-                        Console.WriteLine("Got message: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"");
+                        //Console.WriteLine("Got message of size: " + clientEvent.Data.Count);
+                        //Console.WriteLine("Got message: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"");
                         clientEvent.Recycle();
                     }
 
@@ -125,11 +143,16 @@ namespace Ruffles.Example
 
                 if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= 1)
                 {
+                    Console.WriteLine("Sending size: " + (1024 + (1024 * (messageCounter % 5))));
+                    byte[] largeFragment = new byte[1024 + 1024 * (messageCounter % 5)];
+
+
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
                     byte[] helloReliableSequenced = Encoding.ASCII.GetBytes("This message was sent over a reliable sequenced channel" + messageCounter);
 
-                    server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0, false);
-                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
+                    //server.Send(new ArraySegment<byte>(helloReliableSequenced, 0, helloReliableSequenced.Length), clientId, 0, false);
+                    //server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
+                    server.Send(new ArraySegment<byte>(largeFragment, 0, largeFragment.Length), clientId, 4, false);
 
                     messageCounter++;
                     lastSent = DateTime.Now;
