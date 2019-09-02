@@ -44,6 +44,7 @@ namespace Ruffles.Core
         public byte ChannelId { get; internal set; }
 
         internal HeapMemory InternalMemory;
+        internal MemoryManager MemoryManager;
         internal bool AllowUserRecycle;
 
         /// <summary>

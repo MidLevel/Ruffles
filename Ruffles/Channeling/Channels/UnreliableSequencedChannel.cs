@@ -16,11 +16,13 @@ namespace Ruffles.Channeling.Channels
         // Channel info
         private readonly byte channelId;
         private readonly Connection connection;
+        private readonly MemoryManager memoryManager;
 
-        internal UnreliableSequencedChannel(byte channelId, Connection connection)
+        internal UnreliableSequencedChannel(byte channelId, Connection connection, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
+            this.memoryManager = memoryManager;
         }
 
         private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
@@ -31,7 +33,7 @@ namespace Ruffles.Channeling.Channels
             _lastOutboundSequenceNumber++;
 
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 4);
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
@@ -59,7 +61,7 @@ namespace Ruffles.Channeling.Channels
             _lastOutboundSequenceNumber++;
 
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc(3);
+            HeapMemory memory = memoryManager.AllocHeapMemory(3);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Heartbeat, false);

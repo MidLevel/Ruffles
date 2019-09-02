@@ -4,6 +4,7 @@ using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
 using Ruffles.Configuration;
 using Ruffles.Core;
+using Ruffles.Memory;
 using Ruffles.Messaging;
 
 namespace Ruffles.Connections
@@ -79,11 +80,11 @@ namespace Ruffles.Connections
         internal DateTime HandshakeLastSendTime;
 
 
-        internal Connection(SocketConfig config)
+        internal Connection(SocketConfig config, MemoryManager memoryManager)
         {
             if (config.EnableHeartbeats)
             {
-                HeartbeatChannel = new UnreliableSequencedChannel(0, this);
+                HeartbeatChannel = new UnreliableSequencedChannel(0, this, memoryManager);
             }
         }
 

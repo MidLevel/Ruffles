@@ -40,6 +40,8 @@ namespace Ruffles.Configuration
         /// </summary>
         public bool ReuseConnections = true;
 
+        public bool PoolPointerArrays = false;
+
         // Bandwidth
         /// <summary>
         /// The maximum size of a merged packet. 
@@ -50,7 +52,11 @@ namespace Ruffles.Configuration
         /// The maximum delay before merged packets are sent.
         /// </summary>
         public ulong MaxMergeDelay = 250;
+
+        // Fragmentation
         public ushort MaxMessageSize = 1400;
+        public ushort FragmentArrayBaseSize = 64;
+        public ushort MaxFragments = 32768;
 
         // Memory
         /// <summary>

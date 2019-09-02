@@ -9,7 +9,7 @@ namespace Ruffles.Messaging
 {
     internal static class PacketHandler
     {
-        internal static void HandleIncomingMessage(ArraySegment<byte> payload, Connection connection, SocketConfig activeConfig)
+        internal static void HandleIncomingMessage(ArraySegment<byte> payload, Connection connection, SocketConfig activeConfig, MemoryManager memoryManager)
         {
             // This is where all data packets arrive after passing the connection handling.
 
@@ -30,7 +30,7 @@ namespace Ruffles.Messaging
             if (incomingMessage != null)
             {
                 // Alloc memory that can be borrowed to userspace
-                HeapMemory memory = MemoryManager.Alloc((uint)incomingMessage.Value.Count);
+                HeapMemory memory = memoryManager.AllocHeapMemory((uint)incomingMessage.Value.Count);
 
                 // Copy payload to borrowed memory
                 Buffer.BlockCopy(incomingMessage.Value.Array, incomingMessage.Value.Offset, memory.Buffer, 0, incomingMessage.Value.Count);
@@ -45,7 +45,8 @@ namespace Ruffles.Messaging
                     Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
                     InternalMemory = memory,
                     SocketReceiveTime = DateTime.Now,
-                    ChannelId = channelId
+                    ChannelId = channelId,
+                    MemoryManager = memoryManager
                 });
             }
 
@@ -69,7 +70,8 @@ namespace Ruffles.Messaging
                             Data = new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset, (int)messageMemory.VirtualCount),
                             InternalMemory = messageMemory,
                             SocketReceiveTime = DateTime.Now,
-                            ChannelId = channelId
+                            ChannelId = channelId,
+                            MemoryManager = memoryManager
                         });
                     }
                 }
@@ -77,7 +79,7 @@ namespace Ruffles.Messaging
             }
         }
 
-        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
+        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay, MemoryManager memoryManager)
         {
             if (channelId < 0 || channelId >= connection.Channels.Length)
             {
@@ -101,7 +103,7 @@ namespace Ruffles.Messaging
                 // DeAlloc the memory again. This is done for unreliable channels that need the message after the initial send.
                 for (int i = 0; i < messageMemory.Length; i++)
                 {
-                    MemoryManager.DeAlloc(messageMemory[i]);
+                    memoryManager.DeAlloc(messageMemory[i]);
                 }
             }
         }

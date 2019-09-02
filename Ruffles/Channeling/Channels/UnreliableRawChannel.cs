@@ -12,12 +12,14 @@ namespace Ruffles.Channeling.Channels
         private readonly byte channelId;
         private readonly Connection connection;
         private readonly SocketConfig config;
+        private readonly MemoryManager memoryManager;
 
-        internal UnreliableRawChannel(byte channelId, Connection connection, SocketConfig config)
+        internal UnreliableRawChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
             this.config = config;
+            this.memoryManager = memoryManager;
         }
 
         private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
@@ -25,7 +27,7 @@ namespace Ruffles.Channeling.Channels
         public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 2);
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 2);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);

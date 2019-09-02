@@ -30,7 +30,7 @@ namespace Ruffles.Core
 
         internal readonly Queue<NetworkEvent> UserEventQueue = new Queue<NetworkEvent>();
 
-        private ushort PendingConnections = 0;
+        private ushort pendingConnections = 0;
 
         private Socket ipv4Socket;
         private Socket ipv6Socket;
@@ -42,6 +42,8 @@ namespace Ruffles.Core
         private readonly byte[] incomingBuffer;
 
         private readonly SlidingSet<ulong> challengeInitializationVectors;
+
+        private readonly MemoryManager memoryManager;
 
         public RuffleSocket(SocketConfig config)
         {
@@ -56,6 +58,8 @@ namespace Ruffles.Core
             incomingBuffer = new byte[config.MaxBufferSize];
             Connections = new Connection[config.MaxConnections];
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
+
+            memoryManager = new MemoryManager(config);
 
             bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
 
@@ -178,7 +182,7 @@ namespace Ruffles.Core
                 throw new InvalidOperationException("Connection is not connected");
             }
 
-            PacketHandler.SendMessage(payload, connection, channelId, noDelay);
+            PacketHandler.SendMessage(payload, connection, channelId, noDelay, memoryManager);
         }
 
         /// <summary>
@@ -519,7 +523,7 @@ namespace Ruffles.Core
                         Connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
 
                         // DeAlloc the memory
-                        MemoryManager.DeAlloc(heartbeatMemory);
+                        memoryManager.DeAlloc(heartbeatMemory);
                     }
                 }
             }
@@ -568,7 +572,8 @@ namespace Ruffles.Core
                 InternalMemory = null,
                 Type = NetworkEventType.Nothing,
                 ChannelId = 0,
-                SocketReceiveTime = DateTime.Now
+                SocketReceiveTime = DateTime.Now,
+                MemoryManager = memoryManager
             };
         }
 
@@ -880,7 +885,8 @@ namespace Ruffles.Core
                                     ChannelId = 0,
                                     Data = new ArraySegment<byte>(),
                                     InternalMemory = null,
-                                    SocketReceiveTime = DateTime.Now
+                                    SocketReceiveTime = DateTime.Now,
+                                    MemoryManager = memoryManager
                                 });
                             }
                             else
@@ -1008,32 +1014,32 @@ namespace Ruffles.Core
                                 {
                                     case ChannelType.Reliable:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableChannel(i, pendingConnection, config);
+                                            pendingConnection.Channels[i] = new ReliableChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.Unreliable:
                                         {
-                                            pendingConnection.Channels[i] = new UnreliableChannel(i, pendingConnection, config);
+                                            pendingConnection.Channels[i] = new UnreliableChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.UnreliableSequenced:
                                         {
-                                            pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection);
+                                            pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection, memoryManager);
                                         }
                                         break;
                                     case ChannelType.ReliableSequenced:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, this, config);
+                                            pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, this, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.UnreliableRaw:
                                         {
-                                            pendingConnection.Channels[i] = new UnreliableRawChannel(i, pendingConnection, config);
+                                            pendingConnection.Channels[i] = new UnreliableRawChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.ReliableSequencedFragmented:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, this, config);
+                                            pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, this, config, memoryManager);
                                         }
                                         break;
                                     default:
@@ -1061,7 +1067,8 @@ namespace Ruffles.Core
                                 ChannelId = 0,
                                 Data = new ArraySegment<byte>(),
                                 InternalMemory = null,
-                                SocketReceiveTime = DateTime.Now
+                                SocketReceiveTime = DateTime.Now,
+                                MemoryManager = memoryManager
                             });
 
                             // Send the confirmation
@@ -1126,7 +1133,7 @@ namespace Ruffles.Core
                         {
                             connection.LastMessageIn = DateTime.Now;
 
-                            PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config);
+                            PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config, memoryManager);
                         }
                         else
                         {
@@ -1186,7 +1193,7 @@ namespace Ruffles.Core
 
             connection.State = ConnectionState.Connected;
 
-            PendingConnections++;
+            pendingConnections++;
         }
 
         internal Connection GetPendingConnection(EndPoint endpoint)
@@ -1260,7 +1267,7 @@ namespace Ruffles.Core
             {
                 AddressPendingConnectionLookup.Remove(connection.EndPoint);
 
-                PendingConnections--;
+                pendingConnections--;
             }
             else
             {
@@ -1277,14 +1284,15 @@ namespace Ruffles.Core
                 ChannelId = 0,
                 Data = new ArraySegment<byte>(),
                 InternalMemory = null,
-                SocketReceiveTime = DateTime.Now
+                SocketReceiveTime = DateTime.Now,
+                MemoryManager = memoryManager
             });
         }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
         {
             // Make sure they are not already connected to prevent an attack where a single person can fill all the slots.
-            if (AddressPendingConnectionLookup.ContainsKey(endpoint) || AddressConnectionLookup.ContainsKey(endpoint) || PendingConnections > config.MaxPendingConnections)
+            if (AddressPendingConnectionLookup.ContainsKey(endpoint) || AddressConnectionLookup.ContainsKey(endpoint) || pendingConnections > config.MaxPendingConnections)
             {
                 return null;
             }
@@ -1296,7 +1304,7 @@ namespace Ruffles.Core
                 if (Connections[i] == null)
                 {
                     // Alloc on the heap
-                    connection = new Connection(config)
+                    connection = new Connection(config, memoryManager)
                     {
                         Dead = false,
                         Recycled = false,
@@ -1335,32 +1343,32 @@ namespace Ruffles.Core
                         {
                             case ChannelType.Reliable:
                                 {
-                                    connection.Channels[x] = new ReliableChannel(x, connection, config);
+                                    connection.Channels[x] = new ReliableChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.Unreliable:
                                 {
-                                    connection.Channels[x] = new UnreliableChannel(x, connection, config);
+                                    connection.Channels[x] = new UnreliableChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.UnreliableSequenced:
                                 {
-                                    connection.Channels[x] = new UnreliableSequencedChannel(x, connection);
+                                    connection.Channels[x] = new UnreliableSequencedChannel(x, connection, memoryManager);
                                 }
                                 break;
                             case ChannelType.ReliableSequenced:
                                 {
-                                    connection.Channels[x] = new ReliableSequencedChannel(x, connection, this, config);
+                                    connection.Channels[x] = new ReliableSequencedChannel(x, connection, this, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.UnreliableRaw:
                                 {
-                                    connection.Channels[x] = new UnreliableRawChannel(x, connection, config);
+                                    connection.Channels[x] = new UnreliableRawChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.ReliableSequencedFragmented:
                                 {
-                                    connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, this, config);
+                                    connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, this, config, memoryManager);
                                 }
                                 break;
                             default:
@@ -1377,7 +1385,7 @@ namespace Ruffles.Core
                     Connections[i] = connection;
                     AddressPendingConnectionLookup.Add(endpoint, connection);
 
-                    PendingConnections++;
+                    pendingConnections++;
 
                     break;
                 }
@@ -1403,7 +1411,7 @@ namespace Ruffles.Core
 
                     AddressPendingConnectionLookup.Add(endpoint, connection);
 
-                    PendingConnections++;
+                    pendingConnections++;
 
                     break;
                 }

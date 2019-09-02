@@ -18,12 +18,14 @@ namespace Ruffles.Channeling.Channels
         private readonly byte channelId;
         private readonly Connection connection;
         private readonly SocketConfig config;
+        private readonly MemoryManager memoryManager;
 
-        internal UnreliableChannel(byte channelId, Connection connection, SocketConfig config)
+        internal UnreliableChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
             this.config = config;
+            this.memoryManager = memoryManager;
 
             _incomingAckedPackets = new SlidingWindow<bool>(config.ReliabilityWindowSize, true, sizeof(ushort));
         }
@@ -36,7 +38,7 @@ namespace Ruffles.Channeling.Channels
             _lastOutboundSequenceNumber++;
 
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 4);
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);

@@ -20,11 +20,11 @@ namespace Ruffles.Channeling.Channels
             public ushort Attempts;
             public bool Alive;
 
-            public void DeAlloc()
+            public void DeAlloc(MemoryManager memoryManager)
             {
                 if (IsAlloced)
                 {
-                    MemoryManager.DeAlloc(Memory);
+                    memoryManager.DeAlloc(Memory);
                 }
             }
         }
@@ -37,11 +37,11 @@ namespace Ruffles.Channeling.Channels
             public HeapMemory Memory;
             public bool Alive;
 
-            public void DeAlloc()
+            public void DeAlloc(MemoryManager memoryManager)
             {
                 if (IsAlloced)
                 {
-                    MemoryManager.DeAlloc(Memory);
+                    memoryManager.DeAlloc(Memory);
                 }
             }
         }
@@ -59,17 +59,19 @@ namespace Ruffles.Channeling.Channels
         private readonly Connection connection;
         private readonly RuffleSocket socket;
         private readonly SocketConfig config;
+        private readonly MemoryManager memoryManager;
 
-        internal ReliableSequencedChannel(byte channelId, Connection connection, RuffleSocket socket, SocketConfig config)
+        internal ReliableSequencedChannel(byte channelId, Connection connection, RuffleSocket socket, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
             this.socket = socket;
             this.config = config;
+            this.memoryManager = memoryManager;
 
             // Alloc the in flight windows for receive and send
-            _receiveSequencer = new HeapableSlidingWindow<PendingIncomingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
-            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
+            _receiveSequencer = new HeapableSlidingWindow<PendingIncomingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort), memoryManager);
+            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort), memoryManager);
         }
 
         public HeapMemory HandlePoll()
@@ -126,7 +128,7 @@ namespace Ruffles.Channeling.Channels
             else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0 && !_receiveSequencer[sequence].Alive)
             {
                 // Alloc payload plus header memory
-                HeapMemory memory = MemoryManager.Alloc((uint)payload.Count - 2);
+                HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 2);
 
                 // Copy the payload
                 Buffer.BlockCopy(payload.Array, payload.Offset + 2, memory.Buffer, 0, payload.Count - 2);
@@ -155,7 +157,7 @@ namespace Ruffles.Channeling.Channels
             _lastOutboundSequenceNumber++;
 
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 4);
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
@@ -196,7 +198,7 @@ namespace Ruffles.Channeling.Channels
             if (_sendSequencer[sequence].Alive)
             {
                 // Dealloc the memory held by the sequencer for the packet
-                _sendSequencer[sequence].DeAlloc();
+                _sendSequencer[sequence].DeAlloc(memoryManager);
 
                 // TODO: Remove roundtripping from channeled packets and make specific ping-pong packets
 
@@ -234,7 +236,7 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence)
         {
             // Alloc ack memory
-            HeapMemory ackMemory = MemoryManager.Alloc(4);
+            HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
 
             // Write header
             ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
@@ -248,7 +250,7 @@ namespace Ruffles.Channeling.Channels
             connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false);
 
             // Return memory
-            MemoryManager.DeAlloc(ackMemory);
+            memoryManager.DeAlloc(ackMemory);
         }
 
         public void InternalUpdate()

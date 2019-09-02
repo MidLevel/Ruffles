@@ -37,7 +37,7 @@ namespace Ruffles.Channeling.Channels
             public PendingOutgoingFragment[] Fragments;
             public bool Alive;
 
-            public void DeAlloc()
+            public void DeAlloc(MemoryManager memoryManager)
             {
                 if (IsAlloced)
                 {
@@ -45,7 +45,7 @@ namespace Ruffles.Channeling.Channels
                     {
                         if (Fragments[i].Alive && Fragments[i].IsAlloced)
                         {
-                            Fragments[i].DeAlloc();
+                            Fragments[i].DeAlloc(memoryManager);
                         }
                     }
                 }
@@ -64,11 +64,11 @@ namespace Ruffles.Channeling.Channels
             public ushort Attempts;
             public bool Alive;
 
-            public void DeAlloc()
+            public void DeAlloc(MemoryManager memoryManager)
             {
                 if (IsAlloced)
                 {
-                    MemoryManager.DeAlloc(Memory);
+                    memoryManager.DeAlloc(Memory);
                 }
             }
         }
@@ -86,7 +86,7 @@ namespace Ruffles.Channeling.Channels
 
                     for (int i = 0; i < Fragments.Count; i++)
                     {
-                        if (Fragments.Array[Fragments.Offset + i] != null && !Fragments.Array[Fragments.Offset + i].isDead)
+                        if (Fragments.Array[Fragments.Offset + i] != null && !((HeapMemory)Fragments.Array[Fragments.Offset + i]).isDead)
                         {
                             return true;
                         }
@@ -107,7 +107,7 @@ namespace Ruffles.Channeling.Channels
 
                     for (int i = 0; i < Fragments.Count; i++)
                     {
-                        if (Fragments.Array[Fragments.Offset + i] == null || Fragments.Array[Fragments.Offset + i].isDead)
+                        if (Fragments.Array[Fragments.Offset + i] == null || ((HeapMemory)Fragments.Array[Fragments.Offset + i]).isDead)
                         {
                             return false;
                         }
@@ -132,7 +132,7 @@ namespace Ruffles.Channeling.Channels
 
                     for (int i = 0; i < Fragments.Count; i++)
                     {
-                        byteSize += Fragments.Array[Fragments.Offset + i].VirtualCount;
+                        byteSize += ((HeapMemory)Fragments.Array[Fragments.Offset + i]).VirtualCount;
                     }
 
                     return byteSize;
@@ -141,20 +141,22 @@ namespace Ruffles.Channeling.Channels
 
             public ushort Sequence;
             public ushort? Size;
-            public ArraySegment<HeapMemory> Fragments;
+            public ArraySegment<object> Fragments;
             public bool Alive;
 
-            public void DeAlloc()
+            public void DeAlloc(MemoryManager memoryManager)
             {
                 if (IsAlloced)
                 {
                     for (int i = 0; i < Fragments.Count; i++)
                     {
-                        if (Fragments.Array[Fragments.Offset + i] != null && !Fragments.Array[Fragments.Offset + i].isDead)
+                        if (Fragments.Array[Fragments.Offset + i] != null && !((HeapMemory)Fragments.Array[Fragments.Offset + i]).isDead)
                         {
-                            MemoryManager.DeAlloc(Fragments.Array[Fragments.Offset + i]);
+                            memoryManager.DeAlloc((HeapMemory)Fragments.Array[Fragments.Offset + i]);
                         }
                     }
+
+                    memoryManager.DeAlloc(Fragments.Array);
                 }
             }
         }
@@ -172,17 +174,19 @@ namespace Ruffles.Channeling.Channels
         private readonly Connection connection;
         private readonly RuffleSocket socket;
         private readonly SocketConfig config;
+        private readonly MemoryManager memoryManager;
 
-        internal ReliableSequencedFragmentedChannel(byte channelId, Connection connection, RuffleSocket socket, SocketConfig config)
+        internal ReliableSequencedFragmentedChannel(byte channelId, Connection connection, RuffleSocket socket, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
             this.socket = socket;
             this.config = config;
+            this.memoryManager = memoryManager;
 
             // Alloc the in flight windows for receive and send
-            _receiveSequencer = new HeapableSlidingWindow<PendingIncomingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
-            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
+            _receiveSequencer = new HeapableSlidingWindow<PendingIncomingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort), memoryManager);
+            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort), memoryManager);
         }
 
         public HeapMemory HandlePoll()
@@ -198,7 +202,7 @@ namespace Ruffles.Channeling.Channels
                 uint totalSize = nextPacket.TotalByteSize;
 
                 // Alloc memory for that large segment
-                HeapMemory memory = MemoryManager.Alloc(totalSize);
+                HeapMemory memory = memoryManager.AllocHeapMemory(totalSize);
 
                 // Keep track of where we are, fragments COULD have different sizes.
                 int bufferPosition = 0;
@@ -207,13 +211,13 @@ namespace Ruffles.Channeling.Channels
                 for (int i = 0; i < nextPacket.Fragments.Count; i++)
                 {
                     // Copy fragment to final buffer
-                    Buffer.BlockCopy(nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i].Buffer, (int)nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i].VirtualOffset, memory.Buffer, bufferPosition, (int)nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i].VirtualCount);
+                    Buffer.BlockCopy(((HeapMemory)nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i]).Buffer, (int)((HeapMemory)nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i]).VirtualOffset, memory.Buffer, bufferPosition, (int)((HeapMemory)nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i]).VirtualCount);
 
-                    bufferPosition += (int)nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i].VirtualCount;
+                    bufferPosition += (int)((HeapMemory)nextPacket.Fragments.Array[nextPacket.Fragments.Offset + i]).VirtualCount;
                 }
 
                 // Free the memory of all the individual fragments
-                nextPacket.DeAlloc();
+                nextPacket.DeAlloc(memoryManager);
 
                 // Kill
                 _receiveSequencer[_incomingLowestAckedSequence] = new PendingIncomingPacket()
@@ -221,7 +225,7 @@ namespace Ruffles.Channeling.Channels
                     Alive = false,
                     Sequence = 0,
                     Size = null,
-                    Fragments = new ArraySegment<HeapMemory>()
+                    Fragments = new ArraySegment<object>()
                 };
 
 
@@ -245,7 +249,7 @@ namespace Ruffles.Channeling.Channels
 
             if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || 
                 (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].IsComplete) || 
-                (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].Fragments.Array != null && _receiveSequencer[sequence].Fragments.Count > fragment && _receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment] != null && !_receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment].isDead))
+                (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].Fragments.Array != null && _receiveSequencer[sequence].Fragments.Count > fragment && _receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment] != null && !((HeapMemory)_receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment]).isDead))
             {
                 // We have already acked this message. Ack again
 
@@ -262,11 +266,14 @@ namespace Ruffles.Channeling.Channels
                 // If this is the first fragment we ever get, index the data.
                 if (!_receiveSequencer[sequence].Alive)
                 {
+                    int fragmentPointerSize = isFinal ? fragment + 1 : config.FragmentArrayBaseSize;
+
+                    object[] fragmentPointers = memoryManager.AllocPointers((uint)fragmentPointerSize);
+
                     _receiveSequencer[sequence] = new PendingIncomingPacket()
                     {
                         Alive = true,
-                        // TODO: Remove hardcoded values
-                        Fragments = new ArraySegment<HeapMemory>(new HeapMemory[isFinal ? fragment + 1 : 128], 0, fragment + 1),
+                        Fragments = new ArraySegment<object>(fragmentPointers, 0, fragment + 1),
                         Sequence = sequence,
                         Size = isFinal ? (ushort?)(fragment + 1) : null
                     };
@@ -279,14 +286,16 @@ namespace Ruffles.Channeling.Channels
                         // We need to expand the fragments array.
 
                         // Calculate the target size of the array
-                        // TODO: Remove hardcoded values
-                        uint allocSize = Math.Max(128, MemoryManager.CalculateMultiple((uint)fragment + 1, 64));
+                        uint allocSize = Math.Max(config.FragmentArrayBaseSize, MemoryManager.CalculateMultiple((uint)fragment + 1, 64));
 
                         // Alloc new array
-                        ArraySegment<HeapMemory> newFragments = new ArraySegment<HeapMemory>(new HeapMemory[allocSize], _receiveSequencer[sequence].Fragments.Offset, fragment + 1);
+                        ArraySegment<object> newFragments = new ArraySegment<object>(new HeapMemory[allocSize], _receiveSequencer[sequence].Fragments.Offset, fragment + 1);
 
                         // Copy old values
                         Array.Copy(_receiveSequencer[sequence].Fragments.Array, newFragments.Array, _receiveSequencer[sequence].Fragments.Array.Length);
+
+                        // Return the memory for the old
+                        memoryManager.DeAlloc(_receiveSequencer[sequence].Fragments.Array);
 
                         // Update the index
                         _receiveSequencer[sequence] = new PendingIncomingPacket()
@@ -304,7 +313,7 @@ namespace Ruffles.Channeling.Channels
                         // Update the virtual elngth of the array
                         _receiveSequencer[sequence] = new PendingIncomingPacket()
                         {
-                            Fragments = new ArraySegment<HeapMemory>(_receiveSequencer[sequence].Fragments.Array, _receiveSequencer[sequence].Fragments.Offset, fragment + 1),
+                            Fragments = new ArraySegment<object>(_receiveSequencer[sequence].Fragments.Array, _receiveSequencer[sequence].Fragments.Offset, fragment + 1),
                             Alive = _receiveSequencer[sequence].Alive,
                             Sequence = _receiveSequencer[sequence].Sequence,
                             Size = isFinal ? (ushort?)(fragment + 1) : _receiveSequencer[sequence].Size
@@ -312,10 +321,10 @@ namespace Ruffles.Channeling.Channels
                     }
                 }
 
-                if (_receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment] == null || _receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment].isDead)
+                if (_receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment] == null || ((HeapMemory)_receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment]).isDead)
                 {
                     // Alloc some memory for the fragment
-                    HeapMemory memory = MemoryManager.Alloc((uint)payload.Count - 4);
+                    HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 4);
 
                     // Copy the payload
                     Buffer.BlockCopy(payload.Array, payload.Offset + 4, memory.Buffer, 0, payload.Count - 4);
@@ -353,7 +362,7 @@ namespace Ruffles.Channeling.Channels
                 int messageSize = Math.Min(config.MaxMessageSize, payload.Count - position);
 
                 // Allocate memory for each fragment
-                fragments[i] = MemoryManager.Alloc((uint)(messageSize + 6));
+                fragments[i] = memoryManager.AllocHeapMemory((uint)(messageSize + 6));
 
                 // Write headers
                 fragments[i].Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
@@ -418,7 +427,7 @@ namespace Ruffles.Channeling.Channels
             if (_sendSequencer[sequence].Alive && _sendSequencer[sequence].Fragments.Length > fragment && _sendSequencer[sequence].Fragments[fragment].Alive)
             {
                 // Dealloc the memory held by the sequencer for the packet
-                _sendSequencer[sequence].Fragments[fragment].DeAlloc();
+                _sendSequencer[sequence].Fragments[fragment].DeAlloc(memoryManager);
 
                 // TODO: Remove roundtripping from channeled packets and make specific ping-pong packets
 
@@ -448,7 +457,7 @@ namespace Ruffles.Channeling.Channels
                 if (!hasAllocatedAndAliveFragments)
                 {
                     // Dealloc the wrapper packet
-                    _sendSequencer[sequence].DeAlloc();
+                    _sendSequencer[sequence].DeAlloc(memoryManager);
 
                     // Kill the wrapper packet
                     _sendSequencer[sequence] = new PendingOutgoingPacket()
@@ -478,7 +487,7 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence, ushort fragment, bool isFinal)
         {
             // Alloc ack memory
-            HeapMemory ackMemory = MemoryManager.Alloc(4);
+            HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
 
             // Write header
             ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
@@ -496,13 +505,13 @@ namespace Ruffles.Channeling.Channels
             connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 6), false);
 
             // Return memory
-            MemoryManager.DeAlloc(ackMemory);
+            memoryManager.DeAlloc(ackMemory);
         }
 
         private void SendAckEncoded(ushort sequence, ushort encodedFragment)
         {
             // Alloc ack memory
-            HeapMemory ackMemory = MemoryManager.Alloc(4);
+            HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
 
             // Write header
             ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
@@ -520,7 +529,7 @@ namespace Ruffles.Channeling.Channels
             connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 6), false);
 
             // Return memory
-            MemoryManager.DeAlloc(ackMemory);
+            memoryManager.DeAlloc(ackMemory);
         }
 
         public void InternalUpdate()

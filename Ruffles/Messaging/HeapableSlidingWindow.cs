@@ -12,7 +12,9 @@ namespace Ruffles.Messaging
         private readonly bool _resetOld;
         private ulong _lastHighestSequence;
 
-        public HeapableSlidingWindow(int size, bool resetOld, byte wrapSize)
+        private readonly MemoryManager _memoryManager;
+
+        public HeapableSlidingWindow(int size, bool resetOld, byte wrapSize, MemoryManager memoryManager)
         {
             if (resetOld && size % 8 != 0)
             {
@@ -23,6 +25,8 @@ namespace Ruffles.Messaging
             _indexes = new int[size];
             _wrapSize = wrapSize;
             _resetOld = resetOld;
+
+            _memoryManager = memoryManager;
         }
 
         public T this[int index]
@@ -66,7 +70,7 @@ namespace Ruffles.Messaging
             for (int i = 0; i < _array.Length; i++)
             {
                 _indexes[i] = 0;
-                _array[i].DeAlloc();
+                _array[i].DeAlloc(_memoryManager);
                 _array[i] = default(T);
             }
 
