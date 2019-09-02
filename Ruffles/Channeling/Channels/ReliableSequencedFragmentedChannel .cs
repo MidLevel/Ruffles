@@ -252,6 +252,7 @@ namespace Ruffles.Channeling.Channels
                 SendAckEncoded(sequence, encodedFragment);
 
                 hasMore = false;
+
                 return null;
             }
             else
@@ -293,7 +294,7 @@ namespace Ruffles.Channeling.Channels
                             Fragments = newFragments,
                             Alive = _receiveSequencer[sequence].Alive,
                             Sequence = _receiveSequencer[sequence].Sequence,
-                            Size = _receiveSequencer[sequence].Size
+                            Size = isFinal ? (ushort?)(fragment + 1) : _receiveSequencer[sequence].Size
                         };
                     }
 
@@ -306,12 +307,12 @@ namespace Ruffles.Channeling.Channels
                             Fragments = new ArraySegment<HeapMemory>(_receiveSequencer[sequence].Fragments.Array, _receiveSequencer[sequence].Fragments.Offset, fragment + 1),
                             Alive = _receiveSequencer[sequence].Alive,
                             Sequence = _receiveSequencer[sequence].Sequence,
-                            Size = _receiveSequencer[sequence].Size
+                            Size = isFinal ? (ushort?)(fragment + 1) : _receiveSequencer[sequence].Size
                         };
                     }
                 }
 
-
+                if (_receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment] == null || _receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment].isDead)
                 {
                     // Alloc some memory for the fragment
                     HeapMemory memory = MemoryManager.Alloc((uint)payload.Count - 4);
@@ -352,7 +353,7 @@ namespace Ruffles.Channeling.Channels
                 int messageSize = Math.Min(config.MaxMessageSize, payload.Count - position);
 
                 // Allocate memory for each fragment
-                fragments[i] = MemoryManager.Alloc(((uint)Math.Min(config.MaxMessageSize, payload.Count - position)) + 6);
+                fragments[i] = MemoryManager.Alloc((uint)(messageSize + 6));
 
                 // Write headers
                 fragments[i].Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
@@ -367,7 +368,7 @@ namespace Ruffles.Channeling.Channels
                 fragments[i].Buffer[5] = (byte)(((i & 32767) >> 8) | (byte)(i == fragments.Length - 1 ? 128 : 0));
 
                 // Write the payload
-                Buffer.BlockCopy(payload.Array, payload.Offset + position, fragments[i].Buffer, (int)fragments[i].VirtualOffset, messageSize);
+                Buffer.BlockCopy(payload.Array, payload.Offset + position, fragments[i].Buffer, 6, messageSize);
 
                 // Increase the position
                 position += messageSize;
@@ -381,7 +382,7 @@ namespace Ruffles.Channeling.Channels
 
             for (int i = 0; i < outgoingFragments.Length; i++)
             {
-                // Add the memory to the outgoing sequencer
+                // Add the memory to the outgoing sequencer array
                 outgoingFragments[i] = new PendingOutgoingFragment()
                 {
                     Alive = true,
@@ -392,6 +393,13 @@ namespace Ruffles.Channeling.Channels
                     Memory = fragments[i]
                 };
             }
+
+            // Add the memory to the outgoing sequencer
+            _sendSequencer[_lastOutboundSequenceNumber] = new PendingOutgoingPacket()
+            {
+                Alive = true,
+                Fragments = outgoingFragments
+            };
 
             return fragments;
         }
@@ -525,24 +533,30 @@ namespace Ruffles.Channeling.Channels
                 {
                     for (int j = 0; j < _sendSequencer[i].Fragments.Length; j++)
                     {
-                        if (_sendSequencer[i].Fragments[j].Attempts > config.ReliabilityMaxResendAttempts)
+                        if (_sendSequencer[i].Fragments[j].Alive)
                         {
-                            // If they don't ack the message, disconnect them
-                            connection.Disconnect(false);
-                        }
-                        else if ((DateTime.Now - _sendSequencer[i].Fragments[j].LastSent).TotalMilliseconds > connection.Roundtrip * config.ReliabilityResendRoundtripMultiplier)
-                        {
-                            _sendSequencer[i].Fragments[j] = new PendingOutgoingFragment()
+                            if (_sendSequencer[i].Fragments[j].Attempts > config.ReliabilityMaxResendAttempts)
                             {
-                                Alive = true,
-                                Attempts = (ushort)(_sendSequencer[i].Fragments[j].Attempts + 1),
-                                LastSent = DateTime.Now,
-                                FirstSent = _sendSequencer[i].Fragments[j].FirstSent,
-                                Memory = _sendSequencer[i].Fragments[j].Memory,
-                                Sequence = i
-                            };
+                                // If they don't ack the message, disconnect them
+                                connection.Disconnect(false);
 
-                            connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Fragments[j].Memory.Buffer, (int)_sendSequencer[i].Fragments[j].Memory.VirtualOffset, (int)_sendSequencer[i].Fragments[j].Memory.VirtualCount), false);
+                                return;
+                            }
+                            else if ((DateTime.Now - _sendSequencer[i].Fragments[j].LastSent).TotalMilliseconds > connection.Roundtrip * config.ReliabilityResendRoundtripMultiplier)
+                            {
+                                _sendSequencer[i].Fragments[j] = new PendingOutgoingFragment()
+                                {
+                                    Alive = true,
+                                    Attempts = (ushort)(_sendSequencer[i].Fragments[j].Attempts + 1),
+                                    LastSent = DateTime.Now,
+                                    FirstSent = _sendSequencer[i].Fragments[j].FirstSent,
+                                    Memory = _sendSequencer[i].Fragments[j].Memory,
+                                    Sequence = i
+                                };
+
+                                Console.WriteLine("Resending fragment for sequence: " + i + " and fragment: " + j);
+                                connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Fragments[j].Memory.Buffer, (int)_sendSequencer[i].Fragments[j].Memory.VirtualOffset, (int)_sendSequencer[i].Fragments[j].Memory.VirtualCount), false);
+                            }
                         }
                     }
                 }

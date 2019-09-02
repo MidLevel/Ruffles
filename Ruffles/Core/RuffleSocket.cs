@@ -256,7 +256,7 @@ namespace Ruffles.Core
                     for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
 
                     // Write IV
-                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + i] = ((byte)(iv >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
                 }
 
                 int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
@@ -405,13 +405,13 @@ namespace Ruffles.Core
                             if (config.TimeBasedConnectionChallenge)
                             {
                                 // Write the response unix time
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].PreConnectionChallengeTimestamp >> (i * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
 
                                 // Write counter
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(Connections[i].PreConnectionChallengeCounter >> (i * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(Connections[i].PreConnectionChallengeCounter >> (x * 8)));
 
                                 // Write IV
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + x] = ((byte)(Connections[i].PreConnectionChallengeIV >> (i * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(Connections[i].PreConnectionChallengeIV >> (x * 8)));
                             }
 
                             int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
@@ -688,14 +688,14 @@ namespace Ruffles.Core
                                             ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 7] << 56));
 
                             // Read the initialization vector they used
-                            ulong userIv = (((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2]) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 1] << 8) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 2] << 16) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 3] << 24) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 4] << 32) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 5] << 40) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 6] << 48) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 7] << 56));
+                            ulong userIv = (((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2)]) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 1] << 8) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 2] << 16) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 3] << 24) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 4] << 32) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 5] << 40) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 6] << 48) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 7] << 56));
 
                             // Ensure they dont reuse a IV
                             if (challengeInitializationVectors[userIv])
@@ -971,6 +971,11 @@ namespace Ruffles.Core
                                             pendingConnection.ChannelTypes[i] = ChannelType.UnreliableRaw;
                                         }
                                         break;
+                                    case (byte)ChannelType.ReliableSequencedFragmented:
+                                        {
+                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableSequencedFragmented;
+                                        }
+                                        break;
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
@@ -1024,6 +1029,11 @@ namespace Ruffles.Core
                                     case ChannelType.UnreliableRaw:
                                         {
                                             pendingConnection.Channels[i] = new UnreliableRawChannel(i, pendingConnection, config);
+                                        }
+                                        break;
+                                    case ChannelType.ReliableSequencedFragmented:
+                                        {
+                                            pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, this, config);
                                         }
                                         break;
                                     default:
@@ -1346,6 +1356,11 @@ namespace Ruffles.Core
                             case ChannelType.UnreliableRaw:
                                 {
                                     connection.Channels[x] = new UnreliableRawChannel(x, connection, config);
+                                }
+                                break;
+                            case ChannelType.ReliableSequencedFragmented:
+                                {
+                                    connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, this, config);
                                 }
                                 break;
                             default:

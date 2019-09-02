@@ -29,6 +29,7 @@
         /// Messages are not guaranteed to be delivered, the order is not guaranteed.
         /// Duplicate packets are not dropped.
         /// </summary>
-        UnreliableRaw
+        UnreliableRaw,
+        ReliableSequencedFragmented
     }
 }
