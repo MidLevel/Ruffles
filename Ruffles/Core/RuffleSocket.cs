@@ -255,7 +255,7 @@ namespace Ruffles.Core
                         // Increment counter
                         counter++;
                     }
-                    while ((hash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty) != 0);
+                    while ((hash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty) != 0);
 
                     // Make counter 1 less
                     counter--;
@@ -721,7 +721,7 @@ namespace Ruffles.Core
                             ulong claimedHash = HashProvider.GetStableHash64(challengeUnixTime, counter, userIv);
 
                             // Check if the hash collides
-                            bool isCollided = ((claimedHash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty)) == 0;
+                            bool isCollided = ((claimedHash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty)) == 0;
 
                             if (!isCollided)
                             {
