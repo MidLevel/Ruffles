@@ -20,8 +20,8 @@ namespace Ruffles.Tests.Channels
             ConnectionStub clientsConnectionToServer = new ConnectionStub();
             ConnectionStub serversConnectionToClient = new ConnectionStub();
 
-            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, null, config, memoryManager);
-            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, null, config, memoryManager);
+            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
+            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
 
             byte[] message = BufferHelper.GetRandomBuffer(1024);
 
@@ -51,8 +51,8 @@ namespace Ruffles.Tests.Channels
             ConnectionStub clientsConnectionToServer = new ConnectionStub();
             ConnectionStub serversConnectionToClient = new ConnectionStub();
 
-            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, null, config, memoryManager);
-            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, null, config, memoryManager);
+            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
+            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
 
             // Create 3 payloads
             byte[] message1 = BufferHelper.GetRandomBuffer(1024);
@@ -119,8 +119,8 @@ namespace Ruffles.Tests.Channels
             ConnectionStub clientsConnectionToServer = new ConnectionStub();
             ConnectionStub serversConnectionToClient = new ConnectionStub();
 
-            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, null, config, memoryManager);
-            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, null, config, memoryManager);
+            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
+            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
 
             // Create 3 payloads
             byte[] message1 = BufferHelper.GetRandomBuffer(1024 * 5);
@@ -230,8 +230,8 @@ namespace Ruffles.Tests.Channels
             ConnectionStub clientsConnectionToServer = new ConnectionStub();
             ConnectionStub serversConnectionToClient = new ConnectionStub();
 
-            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, null, config, memoryManager);
-            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, null, config, memoryManager);
+            ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
+            ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
 
             // Create 3 payloads
             byte[] message1 = BufferHelper.GetRandomBuffer(1024 * 5);
