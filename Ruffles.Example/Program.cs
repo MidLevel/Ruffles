@@ -11,7 +11,7 @@ namespace Ruffles.Example
     {
         internal static readonly SocketConfig ServerConfig = new SocketConfig()
         {
-            ChallengeDifficulty = 25, // Difficulty 25 is fairly hard
+            ChallengeDifficulty = 20, // Difficulty 20 is fairly hard
             ChannelTypes = new ChannelType[]
             {
                 ChannelType.Reliable,
@@ -32,7 +32,7 @@ namespace Ruffles.Example
 
         internal static readonly SocketConfig ClientConfig = new SocketConfig()
         {
-            ChallengeDifficulty = 25, // Difficulty 25 is fairly hard
+            ChallengeDifficulty = 20, // Difficulty 20 is fairly hard
             DualListenPort = 0, // Port 0 means we get a port by the operating system
             SimulatorConfig = new Simulation.SimulatorConfig()
             {
