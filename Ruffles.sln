@@ -5,6 +5,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ruffles", "Ruffles\Ruffles.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ruffles.Example", "Ruffles.Example\Ruffles.Example.csproj", "{A7D6CF7D-7E6E-4E2B-B5AE-63A4EBCC177E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ruffles.Tests", "Ruffles.Tests\Ruffles.Tests.csproj", "{AA689AA8-3A9C-4830-9BB5-CD8CE7A24D14}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -19,5 +21,9 @@ Global
 		{A7D6CF7D-7E6E-4E2B-B5AE-63A4EBCC177E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A7D6CF7D-7E6E-4E2B-B5AE-63A4EBCC177E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A7D6CF7D-7E6E-4E2B-B5AE-63A4EBCC177E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA689AA8-3A9C-4830-9BB5-CD8CE7A24D14}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA689AA8-3A9C-4830-9BB5-CD8CE7A24D14}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA689AA8-3A9C-4830-9BB5-CD8CE7A24D14}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA689AA8-3A9C-4830-9BB5-CD8CE7A24D14}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -12,7 +12,7 @@ namespace Ruffles.Connections
     /// <summary>
     /// A connection between two RuffleSockets.
     /// </summary>
-    public class Connection
+    public class Connection : ConnectionBase
     {
         /// <summary>
         /// Gets the id of the connection. This is reused for connections by the RuffleSocket.
@@ -63,7 +63,7 @@ namespace Ruffles.Connections
         /// Gets the estimated roundtrip.
         /// </summary>
         /// <value>The estimated roundtrip.</value>
-        public double Roundtrip { get; internal set; } = 10;
+        public override double Roundtrip { get; internal set; } = 10;
         internal readonly UnreliableSequencedChannel HeartbeatChannel;
         internal MessageMerger Merger;
         internal IChannel[] Channels;
@@ -88,17 +88,17 @@ namespace Ruffles.Connections
             }
         }
 
-        internal void SendRaw(ArraySegment<byte> payload, bool noMerge)
+        internal override void SendRaw(ArraySegment<byte> payload, bool noMerge)
         {
             Socket.SendRaw(this, payload, noMerge);
         }
 
-        internal void Disconnect(bool sendMessage)
+        internal override void Disconnect(bool sendMessage)
         {
             Socket.DisconnectConnection(this, sendMessage, false);
         }
 
-        internal void AddRoundtripSample(ulong sample)
+        internal override void AddRoundtripSample(ulong sample)
         {
             double rttDistance = sample - Roundtrip;
             Roundtrip += (rttDistance * 0.1d);

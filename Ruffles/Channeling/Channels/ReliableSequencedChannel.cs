@@ -56,16 +56,14 @@ namespace Ruffles.Channeling.Channels
 
         // Channel info
         private readonly byte channelId;
-        private readonly Connection connection;
-        private readonly RuffleSocket socket;
+        private readonly ConnectionBase connection;
         private readonly SocketConfig config;
         private readonly MemoryManager memoryManager;
 
-        internal ReliableSequencedChannel(byte channelId, Connection connection, RuffleSocket socket, SocketConfig config, MemoryManager memoryManager)
+        internal ReliableSequencedChannel(byte channelId, ConnectionBase connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
-            this.socket = socket;
             this.config = config;
             this.memoryManager = memoryManager;
 
@@ -101,7 +99,7 @@ namespace Ruffles.Channeling.Channels
         {
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
-            
+
             if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _receiveSequencer[sequence].Alive)
             {
                 // We have already acked this message. Ack again

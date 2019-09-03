@@ -192,16 +192,14 @@ namespace Ruffles.Channeling.Channels
 
         // Channel info
         private readonly byte channelId;
-        private readonly Connection connection;
-        private readonly RuffleSocket socket;
+        private readonly ConnectionBase connection;
         private readonly SocketConfig config;
         private readonly MemoryManager memoryManager;
 
-        internal ReliableSequencedFragmentedChannel(byte channelId, Connection connection, RuffleSocket socket, SocketConfig config, MemoryManager memoryManager)
+        internal ReliableSequencedFragmentedChannel(byte channelId, ConnectionBase connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
-            this.socket = socket;
             this.config = config;
             this.memoryManager = memoryManager;
 

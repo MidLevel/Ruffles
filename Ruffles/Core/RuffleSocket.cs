@@ -1029,7 +1029,7 @@ namespace Ruffles.Core
                                         break;
                                     case ChannelType.ReliableSequenced:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, this, config, memoryManager);
+                                            pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.UnreliableRaw:
@@ -1039,7 +1039,7 @@ namespace Ruffles.Core
                                         break;
                                     case ChannelType.ReliableSequencedFragmented:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, this, config, memoryManager);
+                                            pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     default:
@@ -1358,7 +1358,7 @@ namespace Ruffles.Core
                                 break;
                             case ChannelType.ReliableSequenced:
                                 {
-                                    connection.Channels[x] = new ReliableSequencedChannel(x, connection, this, config, memoryManager);
+                                    connection.Channels[x] = new ReliableSequencedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.UnreliableRaw:
@@ -1368,7 +1368,7 @@ namespace Ruffles.Core
                                 break;
                             case ChannelType.ReliableSequencedFragmented:
                                 {
-                                    connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, this, config, memoryManager);
+                                    connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             default:

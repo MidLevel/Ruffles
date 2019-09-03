@@ -1,21 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFrameworks>net35;net471;net45;netstandard2.0;netcoreapp2.0</TargetFrameworks>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Folder Include="Channeling\" />
-    <Folder Include="Memory\" />
-    <Folder Include="Hashing\" />
-    <Folder Include="Connections\" />
-    <Folder Include="Simulation\" />
-    <Folder Include="Core\" />
-    <Folder Include="Configuration\" />
-    <Folder Include="Messaging\" />
-    <Folder Include="Exceptions\" />
-    <Folder Include="Channeling\Channels\" />
-    <Folder Include="Random\" />
-    <Folder Include="Utils\" />
-  </ItemGroup>
 </Project>
