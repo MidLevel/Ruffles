@@ -30,7 +30,7 @@ namespace Ruffles.Core
 
         internal readonly Queue<NetworkEvent> UserEventQueue = new Queue<NetworkEvent>();
 
-        private ushort PendingConnections = 0;
+        private ushort pendingConnections = 0;
 
         private Socket ipv4Socket;
         private Socket ipv6Socket;
@@ -43,8 +43,17 @@ namespace Ruffles.Core
 
         private readonly SlidingSet<ulong> challengeInitializationVectors;
 
+        private readonly MemoryManager memoryManager;
+
         public RuffleSocket(SocketConfig config)
         {
+            List<string> configurationErrors = config.GetInvalidConfiguration();
+
+            if (configurationErrors.Count > 0)
+            {
+                Logging.Error("Invalid configuration! Please fix the following issues [" + string.Join(",", configurationErrors.ToArray()) + "]");
+            }
+
             this.config = config;
 
             if (config.UseSimulator)
@@ -56,6 +65,8 @@ namespace Ruffles.Core
             incomingBuffer = new byte[config.MaxBufferSize];
             Connections = new Connection[config.MaxConnections];
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
+
+            memoryManager = new MemoryManager(config);
 
             bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
 
@@ -178,7 +189,7 @@ namespace Ruffles.Core
                 throw new InvalidOperationException("Connection is not connected");
             }
 
-            PacketHandler.SendMessage(payload, connection, channelId, noDelay);
+            PacketHandler.SendMessage(payload, connection, channelId, noDelay, memoryManager);
         }
 
         /// <summary>
@@ -196,6 +207,35 @@ namespace Ruffles.Core
             }
 
             Send(payload, Connections[connectionId], channelId, noDelay);
+        }
+
+        /// <summary>
+        /// Sends an unconnected message.
+        /// </summary>
+        /// <param name="payload">Payload.</param>
+        /// <param name="endpoint">Endpoint.</param>
+        public void SendUnconnected(ArraySegment<byte> payload, IPEndPoint endpoint)
+        {
+            if (payload.Count > config.MaxMessageSize)
+            {
+                Logging.Error("Tried to send unconnected message that was too large. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                return;
+            }
+
+            // Allocate the memory
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
+
+            // Write headers
+            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.UnconnectedData, false);
+
+            // Copy payload to borrowed memory
+            Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 1, payload.Count);
+
+            // Send the packet
+            SendRawRealEndPoint(endpoint, payload);
+
+            // Release memory
+            memoryManager.DeAlloc(memory);
         }
 
         /// <summary>
@@ -244,7 +284,7 @@ namespace Ruffles.Core
                         // Increment counter
                         counter++;
                     }
-                    while ((hash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty) != 0);
+                    while ((hash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty) != 0);
 
                     // Make counter 1 less
                     counter--;
@@ -256,7 +296,7 @@ namespace Ruffles.Core
                     for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
 
                     // Write IV
-                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + i] = ((byte)(iv >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
                 }
 
                 int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
@@ -405,13 +445,13 @@ namespace Ruffles.Core
                             if (config.TimeBasedConnectionChallenge)
                             {
                                 // Write the response unix time
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].PreConnectionChallengeTimestamp >> (i * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
 
                                 // Write counter
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(Connections[i].PreConnectionChallengeCounter >> (i * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(Connections[i].PreConnectionChallengeCounter >> (x * 8)));
 
                                 // Write IV
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) * 2 + x] = ((byte)(Connections[i].PreConnectionChallengeIV >> (i * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(Connections[i].PreConnectionChallengeIV >> (x * 8)));
                             }
 
                             int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
@@ -519,7 +559,7 @@ namespace Ruffles.Core
                         Connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
 
                         // DeAlloc the memory
-                        MemoryManager.DeAlloc(heartbeatMemory);
+                        memoryManager.DeAlloc(heartbeatMemory);
                     }
                 }
             }
@@ -568,7 +608,8 @@ namespace Ruffles.Core
                 InternalMemory = null,
                 Type = NetworkEventType.Nothing,
                 ChannelId = 0,
-                SocketReceiveTime = DateTime.Now
+                SocketReceiveTime = DateTime.Now,
+                MemoryManager = memoryManager
             };
         }
 
@@ -598,6 +639,18 @@ namespace Ruffles.Core
             else if (connection.EndPoint.AddressFamily == AddressFamily.InterNetworkV6)
             {
                 int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, connection.EndPoint);
+            }
+        }
+
+        private void SendRawRealEndPoint(IPEndPoint endpoint, ArraySegment<byte> payload)
+        {
+            if (endpoint.AddressFamily == AddressFamily.InterNetwork)
+            {
+                int sent = ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+            }
+            else if (endpoint.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
             }
         }
 
@@ -688,14 +741,14 @@ namespace Ruffles.Core
                                             ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 7] << 56));
 
                             // Read the initialization vector they used
-                            ulong userIv = (((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2]) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 1] << 8) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 2] << 16) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 3] << 24) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 4] << 32) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 5] << 40) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 6] << 48) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) * 2 + 7] << 56));
+                            ulong userIv = (((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2)]) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 1] << 8) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 2] << 16) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 3] << 24) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 4] << 32) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 5] << 40) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 6] << 48) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 7] << 56));
 
                             // Ensure they dont reuse a IV
                             if (challengeInitializationVectors[userIv])
@@ -709,7 +762,7 @@ namespace Ruffles.Core
                             ulong claimedHash = HashProvider.GetStableHash64(challengeUnixTime, counter, userIv);
 
                             // Check if the hash collides
-                            bool isCollided = ((claimedHash << (sizeof(ulong) - config.ChallengeDifficulty)) >> (sizeof(ulong) - config.ChallengeDifficulty)) == 0;
+                            bool isCollided = ((claimedHash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty)) == 0;
 
                             if (!isCollided)
                             {
@@ -880,7 +933,8 @@ namespace Ruffles.Core
                                     ChannelId = 0,
                                     Data = new ArraySegment<byte>(),
                                     InternalMemory = null,
-                                    SocketReceiveTime = DateTime.Now
+                                    SocketReceiveTime = DateTime.Now,
+                                    MemoryManager = memoryManager
                                 });
                             }
                             else
@@ -971,6 +1025,11 @@ namespace Ruffles.Core
                                             pendingConnection.ChannelTypes[i] = ChannelType.UnreliableRaw;
                                         }
                                         break;
+                                    case (byte)ChannelType.ReliableSequencedFragmented:
+                                        {
+                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableSequencedFragmented;
+                                        }
+                                        break;
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
@@ -1003,27 +1062,32 @@ namespace Ruffles.Core
                                 {
                                     case ChannelType.Reliable:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableChannel(i, pendingConnection, config);
+                                            pendingConnection.Channels[i] = new ReliableChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.Unreliable:
                                         {
-                                            pendingConnection.Channels[i] = new UnreliableChannel(i, pendingConnection, config);
+                                            pendingConnection.Channels[i] = new UnreliableChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.UnreliableSequenced:
                                         {
-                                            pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection);
+                                            pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.ReliableSequenced:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, this, config);
+                                            pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.UnreliableRaw:
                                         {
-                                            pendingConnection.Channels[i] = new UnreliableRawChannel(i, pendingConnection, config);
+                                            pendingConnection.Channels[i] = new UnreliableRawChannel(i, pendingConnection, config, memoryManager);
+                                        }
+                                        break;
+                                    case ChannelType.ReliableSequencedFragmented:
+                                        {
+                                            pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     default:
@@ -1051,7 +1115,8 @@ namespace Ruffles.Core
                                 ChannelId = 0,
                                 Data = new ArraySegment<byte>(),
                                 InternalMemory = null,
-                                SocketReceiveTime = DateTime.Now
+                                SocketReceiveTime = DateTime.Now,
+                                MemoryManager = memoryManager
                             });
 
                             // Send the confirmation
@@ -1116,7 +1181,7 @@ namespace Ruffles.Core
                         {
                             connection.LastMessageIn = DateTime.Now;
 
-                            PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config);
+                            PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config, memoryManager);
                         }
                         else
                         {
@@ -1165,6 +1230,36 @@ namespace Ruffles.Core
                         }
                     }
                     break;
+                case (byte)MessageType.UnconnectedData:
+                    {
+                        if (config.AllowUnconnectedMessages)
+                        {
+                            // Alloc memory that can be borrowed to userspace
+                            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 1);
+
+                            // Copy payload to borrowed memory
+                            Buffer.BlockCopy(payload.Array, payload.Offset + 1, memory.Buffer, 0, payload.Count - 1);
+
+                            // Send to userspace
+                            UserEventQueue.Enqueue(new NetworkEvent()
+                            {
+                                Connection = null,
+                                Socket = this,
+                                Type = NetworkEventType.UnconnectedData,
+                                AllowUserRecycle = true,
+                                Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
+                                InternalMemory = memory,
+                                SocketReceiveTime = DateTime.Now,
+                                ChannelId = 0,
+                                MemoryManager = memoryManager
+                            });
+                        }
+                        else
+                        {
+                            Logging.Warning("Got unconnected message but SocketConfig.AllowUnconnectedMessages is disabled.");
+                        }
+                    }
+                    break;
             }
         }
 
@@ -1176,7 +1271,7 @@ namespace Ruffles.Core
 
             connection.State = ConnectionState.Connected;
 
-            PendingConnections++;
+            pendingConnections++;
         }
 
         internal Connection GetPendingConnection(EndPoint endpoint)
@@ -1250,7 +1345,7 @@ namespace Ruffles.Core
             {
                 AddressPendingConnectionLookup.Remove(connection.EndPoint);
 
-                PendingConnections--;
+                pendingConnections--;
             }
             else
             {
@@ -1267,14 +1362,15 @@ namespace Ruffles.Core
                 ChannelId = 0,
                 Data = new ArraySegment<byte>(),
                 InternalMemory = null,
-                SocketReceiveTime = DateTime.Now
+                SocketReceiveTime = DateTime.Now,
+                MemoryManager = memoryManager
             });
         }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
         {
             // Make sure they are not already connected to prevent an attack where a single person can fill all the slots.
-            if (AddressPendingConnectionLookup.ContainsKey(endpoint) || AddressConnectionLookup.ContainsKey(endpoint) || PendingConnections > config.MaxPendingConnections)
+            if (AddressPendingConnectionLookup.ContainsKey(endpoint) || AddressConnectionLookup.ContainsKey(endpoint) || pendingConnections > config.MaxPendingConnections)
             {
                 return null;
             }
@@ -1286,7 +1382,7 @@ namespace Ruffles.Core
                 if (Connections[i] == null)
                 {
                     // Alloc on the heap
-                    connection = new Connection(config)
+                    connection = new Connection(config, memoryManager)
                     {
                         Dead = false,
                         Recycled = false,
@@ -1325,27 +1421,32 @@ namespace Ruffles.Core
                         {
                             case ChannelType.Reliable:
                                 {
-                                    connection.Channels[x] = new ReliableChannel(x, connection, config);
+                                    connection.Channels[x] = new ReliableChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.Unreliable:
                                 {
-                                    connection.Channels[x] = new UnreliableChannel(x, connection, config);
+                                    connection.Channels[x] = new UnreliableChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.UnreliableSequenced:
                                 {
-                                    connection.Channels[x] = new UnreliableSequencedChannel(x, connection);
+                                    connection.Channels[x] = new UnreliableSequencedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.ReliableSequenced:
                                 {
-                                    connection.Channels[x] = new ReliableSequencedChannel(x, connection, this, config);
+                                    connection.Channels[x] = new ReliableSequencedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.UnreliableRaw:
                                 {
-                                    connection.Channels[x] = new UnreliableRawChannel(x, connection, config);
+                                    connection.Channels[x] = new UnreliableRawChannel(x, connection, config, memoryManager);
+                                }
+                                break;
+                            case ChannelType.ReliableSequencedFragmented:
+                                {
+                                    connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             default:
@@ -1362,7 +1463,7 @@ namespace Ruffles.Core
                     Connections[i] = connection;
                     AddressPendingConnectionLookup.Add(endpoint, connection);
 
-                    PendingConnections++;
+                    pendingConnections++;
 
                     break;
                 }
@@ -1388,7 +1489,7 @@ namespace Ruffles.Core
 
                     AddressPendingConnectionLookup.Add(endpoint, connection);
 
-                    PendingConnections++;
+                    pendingConnections++;
 
                     break;
                 }

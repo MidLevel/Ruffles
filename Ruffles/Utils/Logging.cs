@@ -10,7 +10,7 @@ namespace Ruffles.Utils
         /// <summary>
         /// Occurs when ruffles spits out an info log.
         /// </summary>
-        public static event Action<string> OnInfoLog = (value) => Console.WriteLine("[INFO] " + value);
+        public static event Action<string> OnInfoLog;//Console.WriteLine("[INFO] " + value);
         /// <summary>
         /// Occurs when ruffles spits out a warning log.
         /// </summary>

@@ -3,6 +3,6 @@
     internal interface IMemoryReleasable
     {
         bool IsAlloced { get; }
-        void DeAlloc();
+        void DeAlloc(MemoryManager memoryManager);
     }
 }

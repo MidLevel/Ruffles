@@ -1,19 +1,30 @@
 ﻿using System;
 using System.Collections.Generic;
+using Ruffles.Configuration;
 using Ruffles.Exceptions;
+using Ruffles.Utils;
 
 namespace Ruffles.Memory
 {
-    internal static class MemoryManager
+    internal class MemoryManager : IDisposable
     {
-        private static ushort _createdPools = 0;
-        private static bool _hasWarnedAboutLeak = false;
-        private static readonly Queue<HeapMemory> _pooledMemory = new Queue<HeapMemory>();
+        private ushort _createdHeapMemory = 0;
+        private bool _hasWarnedAboutHeapMemoryLeaks = false;
+        private readonly Queue<HeapMemory> _pooledHeapMemory = new Queue<HeapMemory>();
 
-        private const uint minBufferSize = 64;
-        private const uint bufferMultiple = 64;
+        private const uint minHeapMemorySize = 64;
+        private const uint heapMemorySizeMultiple = 64;
 
-        private static uint CalculateMultiple(uint minSize, uint multiple)
+        private ushort _createdPointerArrays = 0;
+        private bool _hasWarnedAboutPointerArrayLeaks = false;
+        private readonly List<object[]> _pooledPointerArrays = new List<object[]>();
+
+        private const uint minPointerArraySize = 64;
+        private const uint pointerArraySizeMultiple = 64;
+
+        private readonly SocketConfig _configuration;
+
+        internal static uint CalculateMultiple(uint minSize, uint multiple)
         {
             uint remainder = minSize % multiple;
 
@@ -28,35 +39,94 @@ namespace Ruffles.Memory
             return result;
         }
 
-        internal static HeapMemory Alloc(uint size)
+
+        internal MemoryManager(SocketConfig config)
         {
-            uint allocSize = Math.Max(minBufferSize, CalculateMultiple(size, bufferMultiple));
-
-            if (_pooledMemory.Count == 0)
-            {
-                _createdPools++;
-
-                if (_createdPools >= 1024 && !_hasWarnedAboutLeak)
-                {
-                    Console.WriteLine("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated.");
-                    _hasWarnedAboutLeak = true;
-                }
-
-                return new HeapMemory(allocSize);
-            }
-
-            HeapMemory memory = _pooledMemory.Dequeue();
-
-            memory.EnsureSize(allocSize);
-
-            memory.isDead = false;
-            memory.VirtualCount = allocSize;
-            memory.VirtualOffset = 0;
-
-            return memory;
+            _configuration = config;
         }
 
-        internal static void DeAlloc(HeapMemory memory)
+        internal object[] AllocPointers(uint size)
+        {
+            uint allocSize = Math.Max(minPointerArraySize, CalculateMultiple(size, pointerArraySizeMultiple));
+
+            object[] pointers = null;
+
+            if (_configuration.PoolPointerArrays)
+            {
+                for (int i = 0; i < _pooledPointerArrays.Count; i++)
+                {
+                    if (_pooledPointerArrays[i].Length >= size)
+                    {
+                        pointers = _pooledPointerArrays[i];
+                        _pooledPointerArrays.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
+
+            if (pointers == null)
+            {
+                _createdPointerArrays++;
+
+                if (_createdPointerArrays >= 1024 && !_hasWarnedAboutPointerArrayLeaks)
+                {
+                    Logging.Warning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [POINTERS ARRAYS]");
+                    _hasWarnedAboutPointerArrayLeaks = true;
+                }
+
+                if (_pooledPointerArrays.Count > 0)
+                {
+                    // Delete this one for expansion.
+                    _pooledPointerArrays.RemoveAt(0);
+                }
+
+                pointers = new object[allocSize];
+            }
+            else
+            {
+                Array.Clear(pointers, 0, pointers.Length);
+            }
+
+            return pointers;
+        }
+
+        internal HeapMemory AllocHeapMemory(uint size)
+        {
+            uint allocSize = Math.Max(minHeapMemorySize, CalculateMultiple(size, heapMemorySizeMultiple));
+
+            if (_pooledHeapMemory.Count == 0)
+            {
+                _createdHeapMemory++;
+
+                if (_createdHeapMemory >= 1024 && !_hasWarnedAboutHeapMemoryLeaks)
+                {
+                    Logging.Warning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP MEMORY]");
+                    _hasWarnedAboutHeapMemoryLeaks = true;
+                }
+
+                HeapMemory memory = new HeapMemory(allocSize);
+
+                memory.isDead = false;
+                memory.VirtualCount = size;
+                memory.VirtualOffset = 0;
+
+                return memory;
+            }
+            else
+            {
+                HeapMemory memory = _pooledHeapMemory.Dequeue();
+
+                memory.EnsureSize(allocSize);
+
+                memory.isDead = false;
+                memory.VirtualCount = size;
+                memory.VirtualOffset = 0;
+
+                return memory;
+            }
+        }
+
+        internal void DeAlloc(HeapMemory memory)
         {
             if (memory.isDead)
             {
@@ -67,7 +137,21 @@ namespace Ruffles.Memory
             memory.VirtualOffset = 0;
             memory.VirtualCount = 0;
 
-            _pooledMemory.Enqueue(memory);
+            _pooledHeapMemory.Enqueue(memory);
+        }
+
+        internal void DeAlloc(object[] pointers)
+        {
+            if (_configuration.PoolPointerArrays)
+            {
+                _pooledPointerArrays.Add(pointers);
+            }
+        }
+
+        public void Dispose()
+        {
+            _pooledPointerArrays.Clear();
+            _pooledPointerArrays.Clear();
         }
     }
 }

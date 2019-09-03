@@ -3,6 +3,7 @@ using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
 {
@@ -12,18 +13,29 @@ namespace Ruffles.Channeling.Channels
         private readonly byte channelId;
         private readonly Connection connection;
         private readonly SocketConfig config;
+        private readonly MemoryManager memoryManager;
 
-        internal UnreliableRawChannel(byte channelId, Connection connection, SocketConfig config)
+        internal UnreliableRawChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
             this.config = config;
+            this.memoryManager = memoryManager;
         }
 
-        public HeapMemory CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
+
+        public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
+            if (payload.Count > config.MaxMessageSize)
+            {
+                Logging.Error("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                dealloc = false;
+                return null;
+            }
+
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 2);
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 2);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
@@ -35,7 +47,10 @@ namespace Ruffles.Channeling.Channels
             // Tell the caller to deallc the memory
             dealloc = true;
 
-            return memory;
+            // Assign memory
+            SINGLE_MESSAGE_ARRAY[0] = memory;
+
+            return SINGLE_MESSAGE_ARRAY;
         }
 
         public void HandleAck(ArraySegment<byte> payload)

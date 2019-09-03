@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Collections.Generic;
+using System.Net;
 using Ruffles.Channeling;
 using Ruffles.Simulation;
 
@@ -23,6 +24,10 @@ namespace Ruffles.Configuration
         /// Whether or not the socket will listen on IPv4 and IPv6 in dual mode on the same port.
         /// </summary>
         public bool UseIPv6Dual = true;
+        /// <summary>
+        /// Whether or not unconnected messages should be allowed.
+        /// </summary>
+        public bool AllowUnconnectedMessages = false;
 
         // Performance
         /// <summary>
@@ -39,23 +44,41 @@ namespace Ruffles.Configuration
         /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.
         /// </summary>
         public bool ReuseConnections = true;
+        /// <summary>
+        /// Whether or not to pool pointer arrays. This is benefitial if your application is garbage critical.
+        /// </summary>
+        public bool PoolPointerArrays = true;
 
         // Bandwidth
         /// <summary>
         /// The maximum size of a merged packet. 
         /// Increasing this increases the memory usage for each connection.
         /// </summary>
-        public ushort MaxMergeMessageSize = 256;
+        public ushort MaxMergeMessageSize = 1450;
         /// <summary>
         /// The maximum delay before merged packets are sent.
         /// </summary>
         public ulong MaxMergeDelay = 250;
 
+        // Fragmentation
+        /// <summary>
+        /// The maximum user size of a single message.
+        /// </summary>
+        public ushort MaxMessageSize = 1450;
+        /// <summary>
+        /// The default size of fragment arrays.
+        /// </summary>
+        public ushort FragmentArrayBaseSize = 64;
+        /// <summary>
+        /// The maximum amount of fragments allowed to be used.
+        /// </summary>
+        public ushort MaxFragments = 512;
+
         // Memory
         /// <summary>
         /// The maxmimum packet size. Should be larger than the MTU.
         /// </summary>
-        public ushort MaxBufferSize = ushort.MaxValue;
+        public ushort MaxBufferSize = 1500;
         /// <summary>
         /// The maximum amount of connections. Increasing this increases the memory impact.
         /// </summary>
@@ -65,15 +88,15 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The amount of milliseconds from the connection request that the connection has to solve the challenge and complete the connection handshake.
         /// </summary>
-        public ulong HandshakeTimeout = 10000;
+        public ulong HandshakeTimeout = 30_000;
         /// <summary>
         /// The amount of milliseconds of packet silence before a already connected connection will be disconnected.
         /// </summary>
-        public ulong ConnectionTimeout = 10000;
+        public ulong ConnectionTimeout = 30_000;
         /// <summary>
         /// The amount milliseconds between heartbeat keep-alive packets are sent.
         /// </summary>
-        public ulong HeartbeatDelay = 2000;
+        public ulong HeartbeatDelay = 20_000;
 
         // Handshake resends
         /// <summary>
@@ -93,7 +116,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The difficulty of the challenge in bits. Higher difficulties exponentially increase the solve time.
         /// </summary>
-        public byte ChallengeDifficulty = 10;
+        public byte ChallengeDifficulty = 20;
         /// <summary>
         /// The amount of successfull initialization vectors to keep for initial connection requests.
         /// </summary>
@@ -101,7 +124,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The connection request challenge time window in seconds.
         /// </summary>
-        public ulong ConnectionChallengeTimeWindow = 30;
+        public ulong ConnectionChallengeTimeWindow = 60 * 5;
         /// <summary>
         /// Whether or not to enable time based connection challenge. 
         /// Enabling this will prevent slot filling attacks but requires the connector and connection receivers times to be synced with a diff of
@@ -183,5 +206,22 @@ namespace Ruffles.Configuration
         /// Whether or not packet merging should be enabled.
         /// </summary>
         public bool EnablePacketMerging = true;
+
+        public List<string> GetInvalidConfiguration()
+        {
+            List<string> messages = new List<string>();
+
+            if (MaxFragments > 32768)
+            {
+                messages.Add("MaxFragments cannot be greater than 2^15=32768");
+            }
+
+            if (MaxMergeMessageSize > MaxMessageSize)
+            {
+                messages.Add("MaxMergeMessageSize cannot be greater than MaxMessageSize");
+            }
+
+            return messages;
+        }
     }
 }

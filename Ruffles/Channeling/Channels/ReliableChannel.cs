@@ -4,6 +4,7 @@ using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
 {
@@ -20,11 +21,11 @@ namespace Ruffles.Channeling.Channels
             public DateTime FirstSent;
             public ushort Attempts;
 
-            public void DeAlloc()
+            public void DeAlloc(MemoryManager memoryManager)
             {
                 if (IsAlloced)
                 {
-                    MemoryManager.DeAlloc(Memory);
+                    memoryManager.DeAlloc(Memory);
                 }
             }
         }
@@ -41,14 +42,16 @@ namespace Ruffles.Channeling.Channels
         private readonly byte channelId;
         private readonly Connection connection;
         private readonly SocketConfig config;
+        private readonly MemoryManager memoryManager;
 
-        internal ReliableChannel(byte channelId, Connection connection, SocketConfig config)
+        internal ReliableChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
             this.config = config;
+            this.memoryManager = memoryManager;
 
-            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort));
+            _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort), memoryManager);
         }
 
         public HeapMemory HandlePoll()
@@ -105,13 +108,22 @@ namespace Ruffles.Channeling.Channels
             return null;
         }
 
-        public HeapMemory CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
+
+        public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
+            if (payload.Count > config.MaxMessageSize)
+            {
+                Logging.Error("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                dealloc = false;
+                return null;
+            }
+
             // Increment the sequence number
             _lastOutboundSequenceNumber++;
 
             // Allocate the memory
-            HeapMemory memory = MemoryManager.Alloc((uint)payload.Count + 4);
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
             
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
@@ -138,7 +150,10 @@ namespace Ruffles.Channeling.Channels
             // Tell the caller NOT to dealloc the memory, the channel needs it for resend purposes.
             dealloc = false;
 
-            return memory;
+            // Assign memory
+            SINGLE_MESSAGE_ARRAY[0] = memory;
+
+            return SINGLE_MESSAGE_ARRAY;
         }
 
         public void HandleAck(ArraySegment<byte> payload)
@@ -149,7 +164,7 @@ namespace Ruffles.Channeling.Channels
             if (_sendSequencer[sequence].Alive)
             {
                 // Dealloc the memory held by the sequencer
-                MemoryManager.DeAlloc(_sendSequencer[sequence].Memory);
+                memoryManager.DeAlloc(_sendSequencer[sequence].Memory);
 
                 // TODO: Remove roundtripping from channeled packets and make specific ping-pong packets
 
@@ -218,7 +233,7 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence)
         {
             // Alloc ack memory
-            HeapMemory ackMemory = MemoryManager.Alloc(4);
+            HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
 
             // Write header
             ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
@@ -232,7 +247,7 @@ namespace Ruffles.Channeling.Channels
             connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false);
 
             // Return memory
-            MemoryManager.DeAlloc(ackMemory);
+            memoryManager.DeAlloc(ackMemory);
         }
     }
 }
