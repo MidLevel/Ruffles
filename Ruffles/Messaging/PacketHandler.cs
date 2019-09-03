@@ -4,6 +4,7 @@ using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Core;
 using Ruffles.Memory;
+using Ruffles.Utils;
 
 namespace Ruffles.Messaging
 {
@@ -18,6 +19,7 @@ namespace Ruffles.Messaging
             if (channelId < 0 || channelId >= connection.Channels.Length)
             {
                 // ChannelId out of range
+                Logging.Error("Got message on channel out of range. [ChannelId=" + channelId + "]");
                 return;
             }
 
