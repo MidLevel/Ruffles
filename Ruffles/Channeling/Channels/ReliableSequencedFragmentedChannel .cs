@@ -37,6 +37,27 @@ namespace Ruffles.Channeling.Channels
             public PendingOutgoingFragment[] Fragments;
             public bool Alive;
 
+            public bool AllFragmentsAlive
+            {
+                get
+                {
+                    if (Fragments == null)
+                    {
+                        return false;
+                    }
+
+                    for (int i = 0; i < Fragments.Length; i++)
+                    {
+                        if (!Fragments[i].Alive)
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+            }
+
             public void DeAlloc(MemoryManager memoryManager)
             {
                 if (IsAlloced)
@@ -467,7 +488,7 @@ namespace Ruffles.Channeling.Channels
                 }
             }
 
-            for (ushort i = sequence; _sendSequencer[i].Alive; i++)
+            for (ushort i = sequence; _sendSequencer[i].Alive && _sendSequencer[i].AllFragmentsAlive; i++)
             {
                 _incomingLowestAckedSequence = i;
             }
@@ -563,7 +584,6 @@ namespace Ruffles.Channeling.Channels
                                     Sequence = i
                                 };
 
-                                Console.WriteLine("Resending fragment for sequence: " + i + " and fragment: " + j);
                                 connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Fragments[j].Memory.Buffer, (int)_sendSequencer[i].Fragments[j].Memory.VirtualOffset, (int)_sendSequencer[i].Fragments[j].Memory.VirtualCount), false);
                             }
                         }
