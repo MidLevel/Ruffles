@@ -13,10 +13,6 @@ namespace Ruffles.Messaging
         {
             // This is where all data packets arrive after passing the connection handling.
 
-            // TODO:
-            // 1. Fragmentation
-            // 2. Delay to pack messages
-
             byte channelId = payload.Array[payload.Offset];
 
             if (channelId < 0 || channelId >= connection.Channels.Length)
@@ -100,7 +96,7 @@ namespace Ruffles.Messaging
 
             if (dealloc)
             {
-                // DeAlloc the memory again. This is done for unreliable channels that need the message after the initial send.
+                // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
                 for (int i = 0; i < messageMemory.Length; i++)
                 {
                     memoryManager.DeAlloc(messageMemory[i]);
