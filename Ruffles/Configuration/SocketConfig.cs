@@ -7,6 +7,12 @@ namespace Ruffles.Configuration
 {
     public class SocketConfig
     {
+        // Random
+        /// <summary>
+        /// Whether or not to use verbose info logging. This can cause tons of garbage allocation.
+        /// </summary>
+        public bool UseVerboseInfoLogging = false;
+
         // Connection
         /// <summary>
         /// The IPv4 address the socket will listen on.

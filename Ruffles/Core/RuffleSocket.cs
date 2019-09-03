@@ -666,7 +666,10 @@ namespace Ruffles.Core
             // Unpack header, dont cast to MessageType enum for safety
             HeaderPacker.Unpack(payload.Array[payload.Offset], out byte messageType, out bool fragmented);
 
-            Logging.Info("Unpacked packet. [MessageType=" + (MessageType)messageType + "] [Fragmented=" + fragmented + "]");
+            if (config.UseVerboseInfoLogging)
+            {
+                Logging.Info("Unpacked packet. [MessageType=" + (MessageType)messageType + "] [Fragmented=" + fragmented + "]");
+            }
 
             switch (messageType)
             {
