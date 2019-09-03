@@ -4,6 +4,7 @@ using Ruffles.Connections;
 using Ruffles.Core;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
 {
@@ -266,6 +267,13 @@ namespace Ruffles.Channeling.Channels
             // IsFinal is the most significant bit
             bool isFinal = (ushort)((encodedFragment & 32768) >> 15) == 1;
 
+            if (fragment > config.MaxFragments)
+            {
+                Logging.Error("FragmentId was too large. [FragmentId=" + fragment + "] [Config.MaxFragments=" + config.MaxFragments + "]. The fragment was silently dropped, expect a timeout.");
+                hasMore = false;
+                return null;
+            }
+
             if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || 
                 (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].IsComplete) || 
                 (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].Fragments.Array != null && _receiveSequencer[sequence].Fragments.Count > fragment && _receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment] != null && !((HeapMemory)_receiveSequencer[sequence].Fragments.Array[_receiveSequencer[sequence].Fragments.Offset + fragment]).isDead))
@@ -364,11 +372,18 @@ namespace Ruffles.Channeling.Channels
 
         public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
-            // Increment the sequence number
-            _lastOutboundSequenceNumber++;
-
             // Calculate the amount of fragments required
             int fragmentsRequired = (payload.Count + (config.MaxMessageSize - 1)) / config.MaxMessageSize;
+
+            if (fragmentsRequired > config.MaxFragments)
+            {
+                Logging.Error("Tried to create message that was too large. [Size=" + payload.Count + "] [FragmentsRequired=" + fragmentsRequired + "] [Config.MaxFragments=" + config.MaxFragments + "]");
+                dealloc = false;
+                return null;
+            }
+
+            // Increment the sequence number
+            _lastOutboundSequenceNumber++;
 
             // Alloc array
             HeapMemory[] fragments = new HeapMemory[fragmentsRequired];

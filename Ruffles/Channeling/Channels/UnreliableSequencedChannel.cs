@@ -1,7 +1,9 @@
 ﻿using System;
+using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
 {
@@ -17,18 +19,27 @@ namespace Ruffles.Channeling.Channels
         private readonly byte channelId;
         private readonly Connection connection;
         private readonly MemoryManager memoryManager;
+        private readonly SocketConfig config;
 
-        internal UnreliableSequencedChannel(byte channelId, Connection connection, MemoryManager memoryManager)
+        internal UnreliableSequencedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
             this.memoryManager = memoryManager;
+            this.config = config;
         }
 
         private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
 
         public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
+            if (payload.Count > config.MaxMessageSize)
+            {
+                Logging.Error("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                dealloc = false;
+                return null;
+            }
+
             // Increment the sequence number
             _lastOutboundSequenceNumber++;
 

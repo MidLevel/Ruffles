@@ -47,6 +47,13 @@ namespace Ruffles.Core
 
         public RuffleSocket(SocketConfig config)
         {
+            List<string> configurationErrors = config.GetInvalidConfiguration();
+
+            if (configurationErrors.Count > 0)
+            {
+                Logging.Error("Invalid configuration! Please fix the following issues [" + string.Join(",", configurationErrors.ToArray()) + "]");
+            }
+
             this.config = config;
 
             if (config.UseSimulator)
@@ -1024,7 +1031,7 @@ namespace Ruffles.Core
                                         break;
                                     case ChannelType.UnreliableSequenced:
                                         {
-                                            pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection, memoryManager);
+                                            pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     case ChannelType.ReliableSequenced:
@@ -1353,7 +1360,7 @@ namespace Ruffles.Core
                                 break;
                             case ChannelType.UnreliableSequenced:
                                 {
-                                    connection.Channels[x] = new UnreliableSequencedChannel(x, connection, memoryManager);
+                                    connection.Channels[x] = new UnreliableSequencedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             case ChannelType.ReliableSequenced:

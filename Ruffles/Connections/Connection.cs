@@ -84,7 +84,7 @@ namespace Ruffles.Connections
         {
             if (config.EnableHeartbeats)
             {
-                HeartbeatChannel = new UnreliableSequencedChannel(0, this, memoryManager);
+                HeartbeatChannel = new UnreliableSequencedChannel(0, this, config, memoryManager);
             }
         }
 

@@ -4,6 +4,7 @@ using Ruffles.Connections;
 using Ruffles.Core;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
 {
@@ -151,6 +152,13 @@ namespace Ruffles.Channeling.Channels
 
         public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
+            if (payload.Count > config.MaxMessageSize)
+            {
+                Logging.Error("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                dealloc = false;
+                return null;
+            }
+
             // Increment the sequence number
             _lastOutboundSequenceNumber++;
 

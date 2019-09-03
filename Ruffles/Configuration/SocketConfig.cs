@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Collections.Generic;
+using System.Net;
 using Ruffles.Channeling;
 using Ruffles.Simulation;
 
@@ -39,23 +40,34 @@ namespace Ruffles.Configuration
         /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.
         /// </summary>
         public bool ReuseConnections = true;
-
-        public bool PoolPointerArrays = false;
+        /// <summary>
+        /// Whether or not to pool pointer arrays. This is benefitial if your application is garbage critical.
+        /// </summary>
+        public bool PoolPointerArrays = true;
 
         // Bandwidth
         /// <summary>
         /// The maximum size of a merged packet. 
         /// Increasing this increases the memory usage for each connection.
         /// </summary>
-        public ushort MaxMergeMessageSize = 256;
+        public ushort MaxMergeMessageSize = 1450;
         /// <summary>
         /// The maximum delay before merged packets are sent.
         /// </summary>
         public ulong MaxMergeDelay = 250;
 
         // Fragmentation
-        public ushort MaxMessageSize = 1400;
+        /// <summary>
+        /// The maximum user size of a single message.
+        /// </summary>
+        public ushort MaxMessageSize = 1450;
+        /// <summary>
+        /// The default size of fragment arrays.
+        /// </summary>
         public ushort FragmentArrayBaseSize = 64;
+        /// <summary>
+        /// The maximum amount of fragments allowed to be used.
+        /// </summary>
         public ushort MaxFragments = 32768;
 
         // Memory
@@ -190,5 +202,22 @@ namespace Ruffles.Configuration
         /// Whether or not packet merging should be enabled.
         /// </summary>
         public bool EnablePacketMerging = true;
+
+        public List<string> GetInvalidConfiguration()
+        {
+            List<string> messages = new List<string>();
+
+            if (MaxFragments > 32768)
+            {
+                messages.Add("MaxFragments cannot be greater than 2^15=32768");
+            }
+
+            if (MaxMergeMessageSize > MaxMessageSize)
+            {
+                messages.Add("MaxMergeMessageSize cannot be greater than MaxMessageSize");
+            }
+
+            return messages;
+        }
     }
 }
