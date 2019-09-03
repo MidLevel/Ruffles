@@ -24,6 +24,10 @@
         /// <summary>
         /// A connection sent data.
         /// </summary>
-        Data
+        Data,
+        /// <summary>
+        /// An endpoint sent unconnected data.
+        /// </summary>
+        UnconnectedData
     }
 }

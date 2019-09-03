@@ -11,6 +11,7 @@
         Data,
         Disconnect,
         Ack,
-        Merge
+        Merge,
+        UnconnectedData
     }
 }

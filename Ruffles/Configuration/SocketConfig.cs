@@ -24,6 +24,10 @@ namespace Ruffles.Configuration
         /// Whether or not the socket will listen on IPv4 and IPv6 in dual mode on the same port.
         /// </summary>
         public bool UseIPv6Dual = true;
+        /// <summary>
+        /// Whether or not unconnected messages should be allowed.
+        /// </summary>
+        public bool AllowUnconnectedMessages = false;
 
         // Performance
         /// <summary>

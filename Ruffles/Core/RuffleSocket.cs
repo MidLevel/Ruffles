@@ -210,6 +210,35 @@ namespace Ruffles.Core
         }
 
         /// <summary>
+        /// Sends an unconnected message.
+        /// </summary>
+        /// <param name="payload">Payload.</param>
+        /// <param name="endpoint">Endpoint.</param>
+        public void SendUnconnected(ArraySegment<byte> payload, IPEndPoint endpoint)
+        {
+            if (payload.Count > config.MaxMessageSize)
+            {
+                Logging.Error("Tried to send unconnected message that was too large. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                return;
+            }
+
+            // Allocate the memory
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
+
+            // Write headers
+            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.UnconnectedData, false);
+
+            // Copy payload to borrowed memory
+            Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 1, payload.Count);
+
+            // Send the packet
+            SendRawRealEndPoint(endpoint, payload);
+
+            // Release memory
+            memoryManager.DeAlloc(memory);
+        }
+
+        /// <summary>
         /// Starts a connection to a endpoint.
         /// </summary>
         /// <returns>The pending connection.</returns>
@@ -610,6 +639,18 @@ namespace Ruffles.Core
             else if (connection.EndPoint.AddressFamily == AddressFamily.InterNetworkV6)
             {
                 int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, connection.EndPoint);
+            }
+        }
+
+        private void SendRawRealEndPoint(IPEndPoint endpoint, ArraySegment<byte> payload)
+        {
+            if (endpoint.AddressFamily == AddressFamily.InterNetwork)
+            {
+                int sent = ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+            }
+            else if (endpoint.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
             }
         }
 
@@ -1186,6 +1227,36 @@ namespace Ruffles.Core
                         else
                         {
                             Logging.Error("Client " + endpoint + " connection could not be found");
+                        }
+                    }
+                    break;
+                case (byte)MessageType.UnconnectedData:
+                    {
+                        if (config.AllowUnconnectedMessages)
+                        {
+                            // Alloc memory that can be borrowed to userspace
+                            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 1);
+
+                            // Copy payload to borrowed memory
+                            Buffer.BlockCopy(payload.Array, payload.Offset + 1, memory.Buffer, 0, payload.Count - 1);
+
+                            // Send to userspace
+                            UserEventQueue.Enqueue(new NetworkEvent()
+                            {
+                                Connection = null,
+                                Socket = this,
+                                Type = NetworkEventType.UnconnectedData,
+                                AllowUserRecycle = true,
+                                Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
+                                InternalMemory = memory,
+                                SocketReceiveTime = DateTime.Now,
+                                ChannelId = 0,
+                                MemoryManager = memoryManager
+                            });
+                        }
+                        else
+                        {
+                            Logging.Warning("Got unconnected message but SocketConfig.AllowUnconnectedMessages is disabled.");
                         }
                     }
                     break;

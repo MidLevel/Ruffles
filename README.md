@@ -47,6 +47,8 @@ Delivery is not guaranteed, nor is the order. Duplicates are dropped.
 Delivery is not guaranteed but the order is. Older packets and duplicate packets are dropped.
 #### UnreliableRaw
 Delivery is not guaranteed nor is the order. Duplicates are not dropped.
+#### UnconnectedMessages
+Raw UDP packets that does not require a connection.
 
 ### Threading
 Ruffles can run in many different threading environments, it can be run passively single threaded, actively single threaded, or in a threaded environment where everything is done via message queues while remaining garbage free.
