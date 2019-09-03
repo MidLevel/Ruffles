@@ -68,13 +68,13 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The maximum amount of fragments allowed to be used.
         /// </summary>
-        public ushort MaxFragments = 32768;
+        public ushort MaxFragments = 512;
 
         // Memory
         /// <summary>
         /// The maxmimum packet size. Should be larger than the MTU.
         /// </summary>
-        public ushort MaxBufferSize = ushort.MaxValue;
+        public ushort MaxBufferSize = 1500;
         /// <summary>
         /// The maximum amount of connections. Increasing this increases the memory impact.
         /// </summary>
@@ -112,7 +112,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The difficulty of the challenge in bits. Higher difficulties exponentially increase the solve time.
         /// </summary>
-        public byte ChallengeDifficulty = 10;
+        public byte ChallengeDifficulty = 20;
         /// <summary>
         /// The amount of successfull initialization vectors to keep for initial connection requests.
         /// </summary>
@@ -120,7 +120,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The connection request challenge time window in seconds.
         /// </summary>
-        public ulong ConnectionChallengeTimeWindow = 30;
+        public ulong ConnectionChallengeTimeWindow = 60 * 5;
         /// <summary>
         /// Whether or not to enable time based connection challenge. 
         /// Enabling this will prevent slot filling attacks but requires the connector and connection receivers times to be synced with a diff of
