@@ -161,6 +161,33 @@ namespace Ruffles.Channeling.Channels
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
+            // Handle the base ack
+            HandleAck(sequence);
+
+            if ((payload.Count - 2) > 0)
+            {
+                // There is more data. This has to be ack bits
+
+                // Calculate the amount of ack bits
+                int bits = (payload.Count - 2) * 8;
+
+                // Iterate ack bits
+                for (byte i = 0; i < bits; i++)
+                {
+                    // Get the ack for the current bit
+                    bool isAcked = ((payload.Array[payload.Offset + 2 + (i / 8)] & ((byte)Math.Pow(2, (7 - (i % 8))))) >> (7 - (i % 8))) == 1;
+
+                    if (isAcked)
+                    {
+                        // Handle the bit ack
+                        HandleAck((ushort)(sequence - i));
+                    }
+                }
+            }
+        }
+
+        private void HandleAck(ushort sequence)
+        {
             if (_sendSequencer[sequence].Alive)
             {
                 // Dealloc the memory held by the sequencer
@@ -233,7 +260,7 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence)
         {
             // Alloc ack memory
-            HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
+            HeapMemory ackMemory = memoryManager.AllocHeapMemory(4 + (uint)(config.EnableMergedAcks ? config.MergedAckBytes : 0));
 
             // Write header
             ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
@@ -243,8 +270,23 @@ namespace Ruffles.Channeling.Channels
             ackMemory.Buffer[2] = (byte)sequence;
             ackMemory.Buffer[3] = (byte)(sequence >> 8);
 
+            if (config.EnableMergedAcks)
+            {
+                // Reset the memory
+                for (int i = 0; i < config.MergedAckBytes; i++)
+                {
+                    ackMemory.Buffer[4 + i] = 0;
+                }
+
+                // Set the bit fields
+                for (byte i = 0; i < config.MergedAckBytes * 8; i++)
+                {
+                    ackMemory.Buffer[(i / 8)] |= (byte)(((SequencingUtils.Distance(((ushort)(sequence - (i + 1))), _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _incomingAckedPackets.Contains(((ushort)(sequence - (i + 1))))) ? 1 : 0) << (7 - (i % 8)));
+                }
+            }
+
             // Send ack
-            connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false);
+            connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4 + (config.EnableMergedAcks ? config.MergedAckBytes : 0)), false);
 
             // Return memory
             memoryManager.DeAlloc(ackMemory);
