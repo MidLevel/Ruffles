@@ -59,6 +59,8 @@ namespace Ruffles.Configuration
         /// The maximum delay before merged packets are sent.
         /// </summary>
         public ulong MaxMergeDelay = 250;
+        public bool EnableMergedAcks = true;
+        public byte MergedAckBytes = 8;
 
         // Fragmentation
         /// <summary>
