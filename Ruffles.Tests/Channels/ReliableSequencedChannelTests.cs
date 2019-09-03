@@ -20,8 +20,8 @@ namespace Ruffles.Tests.Channels
             ConnectionStub clientsConnectionToServer = new ConnectionStub();
             ConnectionStub serversConnectionToClient = new ConnectionStub();
 
-            ReliableSequencedChannel clientChannel = new ReliableSequencedChannel(0, clientsConnectionToServer, null, config, memoryManager);
-            ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, null, config, memoryManager);
+            ReliableSequencedChannel clientChannel = new ReliableSequencedChannel(0, clientsConnectionToServer, config, memoryManager);
+            ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, config, memoryManager);
 
             byte[] message = BufferHelper.GetRandomBuffer(1024);
 
@@ -47,8 +47,8 @@ namespace Ruffles.Tests.Channels
             ConnectionStub clientsConnectionToServer = new ConnectionStub();
             ConnectionStub serversConnectionToClient = new ConnectionStub();
 
-            ReliableSequencedChannel clientChannel = new ReliableSequencedChannel(0, clientsConnectionToServer, null, config, memoryManager);
-            ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, null, config, memoryManager);
+            ReliableSequencedChannel clientChannel = new ReliableSequencedChannel(0, clientsConnectionToServer, config, memoryManager);
+            ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, config, memoryManager);
 
             // Create 3 payloads
             byte[] message1 = BufferHelper.GetRandomBuffer(1024);

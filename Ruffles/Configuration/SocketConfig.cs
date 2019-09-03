@@ -76,6 +76,20 @@ namespace Ruffles.Configuration
         /// </summary>
         public ushort MaxFragments = 512;
 
+        // Fragmentation
+        /// <summary>
+        /// The maximum user size of a single message.
+        /// </summary>
+        public ushort MaxMessageSize = 1450;
+        /// <summary>
+        /// The default size of fragment arrays.
+        /// </summary>
+        public ushort FragmentArrayBaseSize = 64;
+        /// <summary>
+        /// The maximum amount of fragments allowed to be used.
+        /// </summary>
+        public ushort MaxFragments = 512;
+
         // Memory
         /// <summary>
         /// The maxmimum packet size. Should be larger than the MTU.
