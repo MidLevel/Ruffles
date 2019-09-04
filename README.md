@@ -62,10 +62,20 @@ Ruffles supports IPv6 dual socket mode. It does this by using two sockets bound 
 ### Small Packet Merging
 Small packets will be delayed for sending, this allows them to be merged into one larger packet. This can be disabled and enabled on a per packet basis. The delay and max merge size can also be configured.
 
+### Fragmentation
+Packets can be sent as ReliableSequencedFragmented which allows for a single packet to be of a size of up to 2^15*1450 bytes = 47513600 bytes = 47.5 megabyte.
+
+### Ack Merging
+Ack packets are merged into bitfields to make them much more compact.
+
+### Connection Statistics
+Detailed statistics can retrieved from connections, including the bytes sent, packets sent, round trip times and more.
+
 
 ## Roadmap
 This is stuff I want to and plan to add
 
+* Basic bandwidth control, limit the amount of acks that are sent etc
 * Path MTU
 * More Fragmentation Types
 * Explicit Nack
