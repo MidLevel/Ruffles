@@ -19,7 +19,7 @@ namespace Ruffles.Messaging
             if (channelId < 0 || channelId >= connection.Channels.Length)
             {
                 // ChannelId out of range
-                Logging.Error("Got message on channel out of range. [ChannelId=" + channelId + "]");
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Got message on channel out of range. [ChannelId=" + channelId + "]");
                 return;
             }
 

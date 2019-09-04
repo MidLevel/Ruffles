@@ -269,7 +269,7 @@ namespace Ruffles.Channeling.Channels
 
             if (fragment > config.MaxFragments)
             {
-                Logging.Error("FragmentId was too large. [FragmentId=" + fragment + "] [Config.MaxFragments=" + config.MaxFragments + "]. The fragment was silently dropped, expect a timeout.");
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("FragmentId was too large. [FragmentId=" + fragment + "] [Config.MaxFragments=" + config.MaxFragments + "]. The fragment was silently dropped, expect a timeout.");
                 hasMore = false;
                 return null;
             }
@@ -377,7 +377,7 @@ namespace Ruffles.Channeling.Channels
 
             if (fragmentsRequired > config.MaxFragments)
             {
-                Logging.Error("Tried to create message that was too large. [Size=" + payload.Count + "] [FragmentsRequired=" + fragmentsRequired + "] [Config.MaxFragments=" + config.MaxFragments + "]");
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to create message that was too large. [Size=" + payload.Count + "] [FragmentsRequired=" + fragmentsRequired + "] [Config.MaxFragments=" + config.MaxFragments + "]");
                 dealloc = false;
                 return null;
             }

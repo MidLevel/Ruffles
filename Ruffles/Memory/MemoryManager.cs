@@ -70,7 +70,7 @@ namespace Ruffles.Memory
 
                 if (_createdPointerArrays >= 1024 && !_hasWarnedAboutPointerArrayLeaks)
                 {
-                    Logging.Warning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [POINTERS ARRAYS]");
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [POINTERS ARRAYS]");
                     _hasWarnedAboutPointerArrayLeaks = true;
                 }
 
@@ -100,7 +100,7 @@ namespace Ruffles.Memory
 
                 if (_createdHeapMemory >= 1024 && !_hasWarnedAboutHeapMemoryLeaks)
                 {
-                    Logging.Warning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP MEMORY]");
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP MEMORY]");
                     _hasWarnedAboutHeapMemoryLeaks = true;
                 }
 

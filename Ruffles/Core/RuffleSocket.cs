@@ -65,11 +65,17 @@ namespace Ruffles.Core
 
         public RuffleSocket(SocketConfig config)
         {
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Checking SokcetConfig validity...");
+
             List<string> configurationErrors = config.GetInvalidConfiguration();
 
             if (configurationErrors.Count > 0)
             {
-                Logging.Error("Invalid configuration! Please fix the following issues [" + string.Join(",", configurationErrors.ToArray()) + "]");
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Invalid configuration! Please fix the following issues [" + string.Join(",", configurationErrors.ToArray()) + "]");
+            }
+            else
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("SocketConfig is valid");
             }
 
             this.config = config;
@@ -77,24 +83,38 @@ namespace Ruffles.Core
             if (config.UseSimulator)
             {
                 simulator = new NetworkSimulator(config.SimulatorConfig, SendRawReal);
+                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Simulator ENABLED");
+            }
+            else
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Simulator DISABLED");
             }
 
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Math.Max((int)config.AmplificationPreventionHandshakePadding, 128) + " bytes of outgoingInternalBuffer");
             outgoingInternalBuffer = new byte[Math.Max((int)config.AmplificationPreventionHandshakePadding, 128)];
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.MaxBufferSize + " bytes of incomingBuffer");
             incomingBuffer = new byte[config.MaxBufferSize];
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.MaxConnections + " connection slots");
             connections = new Connection[config.MaxConnections];
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.ConnectionChallengeHistory + " challenge IV slots");
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
 
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
             memoryManager = new MemoryManager(config);
 
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Binding socket");
             bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
 
             if (!bindSuccess)
             {
-                Logging.Error("Failed to bind socket");
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to bind socket");
             }
             else
             {
-                Logging.Info("Socket was bound");
+                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
             }
         }
 
@@ -166,7 +186,7 @@ namespace Ruffles.Core
                                 }
                                 catch (SocketException e)
                                 {
-                                    Logging.Error("Socket bind failed after setting dual mode with exception: " + e);
+                                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Socket bind failed after setting dual mode with exception: " + e);
                                     // TODO: Handle
                                     return false;
                                 }
@@ -182,7 +202,7 @@ namespace Ruffles.Core
                         }
                 }
 
-                Logging.Error("Socket bind with exception: " + bindException);
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Socket bind with exception: " + bindException);
                 return false;
             }
 
@@ -236,7 +256,7 @@ namespace Ruffles.Core
         {
             if (payload.Count > config.MaxMessageSize)
             {
-                Logging.Error("Tried to send unconnected message that was too large. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                if (Logging.CurrentLogLevel <= LogLevel.Error)  Logging.LogError("Tried to send unconnected message that was too large. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
                 return;
             }
 
@@ -263,7 +283,7 @@ namespace Ruffles.Core
         /// <param name="endpoint">The endpoint to connect to.</param>
         public Connection Connect(EndPoint endpoint)
         {
-            Logging.Info("Starting connect to " + endpoint);
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect to " + endpoint);
 
             Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingConnection);
 
@@ -277,6 +297,8 @@ namespace Ruffles.Core
 
                 if (config.TimeBasedConnectionChallenge)
                 {
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Using time based connection challenge. Difficulty " + config.ChallengeDifficulty);
+
                     // Current unix time
                     ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
 
@@ -304,6 +326,8 @@ namespace Ruffles.Core
                     }
                     while ((hash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty) != 0);
 
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts");
+
                     // Make counter 1 less
                     counter--;
 
@@ -319,13 +343,13 @@ namespace Ruffles.Core
 
                 int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
-                Logging.Info("Sending connection request to " + endpoint);
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Sending connection request to " + endpoint);
 
                 connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
             }
             else
             {
-                Logging.Error("Failed to allocate connection to " + endpoint);
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to allocate connection to " + endpoint);
             }
 
             return connection;
@@ -598,7 +622,7 @@ namespace Ruffles.Core
                 }
                 catch (Exception e)
                 {
-                    Logging.Error("Error when receiving from socket: " + e);
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
                 }
             }
 
@@ -613,7 +637,7 @@ namespace Ruffles.Core
                 }
                 catch (Exception e)
                 {
-                    Logging.Error("Error when receiving from socket: " + e);
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
                 }
             }
         }
@@ -677,7 +701,7 @@ namespace Ruffles.Core
             }
             catch (Exception e)
             {
-                Logging.Error("Error when sending through socket: " + e);
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
             }
         }
 
@@ -696,7 +720,7 @@ namespace Ruffles.Core
             }
             catch (Exception e)
             {
-                Logging.Error("Error when sending through socket: " + e);
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
             }
         }
 
@@ -705,17 +729,14 @@ namespace Ruffles.Core
             if (payload.Count < 1)
             {
                 // Invalid size
-                Logging.Error("Got packet of size " + payload.Count + " from " + endpoint + ". Packet is too small");
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Got packet of size " + payload.Count + " from " + endpoint + ". Packet is too small");
                 return;
             }
 
             // Unpack header, dont cast to MessageType enum for safety
             HeaderPacker.Unpack(payload.Array[payload.Offset], out byte messageType, out bool fragmented);
 
-            if (config.UseVerboseInfoLogging)
-            {
-                Logging.Info("Unpacked packet. [MessageType=" + (MessageType)messageType + "] [Fragmented=" + fragmented + "]");
-            }
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Unpacked packet. [MessageType=" + (MessageType)messageType + "] [Fragmented=" + fragmented + "]");
 
             switch (messageType)
             {
@@ -775,7 +796,7 @@ namespace Ruffles.Core
                             if (secondsDiff > (long)config.ConnectionChallengeTimeWindow || secondsDiff < -(long)config.ConnectionChallengeTimeWindow)
                             {
                                 // Outside the allowed window
-                                Logging.Error("Client " + endpoint + " failed the connection request. They were outside of their allowed window. The diff was " + Math.Abs(secondsDiff) + " seconds");
+                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They were outside of their allowed window. The diff was " + Math.Abs(secondsDiff) + " seconds");
                                 return;
                             }
 
@@ -803,7 +824,7 @@ namespace Ruffles.Core
                             if (challengeInitializationVectors[userIv])
                             {
                                 // This IV is being reused.
-                                Logging.Error("Client " + endpoint + " failed the connection request. They were trying to reuse an IV");
+                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They were trying to reuse an IV");
                                 return;
                             }
 
@@ -816,7 +837,7 @@ namespace Ruffles.Core
                             if (!isCollided)
                             {
                                 // They failed the challenge
-                                Logging.Error("Client " + endpoint + " failed the connection request. They submitted an invalid answer");
+                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They submitted an invalid answer");
                                 return;
                             }
 
@@ -824,7 +845,7 @@ namespace Ruffles.Core
                             challengeInitializationVectors[userIv] = true;
                         }
 
-                        Logging.Info("Client " + endpoint + " is being challenged");
+                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " is being challenged");
 
                         Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingChallenge);
 
@@ -844,11 +865,11 @@ namespace Ruffles.Core
                             // Send the challenge
                             connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true);
 
-                            Logging.Info("Client " + endpoint + " was sent a challenge of difficulty " + connection.ChallengeDifficulty);
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent a challenge of difficulty " + connection.ChallengeDifficulty);
                         }
                         else
                         {
-                            Logging.Error("Client " + endpoint + " could not be challenged. Allocation failed");
+                            if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Client " + endpoint + " could not be challenged. Allocation failed");
                         }
                     }
                     break;
@@ -861,7 +882,7 @@ namespace Ruffles.Core
                             if (payload.Count < 10)
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
-                                Logging.Error("Server " + endpoint + " sent us a payload that was too small. Disconnecting");
+                                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Server " + endpoint + " sent us a payload that was too small. Disconnecting");
                                 DisconnectConnection(connection, false, false);
                                 return;
                             }
@@ -903,7 +924,7 @@ namespace Ruffles.Core
                             // Send the challenge response
                             connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true);
 
-                            Logging.Info("Server " + endpoint + " challenge of difficulty " + connection.ChallengeDifficulty + " was solved. Answer was sent");
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Server " + endpoint + " challenge of difficulty " + connection.ChallengeDifficulty + " was solved. Answer was sent");
                         }
                     }
                     break;
@@ -912,7 +933,7 @@ namespace Ruffles.Core
                         if (payload.Count < config.AmplificationPreventionHandshakePadding)
                         {
                             // This message is too small. They might be trying to use us for amplification
-                            Logging.Error("Client " + endpoint + " sent a challenge response that was smaller than the amplification padding");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent a challenge response that was smaller than the amplification padding");
                             return;
                         }
 
@@ -946,11 +967,11 @@ namespace Ruffles.Core
                             {
                                 // Success, they completed the hashcash challenge
 
-                                Logging.Info("Client " + endpoint + " successfully completed challenge of difficulty " + connection.ChallengeDifficulty);
+                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " successfully completed challenge of difficulty " + connection.ChallengeDifficulty);
 
                                 ConnectPendingConnection(connection);
 
-                                Logging.Info("Client " + endpoint + " state changed to connected");
+                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " state changed to connected");
 
                                 connection.HailStatus.Attempts = 1;
                                 connection.HailStatus.HasAcked = false;
@@ -970,7 +991,7 @@ namespace Ruffles.Core
 
                                 connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
 
-                                Logging.Info("Client " + endpoint + " was sent a hail");
+                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent a hail");
 
                                 // Send to userspace
                                 PublishEvent(new NetworkEvent()
@@ -989,14 +1010,14 @@ namespace Ruffles.Core
                             else
                             {
                                 // Failed, disconnect them
-                                Logging.Error("Client " + endpoint + " failed the challenge. Disconnecting");
+                                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " failed the challenge. Disconnecting");
 
                                 DisconnectConnection(connection, false, false);
                             }
                         }
                         else
                         {
-                            Logging.Warning("Client " + endpoint + " sent a challenge response but they were either not connected or were not in a RequestingChallenge state. Delayed packets?");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent a challenge response but they were either not connected or were not in a RequestingChallenge state. Delayed packets?");
                         }
                     }
                     break;
@@ -1013,14 +1034,14 @@ namespace Ruffles.Core
                             // Send confirmation
                             connectedConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
 
-                            Logging.Info("Hail confirmation sent to " + endpoint);
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Hail confirmation sent to " + endpoint);
                         }
                         else if (pendingConnection != null && pendingConnection.State == ConnectionState.SolvingChallenge)
                         {
                             if (payload.Count < 2)
                             {
                                 // Invalid size.
-                                Logging.Error("Client " + endpoint + " sent a payload that was too small. Disconnecting");
+                                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent a payload that was too small. Disconnecting");
 
                                 DisconnectConnection(pendingConnection, false, false);
                                 return;
@@ -1034,7 +1055,7 @@ namespace Ruffles.Core
                             if (payload.Count < channelCount + 2)
                             {
                                 // Invalid size.
-                                Logging.Error("Client " + endpoint + " sent a payload that was too small. Disconnecting");
+                                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent a payload that was too small. Disconnecting");
                                 DisconnectConnection(pendingConnection, false, false);
                                 return;
                             }
@@ -1082,7 +1103,7 @@ namespace Ruffles.Core
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
-                                            Logging.Error("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
+                                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
                                             DisconnectConnection(pendingConnection, false, false);
                                             return;
                                         }
@@ -1142,7 +1163,7 @@ namespace Ruffles.Core
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
-                                            Logging.Error("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
+                                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
                                             DisconnectConnection(pendingConnection, false, false);
                                             return;
                                         }
@@ -1152,7 +1173,7 @@ namespace Ruffles.Core
                             // Set state to connected
                             ConnectPendingConnection(pendingConnection);
 
-                            Logging.Info("Client " + endpoint + " state changed to connected");
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " state changed to connected");
 
                             // Send to userspace
                             PublishEvent(new NetworkEvent()
@@ -1174,7 +1195,7 @@ namespace Ruffles.Core
                             // Send confirmation
                             pendingConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
 
-                            Logging.Info("Client " + endpoint + " was sent hail confimrations");
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent hail confimrations");
                         }
                     }
                     break;
@@ -1191,7 +1212,7 @@ namespace Ruffles.Core
                         }
                         else
                         {
-                            Logging.Error("Client " + endpoint + " connection could not be found");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " connection could not be found");
                         }
                     }
                     break;
@@ -1201,7 +1222,7 @@ namespace Ruffles.Core
                         {
                             // TODO: Handle
                             // This is a missmatch.
-                            Logging.Error("Heartbeat received from " + endpoint + " but the we do not have heartbeats enabled. Configuration missmatch?");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Heartbeat received from " + endpoint + " but the we do not have heartbeats enabled. Configuration missmatch?");
                             return;
                         }
 
@@ -1218,7 +1239,7 @@ namespace Ruffles.Core
                         }
                         else
                         {
-                            Logging.Error("Client " + endpoint + " connection could not be found");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " connection could not be found");
                         }
                     }
                     break;
@@ -1234,7 +1255,7 @@ namespace Ruffles.Core
                         }
                         else
                         {
-                            Logging.Error("Client " + endpoint + " connection could not be found");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " connection could not be found");
                         }
                     }
                     break;
@@ -1261,7 +1282,7 @@ namespace Ruffles.Core
                         }
                         else
                         {
-                            Logging.Error("Client " + endpoint + " connection could not be found");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " connection could not be found");
                         }
                     }
                     break;
@@ -1275,7 +1296,7 @@ namespace Ruffles.Core
                         }
                         else
                         {
-                            Logging.Error("Client " + endpoint + " connection could not be found");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " connection could not be found");
                         }
                     }
                     break;
@@ -1305,7 +1326,7 @@ namespace Ruffles.Core
                         }
                         else
                         {
-                            Logging.Warning("Got unconnected message but SocketConfig.AllowUnconnectedMessages is disabled.");
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Got unconnected message but SocketConfig.AllowUnconnectedMessages is disabled.");
                         }
                     }
                     break;
@@ -1502,7 +1523,7 @@ namespace Ruffles.Core
                                 {
                                     // Unknown channel type. Disconnect.
                                     // TODO: Fix
-                                    Logging.Error("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
+                                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
                                     DisconnectConnection(connection, false, false);
                                 }
                                 break;

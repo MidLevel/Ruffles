@@ -154,7 +154,7 @@ namespace Ruffles.Channeling.Channels
         {
             if (payload.Count > config.MaxMessageSize)
             {
-                Logging.Error("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
                 dealloc = false;
                 return null;
             }

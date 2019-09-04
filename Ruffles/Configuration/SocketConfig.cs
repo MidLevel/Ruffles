@@ -7,11 +7,7 @@ namespace Ruffles.Configuration
 {
     public class SocketConfig
     {
-        // Random
-        /// <summary>
-        /// Whether or not to use verbose info logging. This can cause tons of garbage allocation.
-        /// </summary>
-        public bool UseVerboseInfoLogging = false;
+        // General
         /// <summary>
         /// Whether or not to allow polling of the socket. This will require all messages to be processed in a queue.
         /// </summary>
