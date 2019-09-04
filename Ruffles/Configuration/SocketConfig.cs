@@ -243,6 +243,11 @@ namespace Ruffles.Configuration
                 messages.Add("MaxMergeMessageSize cannot be greater than MaxMessageSize");
             }
 
+            if (AmplificationPreventionHandshakePadding > MaxMessageSize)
+            {
+                messages.Add("AmplificationPreventionHandshakePadding cannot be greater than MaxMessageSize");
+            }
+
             return messages;
         }
     }
