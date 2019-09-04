@@ -288,9 +288,9 @@ namespace Ruffles.Channeling.Channels
                 }
 
                 // Set the bit fields
-                for (byte i = 0; i < config.MergedAckBytes * 8; i++)
+                for (int i = 0; i < config.MergedAckBytes * 8; i++)
                 {
-                    ackMemory.Buffer[(i / 8)] |= (byte)(((SequencingUtils.Distance(((ushort)(sequence - (i + 1))), _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _receiveSequencer[((ushort)(sequence - (i + 1)))].Alive) ? 1 : 0) << (7 - (i % 8)));
+                    ackMemory.Buffer[4 + (i / 8)] |= (byte)(((SequencingUtils.Distance(((ushort)(sequence - (i + 1))), _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _receiveSequencer[((ushort)(sequence - (i + 1)))].Alive) ? 1 : 0) << (7 - (i % 8)));
                 }
             }
 
