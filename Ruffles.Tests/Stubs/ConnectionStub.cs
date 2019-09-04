@@ -23,7 +23,7 @@ namespace Ruffles.Tests.Stubs
             }
         }
 
-        internal override void SendRaw(ArraySegment<byte> payload, bool noMerge)
+        internal override void SendRaw(ArraySegment<byte> payload, bool noMerge, ushort headerSize)
         {
             if (OnSendData != null)
             {
