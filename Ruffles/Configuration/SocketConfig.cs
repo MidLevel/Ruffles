@@ -12,6 +12,14 @@ namespace Ruffles.Configuration
         /// Whether or not to use verbose info logging. This can cause tons of garbage allocation.
         /// </summary>
         public bool UseVerboseInfoLogging = false;
+        /// <summary>
+        /// Whether or not to allow polling of the socket. This will require all messages to be processed in a queue.
+        /// </summary>
+        public bool EnablePollEvents = true;
+        /// <summary>
+        /// Whether or not to raise a callback when a event occurs.
+        /// </summary>
+        public bool EnableCallbackEvents = true;
 
         // Connection
         /// <summary>

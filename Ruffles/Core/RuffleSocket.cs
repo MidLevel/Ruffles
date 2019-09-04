@@ -23,12 +23,30 @@ namespace Ruffles.Core
     /// </summary>
     public class RuffleSocket
     {
-        // Separate connections and pending to prevent something like a slorris attack
-        private readonly Connection[] Connections;
-        private readonly Dictionary<EndPoint, Connection> AddressConnectionLookup = new Dictionary<EndPoint, Connection>();
-        private readonly Dictionary<EndPoint, Connection> AddressPendingConnectionLookup = new Dictionary<EndPoint, Connection>();
+        /// <summary>
+        /// Event that is raised when a network event occurs. This can be used as an alternative, or in combination with polling.
+        /// </summary>
+        public event Action<NetworkEvent> OnNetworkEvent;
 
-        internal readonly Queue<NetworkEvent> UserEventQueue = new Queue<NetworkEvent>();
+        internal void PublishEvent(NetworkEvent @event)
+        {
+            if (config.EnablePollEvents)
+            {
+                userEventQueue.Enqueue(@event);
+            }
+
+            if (config.EnableCallbackEvents && OnNetworkEvent != null)
+            {
+                OnNetworkEvent(@event);
+            }
+        }
+
+        // Separate connections and pending to prevent something like a slorris attack
+        private readonly Connection[] connections;
+        private readonly Dictionary<EndPoint, Connection> addressConnectionLookup = new Dictionary<EndPoint, Connection>();
+        private readonly Dictionary<EndPoint, Connection> addressPendingConnectionLookup = new Dictionary<EndPoint, Connection>();
+
+        private readonly Queue<NetworkEvent> userEventQueue = new Queue<NetworkEvent>();
 
         private ushort pendingConnections = 0;
 
@@ -63,7 +81,7 @@ namespace Ruffles.Core
 
             outgoingInternalBuffer = new byte[Math.Max((int)config.AmplificationPreventionHandshakePadding, 128)];
             incomingBuffer = new byte[config.MaxBufferSize];
-            Connections = new Connection[config.MaxConnections];
+            connections = new Connection[config.MaxConnections];
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
 
             memoryManager = new MemoryManager(config);
@@ -201,12 +219,12 @@ namespace Ruffles.Core
         /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
         public void Send(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
         {
-            if (connectionId >= (ulong)Connections.Length || connectionId < 0)
+            if (connectionId >= (ulong)connections.Length || connectionId < 0)
             {
                 throw new ArgumentException("ConnectionId cannot be found", nameof(connectionId));
             }
 
-            Send(payload, Connections[connectionId], channelId, noDelay);
+            Send(payload, connections[connectionId], channelId, noDelay);
         }
 
         /// <summary>
@@ -339,12 +357,12 @@ namespace Ruffles.Core
         /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
         public void Disconnect(ulong connectionId, bool sendMessage)
         {
-            if (connectionId >= (ulong)Connections.Length || connectionId < 0)
+            if (connectionId >= (ulong)connections.Length || connectionId < 0)
             {
                 throw new ArgumentException("ConnectionId cannot be found", nameof(connectionId));
             }
 
-            Disconnect(Connections[connectionId], sendMessage);
+            Disconnect(connections[connectionId], sendMessage);
         }
 
 
@@ -396,15 +414,15 @@ namespace Ruffles.Core
 
         private void CheckMergedPackets()
         {
-            for (int i = 0; i < Connections.Length; i++)
+            for (int i = 0; i < connections.Length; i++)
             {
-                if (Connections[i] != null && !Connections[i].Dead)
+                if (connections[i] != null && !connections[i].Dead)
                 {
-                    ArraySegment<byte>? mergedPayload = Connections[i].Merger.TryFlush();
+                    ArraySegment<byte>? mergedPayload = connections[i].Merger.TryFlush();
 
                     if (mergedPayload != null)
                     {
-                        Connections[i].SendRaw(mergedPayload.Value, true);
+                        connections[i].SendRaw(mergedPayload.Value, true);
                     }
                 }
             }
@@ -412,15 +430,15 @@ namespace Ruffles.Core
 
         private void RunChannelInternalUpdate()
         {
-            for (int i = 0; i < Connections.Length; i++)
+            for (int i = 0; i < connections.Length; i++)
             {
-                if (Connections[i] != null && !Connections[i].Dead && Connections[i].Channels != null)
+                if (connections[i] != null && !connections[i].Dead && connections[i].Channels != null)
                 {
-                    for (int x = 0; x < Connections[i].Channels.Length; x++)
+                    for (int x = 0; x < connections[i].Channels.Length; x++)
                     {
-                        if (Connections[i].Channels[x] != null)
+                        if (connections[i].Channels[x] != null)
                         {
-                            Connections[i].Channels[x].InternalUpdate();
+                            connections[i].Channels[x].InternalUpdate();
                         }
                     }
                 }
@@ -429,70 +447,70 @@ namespace Ruffles.Core
 
         private void CheckConnectionResends()
         {
-            for (int i = 0; i < Connections.Length; i++)
+            for (int i = 0; i < connections.Length; i++)
             {
-                if (Connections[i] != null && !Connections[i].Dead)
+                if (connections[i] != null && !connections[i].Dead)
                 {
-                    if (Connections[i].State == ConnectionState.RequestingConnection)
+                    if (connections[i].State == ConnectionState.RequestingConnection)
                     {
-                        if ((DateTime.Now - Connections[i].HandshakeLastSendTime).TotalMilliseconds > config.ConnectionRequestMinResendDelay && Connections[i].HandshakeResendAttempts < config.MaxConnectionRequestResends)
+                        if ((DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.ConnectionRequestMinResendDelay && connections[i].HandshakeResendAttempts < config.MaxConnectionRequestResends)
                         {
-                            Connections[i].HandshakeResendAttempts++;
-                            Connections[i].HandshakeLastSendTime = DateTime.Now;
+                            connections[i].HandshakeResendAttempts++;
+                            connections[i].HandshakeLastSendTime = DateTime.Now;
 
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
                             if (config.TimeBasedConnectionChallenge)
                             {
                                 // Write the response unix time
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
 
                                 // Write counter
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(Connections[i].PreConnectionChallengeCounter >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(connections[i].PreConnectionChallengeCounter >> (x * 8)));
 
                                 // Write IV
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(Connections[i].PreConnectionChallengeIV >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(connections[i].PreConnectionChallengeIV >> (x * 8)));
                             }
 
                             int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
-                            Connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
                         }
                     }
-                    else if (Connections[i].State == ConnectionState.RequestingChallenge)
+                    else if (connections[i].State == ConnectionState.RequestingChallenge)
                     {
-                        if ((DateTime.Now - Connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && Connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
+                        if ((DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
                         {
-                            Connections[i].HandshakeResendAttempts++;
-                            Connections[i].HandshakeLastSendTime = DateTime.Now;
+                            connections[i].HandshakeResendAttempts++;
+                            connections[i].HandshakeLastSendTime = DateTime.Now;
 
                             // Write connection challenge
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeRequest, false);
-                            for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].ConnectionChallenge >> (x * 8)));
-                            outgoingInternalBuffer[1 + sizeof(ulong)] = Connections[i].ChallengeDifficulty;
+                            for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(connections[i].ConnectionChallenge >> (x * 8)));
+                            outgoingInternalBuffer[1 + sizeof(ulong)] = connections[i].ChallengeDifficulty;
                             
                             // Send the challenge
-                            Connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true);
                         }
                     }
-                    else if (Connections[i].State == ConnectionState.SolvingChallenge)
+                    else if (connections[i].State == ConnectionState.SolvingChallenge)
                     {
-                        if ((DateTime.Now - Connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && Connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
+                        if ((DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
                         {
-                            Connections[i].HandshakeResendAttempts++;
-                            Connections[i].HandshakeLastSendTime = DateTime.Now;
+                            connections[i].HandshakeResendAttempts++;
+                            connections[i].HandshakeLastSendTime = DateTime.Now;
 
                             // Write the challenge response
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeResponse, false);
-                            for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(Connections[i].ChallengeAnswer >> (x * 8)));
+                            for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(connections[i].ChallengeAnswer >> (x * 8)));
                             
                             // Send the challenge response
-                            Connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true);
                         }
                     }
-                    else if (Connections[i].State == ConnectionState.Connected)
+                    else if (connections[i].State == ConnectionState.Connected)
                     {
-                        if (!Connections[i].HailStatus.Completed && (DateTime.Now - Connections[i].HailStatus.LastAttempt).TotalMilliseconds > config.HandshakeResendDelay && Connections[i].HailStatus.Attempts < config.MaxHandshakeResends)
+                        if (!connections[i].HailStatus.Completed && (DateTime.Now - connections[i].HailStatus.LastAttempt).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HailStatus.Attempts < config.MaxHandshakeResends)
                         {
                             // Send the response
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Hail, false);
@@ -506,10 +524,10 @@ namespace Ruffles.Core
                                 outgoingInternalBuffer[2 + x] = (byte)config.ChannelTypes[x];
                             }
 
-                            Connections[i].HailStatus.Attempts++;
-                            Connections[i].HailStatus.LastAttempt = DateTime.Now;
+                            connections[i].HailStatus.Attempts++;
+                            connections[i].HailStatus.LastAttempt = DateTime.Now;
 
-                            Connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
                         }
                     }
                 }
@@ -518,24 +536,24 @@ namespace Ruffles.Core
 
         private void CheckConnectionTimeouts()
         {
-            for (int i = 0; i < Connections.Length; i++)
+            for (int i = 0; i < connections.Length; i++)
             {
-                if (Connections[i] != null && !Connections[i].Dead)
+                if (connections[i] != null && !connections[i].Dead)
                 {
-                    if (Connections[i].State != ConnectionState.Connected)
+                    if (connections[i].State != ConnectionState.Connected)
                     {
-                        if ((DateTime.Now - Connections[i].ConnectionStarted).TotalMilliseconds > config.HandshakeTimeout)
+                        if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.HandshakeTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
-                            DisconnectConnection(Connections[i], false, true);
+                            DisconnectConnection(connections[i], false, true);
                         }
                     }
                     else
                     {
-                        if ((DateTime.Now - Connections[i].LastMessageIn).TotalMilliseconds > config.ConnectionTimeout)
+                        if ((DateTime.Now - connections[i].LastMessageIn).TotalMilliseconds > config.ConnectionTimeout)
                         {
                             // This client has not answered us in way too long. Let it go
-                            DisconnectConnection(Connections[i], false, true);
+                            DisconnectConnection(connections[i], false, true);
                         }
                     }
                 }
@@ -544,19 +562,19 @@ namespace Ruffles.Core
 
         private void CheckConnectionHeartbeats()
         {
-            for (int i = 0; i < Connections.Length; i++)
+            for (int i = 0; i < connections.Length; i++)
             {
-                if (Connections[i] != null && !Connections[i].Dead && Connections[i].State == ConnectionState.Connected)
+                if (connections[i] != null && !connections[i].Dead && connections[i].State == ConnectionState.Connected)
                 {
-                    if ((DateTime.Now - Connections[i].LastMessageOut).TotalMilliseconds > config.HeartbeatDelay)
+                    if ((DateTime.Now - connections[i].LastMessageOut).TotalMilliseconds > config.HeartbeatDelay)
                     {
                         // This client has not been talked to in a long time. Send a heartbeat.
 
                         // Create sequenced heartbeat packet
-                        HeapMemory heartbeatMemory = Connections[i].HeartbeatChannel.CreateOutgoingHeartbeatMessage();
+                        HeapMemory heartbeatMemory = connections[i].HeartbeatChannel.CreateOutgoingHeartbeatMessage();
 
                         // Send heartbeat
-                        Connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
+                        connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
 
                         // DeAlloc the memory
                         memoryManager.DeAlloc(heartbeatMemory);
@@ -572,17 +590,31 @@ namespace Ruffles.Core
             if (ipv4Socket != null && ipv4Socket.Poll(config.MaxSocketBlockMilliseconds * 1000, SelectMode.SelectRead))
             {
                 // TODO: Handle SocketException when buffer is too small.
-                int size = ipv4Socket.ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _fromIPv4Endpoint);
+                try
+                {
+                    int size = ipv4Socket.ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _fromIPv4Endpoint);
 
-                HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _fromIPv4Endpoint);
+                    HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _fromIPv4Endpoint);
+                }
+                catch (Exception e)
+                {
+                    Logging.Error("Error when receiving from socket: " + e);
+                }
             }
 
             if (ipv6Socket != null && ipv6Socket.Poll(config.MaxSocketBlockMilliseconds * 1000, SelectMode.SelectRead))
             {
                 // TODO: Handle SocketException when buffer is too small.
-                int size = ipv6Socket.ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _fromIPv6Endpoint);
+                try
+                {
+                    int size = ipv6Socket.ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _fromIPv6Endpoint);
 
-                HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _fromIPv6Endpoint);
+                    HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _fromIPv6Endpoint);
+                }
+                catch (Exception e)
+                {
+                    Logging.Error("Error when receiving from socket: " + e);
+                }
             }
         }
 
@@ -592,9 +624,9 @@ namespace Ruffles.Core
         /// <returns>The poll result.</returns>
         public NetworkEvent Poll()
         {
-            if (UserEventQueue.Count > 0)
+            if (userEventQueue.Count > 0)
             {
-                NetworkEvent @event = UserEventQueue.Dequeue();
+                NetworkEvent @event = userEventQueue.Dequeue();
 
                 return @event;
             }
@@ -632,25 +664,39 @@ namespace Ruffles.Core
 
         private void SendRawReal(Connection connection, ArraySegment<byte> payload)
         {
-            if (connection.EndPoint.AddressFamily == AddressFamily.InterNetwork)
+            try
             {
-                int sent = ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, connection.EndPoint);
+                if (connection.EndPoint.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    int sent = ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, connection.EndPoint);
+                }
+                else if (connection.EndPoint.AddressFamily == AddressFamily.InterNetworkV6)
+                {
+                    int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, connection.EndPoint);
+                }
             }
-            else if (connection.EndPoint.AddressFamily == AddressFamily.InterNetworkV6)
+            catch (Exception e)
             {
-                int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, connection.EndPoint);
+                Logging.Error("Error when sending through socket: " + e);
             }
         }
 
         private void SendRawRealEndPoint(IPEndPoint endpoint, ArraySegment<byte> payload)
         {
-            if (endpoint.AddressFamily == AddressFamily.InterNetwork)
+            try
             {
-                int sent = ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+                if (endpoint.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    int sent = ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+                }
+                else if (endpoint.AddressFamily == AddressFamily.InterNetworkV6)
+                {
+                    int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+                }
             }
-            else if (endpoint.AddressFamily == AddressFamily.InterNetworkV6)
+            catch (Exception e)
             {
-                int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+                Logging.Error("Error when sending through socket: " + e);
             }
         }
 
@@ -927,7 +973,7 @@ namespace Ruffles.Core
                                 Logging.Info("Client " + endpoint + " was sent a hail");
 
                                 // Send to userspace
-                                UserEventQueue.Enqueue(new NetworkEvent()
+                                PublishEvent(new NetworkEvent()
                                 {
                                     Connection = connection,
                                     Socket = this,
@@ -1109,7 +1155,7 @@ namespace Ruffles.Core
                             Logging.Info("Client " + endpoint + " state changed to connected");
 
                             // Send to userspace
-                            UserEventQueue.Enqueue(new NetworkEvent()
+                            PublishEvent(new NetworkEvent()
                             {
                                 Connection = pendingConnection,
                                 Socket = this,
@@ -1244,7 +1290,7 @@ namespace Ruffles.Core
                             Buffer.BlockCopy(payload.Array, payload.Offset + 1, memory.Buffer, 0, payload.Count - 1);
 
                             // Send to userspace
-                            UserEventQueue.Enqueue(new NetworkEvent()
+                            PublishEvent(new NetworkEvent()
                             {
                                 Connection = null,
                                 Socket = this,
@@ -1269,8 +1315,8 @@ namespace Ruffles.Core
         internal void ConnectPendingConnection(Connection connection)
         {
             // Remove it from pending
-            AddressPendingConnectionLookup.Remove(connection.EndPoint);
-            AddressConnectionLookup.Add(connection.EndPoint, connection);
+            addressPendingConnectionLookup.Remove(connection.EndPoint);
+            addressConnectionLookup.Add(connection.EndPoint, connection);
 
             connection.State = ConnectionState.Connected;
 
@@ -1279,9 +1325,9 @@ namespace Ruffles.Core
 
         internal Connection GetPendingConnection(EndPoint endpoint)
         {
-            if (AddressPendingConnectionLookup.ContainsKey(endpoint))
+            if (addressPendingConnectionLookup.ContainsKey(endpoint))
             {
-                return AddressPendingConnectionLookup[endpoint];
+                return addressPendingConnectionLookup[endpoint];
             }
             else
             {
@@ -1291,9 +1337,9 @@ namespace Ruffles.Core
 
         internal Connection GetConnection(EndPoint endpoint)
         {
-            if (AddressConnectionLookup.ContainsKey(endpoint))
+            if (addressConnectionLookup.ContainsKey(endpoint))
             {
-                return AddressConnectionLookup[endpoint];
+                return addressConnectionLookup[endpoint];
             }
             else
             {
@@ -1340,23 +1386,23 @@ namespace Ruffles.Core
             else
             {
                 // Release to GC unless user has a hold of it
-                Connections[connection.Id] = null;
+                connections[connection.Id] = null;
             }
 
             // Remove connection lookups
             if (connection.State != ConnectionState.Connected)
             {
-                AddressPendingConnectionLookup.Remove(connection.EndPoint);
+                addressPendingConnectionLookup.Remove(connection.EndPoint);
 
                 pendingConnections--;
             }
             else
             {
-                AddressConnectionLookup.Remove(connection.EndPoint);
+                addressConnectionLookup.Remove(connection.EndPoint);
             }
 
             // Send disconnect to userspace
-            UserEventQueue.Enqueue(new NetworkEvent()
+            PublishEvent(new NetworkEvent()
             {
                 Connection = connection,
                 Socket = this,
@@ -1373,16 +1419,16 @@ namespace Ruffles.Core
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
         {
             // Make sure they are not already connected to prevent an attack where a single person can fill all the slots.
-            if (AddressPendingConnectionLookup.ContainsKey(endpoint) || AddressConnectionLookup.ContainsKey(endpoint) || pendingConnections > config.MaxPendingConnections)
+            if (addressPendingConnectionLookup.ContainsKey(endpoint) || addressConnectionLookup.ContainsKey(endpoint) || pendingConnections > config.MaxPendingConnections)
             {
                 return null;
             }
 
             Connection connection = null;
 
-            for (ushort i = 0; i < Connections.Length; i++)
+            for (ushort i = 0; i < connections.Length; i++)
             {
-                if (Connections[i] == null)
+                if (connections[i] == null)
                 {
                     // Alloc on the heap
                     connection = new Connection(config, memoryManager)
@@ -1463,17 +1509,17 @@ namespace Ruffles.Core
                         }
                     }
 
-                    Connections[i] = connection;
-                    AddressPendingConnectionLookup.Add(endpoint, connection);
+                    connections[i] = connection;
+                    addressPendingConnectionLookup.Add(endpoint, connection);
 
                     pendingConnections++;
 
                     break;
                 }
-                else if (Connections[i].Dead && Connections[i].Recycled)
+                else if (connections[i].Dead && connections[i].Recycled)
                 {
                     // This is no longer used, reuse it
-                    connection = Connections[i];
+                    connection = connections[i];
                     connection.Dead = false;
                     connection.Recycled = false;
                     connection.State = state;
@@ -1490,7 +1536,7 @@ namespace Ruffles.Core
                     connection.HandshakeLastSendTime = DateTime.Now;
                     connection.Roundtrip = 10;
 
-                    AddressPendingConnectionLookup.Add(endpoint, connection);
+                    addressPendingConnectionLookup.Add(endpoint, connection);
 
                     pendingConnections++;
 

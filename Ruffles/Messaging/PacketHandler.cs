@@ -34,7 +34,7 @@ namespace Ruffles.Messaging
                 Buffer.BlockCopy(incomingMessage.Value.Array, incomingMessage.Value.Offset, memory.Buffer, 0, incomingMessage.Value.Count);
 
                 // Send to userspace
-                connection.Socket.UserEventQueue.Enqueue(new NetworkEvent()
+                connection.Socket.PublishEvent(new NetworkEvent()
                 {
                     Connection = connection,
                     Socket = connection.Socket,
@@ -59,7 +59,7 @@ namespace Ruffles.Messaging
                     if (messageMemory != null)
                     {
                         // Send to userspace
-                        connection.Socket.UserEventQueue.Enqueue(new NetworkEvent()
+                        connection.Socket.PublishEvent(new NetworkEvent()
                         {
                             Connection = connection,
                             Socket = connection.Socket,
