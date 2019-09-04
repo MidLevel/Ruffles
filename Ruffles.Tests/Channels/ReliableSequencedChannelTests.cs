@@ -23,7 +23,7 @@ namespace Ruffles.Tests.Channels
             ReliableSequencedChannel clientChannel = new ReliableSequencedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, config, memoryManager);
 
-            byte[] message = BufferHelper.GetRandomBuffer(1024);
+            byte[] message = BufferHelper.GetRandomBuffer(1024, 0);
 
             HeapMemory messageMemory = clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message, 0, 1024), out bool dealloc)[0];
             ArraySegment<byte>? payload = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset + 2, (int)messageMemory.VirtualCount - 2), out bool hasMore);
@@ -31,10 +31,7 @@ namespace Ruffles.Tests.Channels
             Assert.NotNull(payload);
             Assert.False(hasMore);
 
-            byte[] bytePayload = new byte[payload.Value.Count];
-            Array.Copy(payload.Value.Array, payload.Value.Offset, bytePayload, 0, payload.Value.Count);
-
-            Assert.AreEqual(message, bytePayload);
+            Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(payload.Value, 0, 1024));
         }
 
         [Test()]
@@ -51,9 +48,9 @@ namespace Ruffles.Tests.Channels
             ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, config, memoryManager);
 
             // Create 3 payloads
-            byte[] message1 = BufferHelper.GetRandomBuffer(1024);
-            byte[] message2 = BufferHelper.GetRandomBuffer(1024);
-            byte[] message3 = BufferHelper.GetRandomBuffer(1024);
+            byte[] message1 = BufferHelper.GetRandomBuffer(1024, 0);
+            byte[] message2 = BufferHelper.GetRandomBuffer(1024, 1);
+            byte[] message3 = BufferHelper.GetRandomBuffer(1024, 2);
 
             // Sequence all payloads as outgoing
             HeapMemory message1Memory = clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message1, 0, 1024), out bool dealloc)[0];
@@ -72,11 +69,7 @@ namespace Ruffles.Tests.Channels
             {
                 Assert.NotNull(payload1);
                 Assert.False(hasMore1);
-
-                byte[] bytePayload = new byte[payload1.Value.Count];
-                Array.Copy(payload1.Value.Array, payload1.Value.Offset, bytePayload, 0, payload1.Value.Count);
-
-                Assert.AreEqual(message1, bytePayload);
+                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(payload1.Value, 0, 1024));
             }
 
             {
@@ -87,21 +80,13 @@ namespace Ruffles.Tests.Channels
             {
                 Assert.NotNull(payload2);
                 Assert.True(hasMore2);
-
-                byte[] bytePayload = new byte[payload2.Value.Count];
-                Array.Copy(payload2.Value.Array, payload2.Value.Offset, bytePayload, 0, payload2.Value.Count);
-
-                Assert.AreEqual(message2, bytePayload);
+                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(payload2.Value, 1, 1024));
             }
 
             {
                 // Check for the third packet
                 Assert.NotNull(pollMemory);
-
-                byte[] bytePayload = new byte[pollMemory.VirtualCount];
-                Array.Copy(pollMemory.Buffer, pollMemory.VirtualOffset, bytePayload, 0, pollMemory.VirtualCount);
-
-                Assert.AreEqual(message3, bytePayload);
+                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(pollMemory, 2, 1024));
             }
         }
     }
