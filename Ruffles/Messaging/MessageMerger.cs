@@ -9,12 +9,16 @@ namespace Ruffles.Messaging
         private int _position;
         private DateTime _lastFlushTime;
         private ulong _flushDelay;
+        private ushort _headerBytes;
+        private ushort _packets;
 
         internal MessageMerger(int maxSize, ulong flushDelay)
         {
             _buffer = new byte[maxSize];
             _buffer[0] = HeaderPacker.Pack((byte)MessageType.Merge, false);
             _position = 1;
+            _headerBytes = 1;
+            _packets = 0;
             _lastFlushTime = DateTime.Now;
             _flushDelay = flushDelay;
         }
@@ -23,9 +27,11 @@ namespace Ruffles.Messaging
         {
             _lastFlushTime = DateTime.Now;
             _position = 1;
+            _headerBytes = 1;
+            _packets = 0;
         }
 
-        internal bool TryWrite(ArraySegment<byte> payload)
+        internal bool TryWrite(ArraySegment<byte> payload, ushort headerBytes)
         {
             if (payload.Count + _position + 2 > _buffer.Length)
             {
@@ -45,11 +51,17 @@ namespace Ruffles.Messaging
                 // Update the position
                 _position += 2 + payload.Count;
 
+                // Update the amount of header bytes
+                _headerBytes += headerBytes;
+
+                // Update the amount of packets
+                _packets++;
+
                 return true;
             }
         }
 
-        internal ArraySegment<byte>? TryFlush()
+        internal ArraySegment<byte>? TryFlush(out ushort headerBytes)
         {
             if (_position > 1 && (DateTime.Now - _lastFlushTime).TotalMilliseconds > _flushDelay)
             {
@@ -58,12 +70,18 @@ namespace Ruffles.Messaging
                 // Save the size
                 int flushSize = _position;
 
+                headerBytes = _headerBytes;
+
                 // Reset values
                 _position = 1;
                 _lastFlushTime = DateTime.Now;
+                _headerBytes = 1;
+                _packets = 0;
 
                 return new ArraySegment<byte>(_buffer, 0, flushSize);
             }
+
+            headerBytes = 0;
 
             return null;
         }

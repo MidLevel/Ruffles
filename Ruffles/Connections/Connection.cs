@@ -79,7 +79,6 @@ namespace Ruffles.Connections
         internal byte HandshakeResendAttempts;
         internal DateTime HandshakeLastSendTime;
 
-
         internal Connection(SocketConfig config, MemoryManager memoryManager)
         {
             if (config.EnableHeartbeats)
@@ -88,9 +87,9 @@ namespace Ruffles.Connections
             }
         }
 
-        internal override void SendRaw(ArraySegment<byte> payload, bool noMerge)
+        internal override void SendRaw(ArraySegment<byte> payload, bool noMerge, ushort headerSize)
         {
-            Socket.SendRaw(this, payload, noMerge);
+            Socket.SendRaw(this, payload, noMerge, headerSize);
         }
 
         internal override void Disconnect(bool sendMessage)

@@ -345,7 +345,7 @@ namespace Ruffles.Core
 
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Sending connection request to " + endpoint);
 
-                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
+                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding));
             }
             else
             {
@@ -442,11 +442,11 @@ namespace Ruffles.Core
             {
                 if (connections[i] != null && !connections[i].Dead)
                 {
-                    ArraySegment<byte>? mergedPayload = connections[i].Merger.TryFlush();
+                    ArraySegment<byte>? mergedPayload = connections[i].Merger.TryFlush(out ushort headerSize);
 
                     if (mergedPayload != null)
                     {
-                        connections[i].SendRaw(mergedPayload.Value, true);
+                        connections[i].SendRaw(mergedPayload.Value, true, headerSize);
                     }
                 }
             }
@@ -498,7 +498,7 @@ namespace Ruffles.Core
 
                             int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding));
                         }
                     }
                     else if (connections[i].State == ConnectionState.RequestingChallenge)
@@ -514,7 +514,7 @@ namespace Ruffles.Core
                             outgoingInternalBuffer[1 + sizeof(ulong)] = connections[i].ChallengeDifficulty;
                             
                             // Send the challenge
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true, 1 + sizeof(ulong) + 1);
                         }
                     }
                     else if (connections[i].State == ConnectionState.SolvingChallenge)
@@ -529,7 +529,7 @@ namespace Ruffles.Core
                             for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(connections[i].ChallengeAnswer >> (x * 8)));
                             
                             // Send the challenge response
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding));
                         }
                     }
                     else if (connections[i].State == ConnectionState.Connected)
@@ -551,7 +551,7 @@ namespace Ruffles.Core
                             connections[i].HailStatus.Attempts++;
                             connections[i].HailStatus.LastAttempt = DateTime.Now;
 
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
+                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true, (ushort)(2 + (byte)config.ChannelTypes.Length));
                         }
                     }
                 }
@@ -598,7 +598,7 @@ namespace Ruffles.Core
                         HeapMemory heartbeatMemory = connections[i].HeartbeatChannel.CreateOutgoingHeartbeatMessage();
 
                         // Send heartbeat
-                        connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
+                        connections[i].SendRaw(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false, (ushort)heartbeatMemory.VirtualCount);
 
                         // DeAlloc the memory
                         memoryManager.DeAlloc(heartbeatMemory);
@@ -669,12 +669,24 @@ namespace Ruffles.Core
             };
         }
 
-        internal void SendRaw(Connection connection, ArraySegment<byte> payload, bool noMerge)
+        internal void SendRaw(Connection connection, ArraySegment<byte> payload, bool noMerge, ushort headerBytes)
         {
             connection.LastMessageOut = DateTime.Now;
 
-            if (!config.EnablePacketMerging || noMerge || !connection.Merger.TryWrite(payload))
+            bool merged = false;
+
+            if (!config.EnablePacketMerging || noMerge || !(merged = connection.Merger.TryWrite(payload, headerBytes)))
             {
+                connection.OutgoingTotalBytes += (ulong)payload.Count;
+                connection.OutgoingUserBytes += (ulong)payload.Count - headerBytes;
+
+                connection.OutgoingPackets++;
+
+                if (!merged)
+                {
+                    connection.OutgoingWirePackets++;
+                }
+
                 if (simulator != null)
                 {
                     simulator.Add(connection, payload);
@@ -724,7 +736,7 @@ namespace Ruffles.Core
             }
         }
 
-        internal void HandlePacket(ArraySegment<byte> payload, EndPoint endpoint)
+        internal void HandlePacket(ArraySegment<byte> payload, EndPoint endpoint, bool wirePacket = true)
         {
             if (payload.Count < 1)
             {
@@ -746,6 +758,10 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
+                            connection.IncomingWirePackets++;
+
+                            connection.IncomingTotalBytes += (ulong)payload.Count;
+
                             if (!config.EnablePacketMerging)
                             {
                                 // Big missmatch here.
@@ -761,7 +777,7 @@ namespace Ruffles.Core
                                 for (int i = 0; i < segments.Count; i++)
                                 {
                                     // Handle the segment
-                                    HandlePacket(segments[i], endpoint);
+                                    HandlePacket(segments[i], endpoint, false);
                                 }
                             }
                         }
@@ -853,6 +869,14 @@ namespace Ruffles.Core
                         {
                             // This connection was successfully added as pending
 
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             // Set resend values
                             connection.HandshakeResendAttempts = 1;
                             connection.HandshakeLastSendTime = DateTime.Now;
@@ -863,7 +887,7 @@ namespace Ruffles.Core
                             outgoingInternalBuffer[1 + sizeof(ulong)] = connection.ChallengeDifficulty;
 
                             // Send the challenge
-                            connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true);
+                            connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true, 1 + sizeof(ulong) + 1);
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent a challenge of difficulty " + connection.ChallengeDifficulty);
                         }
@@ -879,6 +903,14 @@ namespace Ruffles.Core
 
                         if (connection != null && connection.State == ConnectionState.RequestingConnection)
                         {
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             if (payload.Count < 10)
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
@@ -922,7 +954,7 @@ namespace Ruffles.Core
                             for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(additionsRequired >> (i * 8)));
 
                             // Send the challenge response
-                            connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true);
+                            connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding));
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Server " + endpoint + " challenge of difficulty " + connection.ChallengeDifficulty + " was solved. Answer was sent");
                         }
@@ -941,6 +973,14 @@ namespace Ruffles.Core
 
                         if (connection != null && connection.State == ConnectionState.RequestingChallenge)
                         {
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             if (payload.Count < 9)
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
@@ -989,7 +1029,7 @@ namespace Ruffles.Core
                                     outgoingInternalBuffer[2 + i] = (byte)config.ChannelTypes[i];
                                 }
 
-                                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true);
+                                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true, (ushort)(2 + (byte)config.ChannelTypes.Length));
 
                                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent a hail");
 
@@ -1026,13 +1066,35 @@ namespace Ruffles.Core
                         Connection pendingConnection = GetPendingConnection(endpoint);
                         Connection connectedConnection = GetConnection(endpoint);
 
+                        if (pendingConnection != null)
+                        {
+                            pendingConnection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                pendingConnection.IncomingWirePackets++;
+                                pendingConnection.IncomingTotalBytes += (ulong)payload.Count;
+                           }
+                        }
+
+                        if (connectedConnection != null)
+                        {
+                            connectedConnection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connectedConnection.IncomingWirePackets++;
+                                connectedConnection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+                        }
+
                         if (connectedConnection != null && connectedConnection.State == ConnectionState.Connected)
                         {
                             // Send the confirmation
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.HailConfirmed, false);
 
                             // Send confirmation
-                            connectedConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
+                            connectedConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true, 1);
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Hail confirmation sent to " + endpoint);
                         }
@@ -1193,7 +1255,7 @@ namespace Ruffles.Core
                             outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.HailConfirmed, false);
 
                             // Send confirmation
-                            pendingConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
+                            pendingConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true, 1);
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent hail confimrations");
                         }
@@ -1205,6 +1267,14 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             if (!connection.HailStatus.Completed && connection.State == ConnectionState.Connected)
                             {
                                 connection.HailStatus.HasAcked = true;
@@ -1230,9 +1300,17 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             // Heartbeats are sequenced to not properly handle network congestion
 
-                            if (connection.HeartbeatChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out bool hasMore) != null)
+                            if (connection.HeartbeatChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore) != null)
                             {
                                 connection.LastMessageIn = DateTime.Now;
                             }
@@ -1249,6 +1327,14 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             connection.LastMessageIn = DateTime.Now;
 
                             PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config, memoryManager);
@@ -1265,6 +1351,14 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             connection.LastMessageIn = DateTime.Now;
 
                             byte channelId = payload.Array[payload.Offset + 1];
@@ -1292,6 +1386,14 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
+                            connection.IncomingPackets++;
+
+                            if (wirePacket)
+                            {
+                                connection.IncomingWirePackets++;
+                                connection.IncomingTotalBytes += (ulong)payload.Count;
+                            }
+
                             connection.Disconnect(false);
                         }
                         else
@@ -1378,7 +1480,7 @@ namespace Ruffles.Core
                 outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Disconnect, false);
 
                 // Send disconnect message
-                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true);
+                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true, 1);
             }
 
             if (config.ReuseConnections)

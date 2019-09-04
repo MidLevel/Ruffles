@@ -6,8 +6,8 @@ namespace Ruffles.Channeling
     internal interface IChannel
     {
         HeapMemory HandlePoll();
-        ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out bool hasMore);
-        HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc);
+        ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore);
+        HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc);
         void HandleAck(ArraySegment<byte> payload);
         void Reset();
         void InternalUpdate();

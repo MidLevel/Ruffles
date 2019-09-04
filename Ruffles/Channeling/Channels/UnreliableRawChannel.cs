@@ -25,14 +25,18 @@ namespace Ruffles.Channeling.Channels
 
         private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
 
-        public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
         {
             if (payload.Count > config.MaxMessageSize)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
                 dealloc = false;
+                headerSize = 0;
                 return null;
             }
+
+            // Set header size
+            headerSize = 2;
 
             // Allocate the memory
             HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 2);
@@ -58,10 +62,13 @@ namespace Ruffles.Channeling.Channels
             // Unreliable messages have no acks.
         }
 
-        public ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out bool hasMore)
+        public ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
         {
             // Unreliable has one message in equal no more than one out.
             hasMore = false;
+
+            // Set the headerBytes
+            headerBytes = 0;
 
             return new ArraySegment<byte>(payload.Array, payload.Offset, payload.Count);
         }

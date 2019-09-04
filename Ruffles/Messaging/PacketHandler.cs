@@ -23,7 +23,9 @@ namespace Ruffles.Messaging
                 return;
             }
 
-            ArraySegment<byte>? incomingMessage = connection.Channels[channelId].HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out bool hasMore);
+            ArraySegment<byte>? incomingMessage = connection.Channels[channelId].HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore);
+
+            connection.IncomingUserBytes += (ulong)payload.Count - headerBytes;
 
             if (incomingMessage != null)
             {
@@ -86,13 +88,13 @@ namespace Ruffles.Messaging
 
             IChannel channel = connection.Channels[channelId];
 
-            HeapMemory[] messageMemory = channel.CreateOutgoingMessage(payload, out bool dealloc);
+            HeapMemory[] messageMemory = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
 
             if (messageMemory != null)
             {
                 for (int i = 0; i < messageMemory.Length; i++)
                 {
-                    connection.SendRaw(new ArraySegment<byte>(messageMemory[i].Buffer, (int)messageMemory[i].VirtualOffset, (int)messageMemory[i].VirtualCount), noDelay);
+                    connection.SendRaw(new ArraySegment<byte>(messageMemory[i].Buffer, (int)messageMemory[i].VirtualOffset, (int)messageMemory[i].VirtualCount), noDelay, headerSize);
                 }
             }
 
