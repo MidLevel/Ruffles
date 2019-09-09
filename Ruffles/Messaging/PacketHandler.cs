@@ -79,6 +79,9 @@ namespace Ruffles.Messaging
             }
         }
 
+        // Lock when sending messages to prevent a pointer from being overwritten.
+        private static readonly object _memoryPointerLock = new object();
+
         internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay, MemoryManager memoryManager)
         {
             if (channelId < 0 || channelId >= connection.Channels.Length)
@@ -88,22 +91,25 @@ namespace Ruffles.Messaging
 
             IChannel channel = connection.Channels[channelId];
 
-            HeapMemory[] messageMemory = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
-
-            if (messageMemory != null)
+            lock (_memoryPointerLock)
             {
-                for (int i = 0; i < messageMemory.Length; i++)
+                HeapMemory[] messageMemory = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
+
+                if (messageMemory != null)
                 {
-                    connection.SendRaw(new ArraySegment<byte>(messageMemory[i].Buffer, (int)messageMemory[i].VirtualOffset, (int)messageMemory[i].VirtualCount), noDelay, headerSize);
+                    for (int i = 0; i < messageMemory.Length; i++)
+                    {
+                        connection.SendRaw(new ArraySegment<byte>(messageMemory[i].Buffer, (int)messageMemory[i].VirtualOffset, (int)messageMemory[i].VirtualCount), noDelay, headerSize);
+                    }
                 }
-            }
 
-            if (dealloc)
-            {
-                // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
-                for (int i = 0; i < messageMemory.Length; i++)
+                if (dealloc)
                 {
-                    memoryManager.DeAlloc(messageMemory[i]);
+                    // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
+                    for (int i = 0; i < messageMemory.Length; i++)
+                    {
+                        memoryManager.DeAlloc(messageMemory[i]);
+                    }
                 }
             }
         }

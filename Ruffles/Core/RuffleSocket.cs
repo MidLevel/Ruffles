@@ -2,8 +2,10 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
+using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Hashing;
@@ -46,7 +48,8 @@ namespace Ruffles.Core
         private readonly Dictionary<EndPoint, Connection> addressConnectionLookup = new Dictionary<EndPoint, Connection>();
         private readonly Dictionary<EndPoint, Connection> addressPendingConnectionLookup = new Dictionary<EndPoint, Connection>();
 
-        private readonly Queue<NetworkEvent> userEventQueue = new Queue<NetworkEvent>();
+        // TODO: Removed hardcoded size
+        private readonly ConcurrentCircularQueue<NetworkEvent> userEventQueue;
 
         private ushort pendingConnections = 0;
 
@@ -62,6 +65,8 @@ namespace Ruffles.Core
         private readonly SlidingSet<ulong> challengeInitializationVectors;
 
         private readonly MemoryManager memoryManager;
+
+        private readonly Thread _networkThread;
 
         public RuffleSocket(SocketConfig config)
         {
@@ -90,6 +95,9 @@ namespace Ruffles.Core
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Simulator DISABLED");
             }
 
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.EventQueueSize + " event slots");
+            userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(config.EventQueueSize);
+
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Math.Max((int)config.AmplificationPreventionHandshakePadding, 128) + " bytes of outgoingInternalBuffer");
             outgoingInternalBuffer = new byte[Math.Max((int)config.AmplificationPreventionHandshakePadding, 128)];
 
@@ -116,6 +124,15 @@ namespace Ruffles.Core
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
             }
+
+            _networkThread = new Thread(StartNetworkLogic)
+            {
+                Name = "NetworkThread",
+                IsBackground = true
+            };
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting networking thread");
+            _networkThread.Start();
         }
 
         private bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool ipv6Dual)
@@ -216,18 +233,16 @@ namespace Ruffles.Core
         /// <param name="connection">The connection to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
         /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public void Send(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
+        public bool Send(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
         {
-            if (connection == null || connection.Dead)
+            if (connection != null && !connection.Dead && connection.State == ConnectionState.Connected)
             {
-                throw new ArgumentException("Connection not alive");
-            }
-            else if (connection.State != ConnectionState.Connected)
-            {
-                throw new InvalidOperationException("Connection is not connected");
+                PacketHandler.SendMessage(payload, connection, channelId, noDelay, memoryManager);
+
+                return true;
             }
 
-            PacketHandler.SendMessage(payload, connection, channelId, noDelay, memoryManager);
+            return false;
         }
 
         /// <summary>
@@ -237,14 +252,14 @@ namespace Ruffles.Core
         /// <param name="connectionId">The connectionId to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
         /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public void Send(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
+        public bool Send(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
         {
-            if (connectionId >= (ulong)connections.Length || connectionId < 0)
+            if (connectionId < (ulong)connections.Length && connectionId >= 0)
             {
-                throw new ArgumentException("ConnectionId cannot be found", nameof(connectionId));
+                return Send(payload, connections[connectionId], channelId, noDelay);
             }
 
-            Send(payload, connections[connectionId], channelId, noDelay);
+            return false;
         }
 
         /// <summary>
@@ -360,18 +375,16 @@ namespace Ruffles.Core
         /// </summary>
         /// <param name="connection">The connection to disconnect.</param>
         /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public void Disconnect(Connection connection, bool sendMessage)
+        public bool Disconnect(Connection connection, bool sendMessage)
         {
-            if (connection == null || connection.Dead)
+            if (connection != null && !connection.Dead && connection.State == ConnectionState.Connected)
             {
-                throw new ArgumentException("Connection not alive");
-            }
-            else if (connection.State != ConnectionState.Connected)
-            {
-                throw new InvalidOperationException("Connection is not connected");
+                DisconnectConnection(connection, sendMessage, false);
+
+                return true;
             }
 
-            DisconnectConnection(connection, sendMessage, false);
+            return false;
         }
 
         /// <summary>
@@ -379,60 +392,69 @@ namespace Ruffles.Core
         /// </summary>
         /// <param name="connectionId">The connectionId to disconnect.</param>
         /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public void Disconnect(ulong connectionId, bool sendMessage)
+        public bool Disconnect(ulong connectionId, bool sendMessage)
         {
-            if (connectionId >= (ulong)connections.Length || connectionId < 0)
+            if (connectionId < (ulong)connections.Length && connectionId >= 0)
             {
-                throw new ArgumentException("ConnectionId cannot be found", nameof(connectionId));
+                Disconnect(connections[connectionId], sendMessage);
+
+                return true;
             }
 
-            Disconnect(connections[connectionId], sendMessage);
+            return false;
         }
 
 
         private DateTime _lastTimeoutCheckRan = DateTime.MinValue;
 
-        /// <summary>
-        /// Runs the Ruffles internals. This will check for resends, timeouts, poll the socket etc.
-        /// </summary>
-        public void RunInternalLoop()
+        private void StartNetworkLogic()
         {
-            InternalPollSocket();
-
-            if (simulator != null)
+            while (true)
             {
-                simulator.RunLoop();
-            }
-
-            // Run timeout loop once every ConnectionPollDelay ms
-            if ((DateTime.Now - _lastTimeoutCheckRan).TotalMilliseconds >= config.MinConnectionPollDelay)
-            {
-                if (config.EnablePacketMerging)
+                try
                 {
-                    CheckMergedPackets();
-                }
+                    InternalPollSocket();
 
-                if (config.EnableTimeouts)
+                    if (simulator != null)
+                    {
+                        simulator.RunLoop();
+                    }
+
+                    // Run timeout loop once every ConnectionPollDelay ms
+                    if ((DateTime.Now - _lastTimeoutCheckRan).TotalMilliseconds >= config.MinConnectionPollDelay)
+                    {
+                        if (config.EnablePacketMerging)
+                        {
+                            CheckMergedPackets();
+                        }
+
+                        if (config.EnableTimeouts)
+                        {
+                            CheckConnectionTimeouts();
+                        }
+
+                        if (config.EnableHeartbeats)
+                        {
+                            CheckConnectionHeartbeats();
+                        }
+
+                        if (config.EnableConnectionRequestResends)
+                        {
+                            CheckConnectionResends();
+                        }
+
+                        if (config.EnableChannelUpdates)
+                        {
+                            RunChannelInternalUpdate();
+                        }
+
+                        _lastTimeoutCheckRan = DateTime.Now;
+                    }
+                }
+                catch (Exception e)
                 {
-                    CheckConnectionTimeouts();
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when running internal loop: " + e);
                 }
-
-                if (config.EnableHeartbeats)
-                {
-                    CheckConnectionHeartbeats();
-                }
-
-                if (config.EnableConnectionRequestResends)
-                {
-                    CheckConnectionResends();
-                }
-
-                if (config.EnableChannelUpdates)
-                {
-                    RunChannelInternalUpdate();
-                }
-
-                _lastTimeoutCheckRan = DateTime.Now;
             }
         }
 
@@ -648,10 +670,8 @@ namespace Ruffles.Core
         /// <returns>The poll result.</returns>
         public NetworkEvent Poll()
         {
-            if (userEventQueue.Count > 0)
+            if (userEventQueue.TryDequeue(out NetworkEvent @event))
             {
-                NetworkEvent @event = userEventQueue.Dequeue();
-
                 return @event;
             }
 

@@ -15,6 +15,7 @@ namespace Ruffles.Simulation
         internal delegate void SendDelegate(Connection connection, ArraySegment<byte> payload);
 
         private readonly System.Random random = new System.Random();
+        private readonly object _lock = new object();
         private readonly SortedList<DateTime, OutgoingPacket> _packets = new SortedList<DateTime, OutgoingPacket>();
         private readonly SimulatorConfig config;
         private readonly SendDelegate sendDelegate;
@@ -36,27 +37,32 @@ namespace Ruffles.Simulation
             byte[] garbageAlloc = new byte[payload.Count];
             Buffer.BlockCopy(payload.Array, payload.Offset, garbageAlloc, 0, payload.Count);
 
-
-            DateTime scheduledTime;
-            do
+            lock (_lock)
             {
-                scheduledTime = DateTime.Now.AddMilliseconds(random.Next(config.MinLatency, config.MaxLatency));
+                DateTime scheduledTime;
+                do
+                {
+                    scheduledTime = DateTime.Now.AddMilliseconds(random.Next(config.MinLatency, config.MaxLatency));
+                }
+                while (_packets.ContainsKey(scheduledTime));
+
+                _packets.Add(scheduledTime, new OutgoingPacket()
+                {
+                    Data = garbageAlloc,
+                    Connection = connection
+                });
             }
-            while (_packets.ContainsKey(scheduledTime));
-
-            _packets.Add(scheduledTime, new OutgoingPacket()
-            {
-                Data = garbageAlloc,
-                Connection = connection
-            });
         }
 
         internal void RunLoop()
         {
-            while (_packets.Keys.Count > 0 && DateTime.Now >= _packets.Keys[0])
+            lock (_lock)
             {
-                sendDelegate(_packets[_packets.Keys[0]].Connection, new ArraySegment<byte>(_packets[_packets.Keys[0]].Data, 0, _packets[_packets.Keys[0]].Data.Length));
-                _packets.RemoveAt(0);
+                while (_packets.Keys.Count > 0 && DateTime.Now >= _packets.Keys[0])
+                {
+                    sendDelegate(_packets[_packets.Keys[0]].Connection, new ArraySegment<byte>(_packets[_packets.Keys[0]].Data, 0, _packets[_packets.Keys[0]].Data.Length));
+                    _packets.RemoveAt(0);
+                }
             }
         }
     }

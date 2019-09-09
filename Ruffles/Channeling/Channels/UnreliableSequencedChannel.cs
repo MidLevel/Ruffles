@@ -21,6 +21,9 @@ namespace Ruffles.Channeling.Channels
         private readonly MemoryManager memoryManager;
         private readonly SocketConfig config;
 
+        // Lock for the channel, this allows sends and receives being done on different threads.
+        private readonly object _lock = new object();
+
         internal UnreliableSequencedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
@@ -41,51 +44,57 @@ namespace Ruffles.Channeling.Channels
                 return null;
             }
 
-            // Increment the sequence number
-            _lastOutboundSequenceNumber++;
+            lock (_lock)
+            {
+                // Increment the sequence number
+                _lastOutboundSequenceNumber++;
 
-            // Set header size
-            headerSize = 4;
+                // Set header size
+                headerSize = 4;
 
-            // Allocate the memory
-            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
+                // Allocate the memory
+                HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
 
-            // Write headers
-            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
-            memory.Buffer[1] = channelId;
+                // Write headers
+                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
+                memory.Buffer[1] = channelId;
 
-            // Write the sequence
-            memory.Buffer[2] = (byte)_lastOutboundSequenceNumber;
-            memory.Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
+                // Write the sequence
+                memory.Buffer[2] = (byte)_lastOutboundSequenceNumber;
+                memory.Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
 
-            // Copy the payload
-            Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 4, payload.Count);
+                // Copy the payload
+                Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 4, payload.Count);
 
-            // Tell the caller to deallc the memory
-            dealloc = true;
+                // Tell the caller to deallc the memory
+                dealloc = true;
 
-            // Assign memory
-            SINGLE_MESSAGE_ARRAY[0] = memory;
+                // Assign memory
+                SINGLE_MESSAGE_ARRAY[0] = memory;
 
-            return SINGLE_MESSAGE_ARRAY;
+                return SINGLE_MESSAGE_ARRAY;
+            }
         }
 
         internal HeapMemory CreateOutgoingHeartbeatMessage()
         {
-            // Increment the sequence number
-            _lastOutboundSequenceNumber++;
+            lock (_lock)
+            {
+                // Increment the sequence number
+                _lastOutboundSequenceNumber++;
 
-            // Allocate the memory
-            HeapMemory memory = memoryManager.AllocHeapMemory(3);
+                // Allocate the memory
+                HeapMemory memory = memoryManager.AllocHeapMemory(3);
 
-            // Write headers
-            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Heartbeat, false);
+                // Write headers
+                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Heartbeat, false);
 
-            // Write the sequence
-            memory.Buffer[1] = (byte)_lastOutboundSequenceNumber;
-            memory.Buffer[2] = (byte)(_lastOutboundSequenceNumber >> 8);
+                // Write the sequence
+                memory.Buffer[1] = (byte)_lastOutboundSequenceNumber;
+                memory.Buffer[2] = (byte)(_lastOutboundSequenceNumber >> 8);
 
-            return memory;
+                return memory;
+            }
         }
 
         public void HandleAck(ArraySegment<byte> payload)
@@ -104,15 +113,18 @@ namespace Ruffles.Channeling.Channels
             // Set the headerBytes
             headerBytes = 2;
 
-            if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0)
+            lock (_lock)
             {
-                // Set the new sequence
-                _incomingLowestAckedSequence = sequence;
+                if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0)
+                {
+                    // Set the new sequence
+                    _incomingLowestAckedSequence = sequence;
 
-                return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
+                    return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
+                }
+
+                return null;
             }
-
-            return null;
         }
 
         public HeapMemory HandlePoll()
@@ -127,11 +139,14 @@ namespace Ruffles.Channeling.Channels
 
         public void Reset()
         {
-            // Clear all incoming states
-            _incomingLowestAckedSequence = 0;
+            lock (_lock)
+            {
+                // Clear all incoming states
+                _incomingLowestAckedSequence = 0;
 
-            // Clear all outgoing states
-            _lastOutboundSequenceNumber = 0;
+                // Clear all outgoing states
+                _lastOutboundSequenceNumber = 0;
+            }
         }
     }
 }

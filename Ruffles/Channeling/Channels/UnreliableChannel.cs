@@ -21,6 +21,9 @@ namespace Ruffles.Channeling.Channels
         private readonly SocketConfig config;
         private readonly MemoryManager memoryManager;
 
+        // Lock for the channel, this allows sends and receives being done on different threads.
+        private readonly object _lock = new object();
+
         internal UnreliableChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
@@ -43,33 +46,36 @@ namespace Ruffles.Channeling.Channels
                 return null;
             }
 
-            // Increment the sequence number
-            _lastOutboundSequenceNumber++;
+            lock (_lock)
+            {
+                // Increment the sequence number
+                _lastOutboundSequenceNumber++;
 
-            // Set header size
-            headerSize = 4;
+                // Set header size
+                headerSize = 4;
 
-            // Allocate the memory
-            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
+                // Allocate the memory
+                HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
 
-            // Write headers
-            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
-            memory.Buffer[1] = channelId;
+                // Write headers
+                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
+                memory.Buffer[1] = channelId;
 
-            // Write the sequence
-            memory.Buffer[2] = (byte)_lastOutboundSequenceNumber;
-            memory.Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
+                // Write the sequence
+                memory.Buffer[2] = (byte)_lastOutboundSequenceNumber;
+                memory.Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
 
-            // Copy the payload
-            Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 4, payload.Count);
+                // Copy the payload
+                Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 4, payload.Count);
 
-            // Tell the caller to deallc the memory
-            dealloc = true;
+                // Tell the caller to deallc the memory
+                dealloc = true;
 
-            // Assign memory
-            SINGLE_MESSAGE_ARRAY[0] = memory;
+                // Assign memory
+                SINGLE_MESSAGE_ARRAY[0] = memory;
 
-            return SINGLE_MESSAGE_ARRAY;
+                return SINGLE_MESSAGE_ARRAY;
+            }
         }
 
         public void HandleAck(ArraySegment<byte> payload)
@@ -88,16 +94,19 @@ namespace Ruffles.Channeling.Channels
             // Set the headerBytes
             headerBytes = 2;
 
-            if (_incomingAckedPackets[sequence])
+            lock (_lock)
             {
-                // We have already received this message. Ignore it.
-                return null;
-            }
-            
-            // Add to sequencer
-            _incomingAckedPackets[sequence] = true;
+                if (_incomingAckedPackets[sequence])
+                {
+                    // We have already received this message. Ignore it.
+                    return null;
+                }
 
-            return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
+                // Add to sequencer
+                _incomingAckedPackets[sequence] = true;
+
+                return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
+            }
         }
 
         public HeapMemory HandlePoll()
@@ -112,11 +121,14 @@ namespace Ruffles.Channeling.Channels
 
         public void Reset()
         {
-            // Clear all incoming states
-            _incomingAckedPackets.Release();
+            lock (_lock)
+            {
+                // Clear all incoming states
+                _incomingAckedPackets.Release();
 
-            // Clear all outgoing states
-            _lastOutboundSequenceNumber = 0;
+                // Clear all outgoing states
+                _lastOutboundSequenceNumber = 0;
+            }
         }
     }
 }

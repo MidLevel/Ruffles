@@ -16,6 +16,11 @@ namespace Ruffles.Configuration
         /// Whether or not to raise a callback when a event occurs.
         /// </summary>
         public bool EnableCallbackEvents = true;
+        /// <summary>
+        /// The size of the global event queue. 
+        /// If this gets full no more events can be processed and the application will freeze until it is polled.
+        /// </summary>
+        public ushort EventQueueSize = 1024 * 8;
 
         // Connection
         /// <summary>
@@ -68,7 +73,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The maximum delay before merged packets are sent.
         /// </summary>
-        public ulong MaxMergeDelay = 250;
+        public ulong MaxMergeDelay = 100;
         /// <summary>
         /// Whether or not to enable merged acks for non fragmented channels.
         /// </summary>
