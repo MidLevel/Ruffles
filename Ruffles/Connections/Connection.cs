@@ -63,7 +63,7 @@ namespace Ruffles.Connections
         /// Gets the estimated roundtrip.
         /// </summary>
         /// <value>The estimated roundtrip.</value>
-        public override double Roundtrip { get; internal set; } = 10;
+        public override double Roundtrip { get; internal set; } = 0;
         internal readonly UnreliableSequencedChannel HeartbeatChannel;
         internal MessageMerger Merger;
         internal IChannel[] Channels;

@@ -5,7 +5,7 @@ namespace Ruffles.Tests.Stubs
 {
     public class ConnectionStub : ConnectionBase
     {
-        public override double Roundtrip { get; internal set; } = 10;
+        public override double Roundtrip { get; internal set; } = 0;
 
         public event Action<ArraySegment<byte>> OnSendData;
         public event Action OnDisconnect;

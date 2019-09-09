@@ -1593,7 +1593,7 @@ namespace Ruffles.Core
                         Channels = new IChannel[0],
                         ChannelTypes = new ChannelType[0],
                         HandshakeLastSendTime = DateTime.Now,
-                        Roundtrip = 10,
+                        Roundtrip = 0,
                         Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null
                     };
 
@@ -1677,7 +1677,7 @@ namespace Ruffles.Core
                     connection.ConnectionStarted = DateTime.Now;
                     connection.ChallengeAnswer = 0;
                     connection.HandshakeLastSendTime = DateTime.Now;
-                    connection.Roundtrip = 10;
+                    connection.Roundtrip = 0;
 
                     addressPendingConnectionLookup.Add(endpoint, connection);
 
