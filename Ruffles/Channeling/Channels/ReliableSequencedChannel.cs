@@ -56,14 +56,14 @@ namespace Ruffles.Channeling.Channels
 
         // Channel info
         private readonly byte channelId;
-        private readonly ConnectionBase connection;
+        private readonly Connection connection;
         private readonly SocketConfig config;
         private readonly MemoryManager memoryManager;
 
         // Lock for the channel, this allows sends and receives being done on different threads.
         private readonly object _lock = new object();
 
-        internal ReliableSequencedChannel(byte channelId, ConnectionBase connection, SocketConfig config, MemoryManager memoryManager)
+        internal ReliableSequencedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;

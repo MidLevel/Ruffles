@@ -1,10 +1,9 @@
 ﻿using NUnit.Framework;
 using Ruffles.Channeling.Channels;
+using Ruffles.Connections;
 using Ruffles.Memory;
 using Ruffles.Tests.Helpers;
-using Ruffles.Tests.Stubs;
 using System;
-using System.Collections.Generic;
 
 namespace Ruffles.Tests.Channels
 {
@@ -18,8 +17,8 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            ConnectionStub clientsConnectionToServer = new ConnectionStub();
-            ConnectionStub serversConnectionToClient = new ConnectionStub();
+            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
+            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
 
             ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
@@ -46,8 +45,8 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            ConnectionStub clientsConnectionToServer = new ConnectionStub();
-            ConnectionStub serversConnectionToClient = new ConnectionStub();
+            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
+            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
 
             ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
@@ -66,7 +65,7 @@ namespace Ruffles.Tests.Channels
             ArraySegment<byte>? payload1 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message1Memory.Buffer, (int)message1Memory.VirtualOffset + 2, (int)message1Memory.VirtualCount - 2), out _, out bool hasMore1);
             // Consume 3rd payload
             ArraySegment<byte>? payload3 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message3Memory.Buffer, (int)message3Memory.VirtualOffset + 2, (int)message3Memory.VirtualCount - 2), out _, out bool hasMore3);
-            // Consume 2nd payload
+            // Consume 2nd payloadhttps://www.youtube.com/watch?v=4FdEOxKpk70
             ArraySegment<byte>? payload2 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message2Memory.Buffer, (int)message2Memory.VirtualOffset + 2, (int)message2Memory.VirtualCount - 2), out _, out bool hasMore2);
 
             Assert.Null(payload1);
@@ -105,8 +104,8 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            ConnectionStub clientsConnectionToServer = new ConnectionStub();
-            ConnectionStub serversConnectionToClient = new ConnectionStub();
+            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
+            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
 
             ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
@@ -207,8 +206,8 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            ConnectionStub clientsConnectionToServer = new ConnectionStub();
-            ConnectionStub serversConnectionToClient = new ConnectionStub();
+            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
+            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
 
             ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);

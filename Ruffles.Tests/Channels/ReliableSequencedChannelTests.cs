@@ -1,8 +1,8 @@
 ﻿using NUnit.Framework;
 using Ruffles.Channeling.Channels;
+using Ruffles.Connections;
 using Ruffles.Memory;
 using Ruffles.Tests.Helpers;
-using Ruffles.Tests.Stubs;
 using System;
 
 namespace Ruffles.Tests.Channels
@@ -17,8 +17,8 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            ConnectionStub clientsConnectionToServer = new ConnectionStub();
-            ConnectionStub serversConnectionToClient = new ConnectionStub();
+            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
+            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
 
             ReliableSequencedChannel clientChannel = new ReliableSequencedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, config, memoryManager);
@@ -41,8 +41,8 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            ConnectionStub clientsConnectionToServer = new ConnectionStub();
-            ConnectionStub serversConnectionToClient = new ConnectionStub();
+            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
+            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
 
             ReliableSequencedChannel clientChannel = new ReliableSequencedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedChannel serverChannel = new ReliableSequencedChannel(0, serversConnectionToClient, config, memoryManager);

@@ -12,7 +12,7 @@ namespace Ruffles.Connections
     /// <summary>
     /// A connection between two RuffleSockets.
     /// </summary>
-    public class Connection : ConnectionBase
+    public class Connection
     {
         /// <summary>
         /// Gets the id of the connection. This is reused for connections by the RuffleSocket.
@@ -63,7 +63,77 @@ namespace Ruffles.Connections
         /// Gets the estimated roundtrip.
         /// </summary>
         /// <value>The estimated roundtrip.</value>
-        public override double Roundtrip { get; internal set; } = 0;
+        public double Roundtrip { get; internal set; } = 0;
+        /// <summary>
+        /// Gets the total amount of outgoing packets. This counts merged packets as individual packets, rather than one merge packet.
+        /// </summary>
+        /// <value>The total amount of packets.</value>
+        public ulong OutgoingPackets { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of outgoing packets. This counts merged packets as one packet. This is the real amount of UDP packets sent over the wire.
+        /// </summary>
+        /// <value>The total amount of packets.</value>
+        public ulong OutgoingWirePackets { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of bytes the user has requested to send. This is only user payloads and does not include headers or protocol packets.
+        /// </summary>
+        /// <value>The total amount of user bytes.</value>
+        public ulong OutgoingUserBytes { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of outgoing bytes. This includes headers. Its the total amount of UDP bytes.
+        /// </summary>
+        /// <value>The total amount of bytes.</value>
+        public ulong OutgoingTotalBytes { get; internal set; }
+
+        /// <summary>
+        /// Gets the total amount of packets that was resent due to a missing packet ack. 
+        /// This does not neccecarly mean the amount of packets that was dropped, since acks can be delayed.
+        /// </summary>
+        /// <value>The total amount of resent packets.</value>
+        public ulong OutgoingResentPackets { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of outgoing packets that was acked at least once.
+        /// </summary>
+        /// <value>The total amount of outgoing packets that was acked.</value>
+        public ulong OutgoingConfirmedPackets { get; internal set; }
+
+        /// <summary>
+        /// Gets the total amount of incoming packets. This counts merged packets as individual packets, rather than one merge packet.
+        /// </summary>
+        /// <value>The total amount of packets.</value>
+        public ulong IncomingPackets { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of incoming packets. This counts merged packets as one packet. This is the real amount of UDP packets sent over the wire.
+        /// </summary>
+        /// <value>The total amount of packets.</value>
+        public ulong IncomingWirePackets { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of bytes that are delivered to the user. This is only user payloads and does not include headers or protocol packets.
+        /// </summary>
+        /// <value>The total amount of user bytes.</value>
+        public ulong IncomingUserBytes { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of incoming bytes. This includes headers. Its the total amount of UDP bytes.
+        /// </summary>
+        /// <value>The total amount of bytes.</value>
+        public ulong IncomingTotalBytes { get; internal set; }
+
+        /// <summary>
+        /// Gets the total amount of duplicate packets. This is packets that have already been acked once.
+        /// </summary>
+        /// <value>The total amount of packets.</value>
+        public ulong IncomingDuplicatePackets { get; internal set; }
+        /// <summary>
+        /// Gets the total amount of duplicate bytes. This is is only bytes in packets that have already been acked once. This includes headers. Its the total amount of UDP bytes.
+        /// </summary>
+        /// <value>The total amount of bytes.</value>
+        public ulong IncomingDuplicateTotalBytes { get; set; }
+        /// <summary>
+        /// Gets the total amount of duplicate user bytes. This is only user payloads and does not include headers or protocol packets.
+        /// </summary>
+        /// <value>The total amount of bytes.</value>
+        public ulong IncomingDuplicateUserBytes { get; set; }
+
         internal readonly UnreliableSequencedChannel HeartbeatChannel;
         internal MessageMerger Merger;
         internal IChannel[] Channels;
@@ -87,17 +157,17 @@ namespace Ruffles.Connections
             }
         }
 
-        internal override void SendRaw(ArraySegment<byte> payload, bool noMerge, ushort headerSize)
+        internal void SendRaw(ArraySegment<byte> payload, bool noMerge, ushort headerSize)
         {
             Socket.SendRaw(this, payload, noMerge, headerSize);
         }
 
-        internal override void Disconnect(bool sendMessage)
+        internal void Disconnect(bool sendMessage)
         {
             Socket.DisconnectConnection(this, sendMessage, false);
         }
 
-        internal override void AddRoundtripSample(ulong sample)
+        internal void AddRoundtripSample(ulong sample)
         {
             double rttDistance = sample - Roundtrip;
             Roundtrip += (rttDistance * 0.1d);
@@ -162,5 +232,12 @@ namespace Ruffles.Connections
                 Recycled = true;
             }
         }
+
+#if DEBUG
+        internal static Connection Stub(SocketConfig config, MemoryManager manager)
+        {
+            return new Connection(config, manager);
+        }
+#endif
     }
 }
