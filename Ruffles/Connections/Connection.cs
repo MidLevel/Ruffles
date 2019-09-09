@@ -103,6 +103,55 @@ namespace Ruffles.Connections
             Roundtrip += (rttDistance * 0.1d);
         }
 
+        internal void Reset()
+        {
+            Dead = false;
+            Recycled = false;
+            State = ConnectionState.Disconnected;
+            Socket = null;
+            EndPoint = null;
+
+            HailStatus = new MessageStatus();
+
+            ConnectionChallenge = 0;
+            ChallengeDifficulty = 0;
+            ChallengeAnswer = 0;
+
+            LastMessageOut = DateTime.MinValue;
+            LastMessageIn = DateTime.MinValue;
+            ConnectionStarted = DateTime.MinValue;
+
+            Roundtrip = 0;
+
+            HandshakeLastSendTime = DateTime.MinValue;
+            HandshakeResendAttempts = 0;
+
+            HeartbeatChannel.Reset();
+            Merger.Clear();
+
+            PreConnectionChallengeTimestamp = 0;
+            PreConnectionChallengeCounter = 0;
+            PreConnectionChallengeIV = 0;
+
+            OutgoingPackets = 0;
+            OutgoingWirePackets = 0;
+            OutgoingUserBytes = 0;
+            OutgoingTotalBytes = 0;
+
+            OutgoingResentPackets = 0;
+            OutgoingConfirmedPackets = 0;
+
+            IncomingPackets = 0;
+            IncomingWirePackets = 0;
+            IncomingUserBytes = 0;
+            IncomingTotalBytes = 0;
+
+            IncomingDuplicatePackets = 0;
+            IncomingDuplicateTotalBytes = 0;
+            IncomingDuplicateUserBytes = 0;
+
+        }
+
         /// <summary>
         /// Recycle this connection so that it can be reused by Ruffles.
         /// </summary>

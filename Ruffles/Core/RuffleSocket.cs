@@ -1544,6 +1544,9 @@ namespace Ruffles.Core
                 addressConnectionLookup.Remove(connection.EndPoint);
             }
 
+            // Set the state to disconnected
+            connection.State = ConnectionState.Disconnected;
+
             // Send disconnect to userspace
             PublishEvent(new NetworkEvent()
             {
@@ -1663,21 +1666,33 @@ namespace Ruffles.Core
                 {
                     // This is no longer used, reuse it
                     connection = connections[i];
-                    connection.Dead = false;
-                    connection.Recycled = false;
-                    connection.State = state;
-                    connection.HailStatus = new MessageStatus();
+
+                    // Reset the core connection, including statistics and other data
+                    connection.Reset();
+
+                    // Set the Id
                     connection.Id = i;
+
+                    // Set the state
+                    connection.State = state;
+
+                    // Set the socket
                     connection.Socket = this;
+
+                    // Set the endpoint
                     connection.EndPoint = endpoint;
+
+                    // Generate a new challenge
                     connection.ConnectionChallenge = RandomProvider.GetRandomULong();
+
+                    // Set the difficulty
                     connection.ChallengeDifficulty = config.ChallengeDifficulty;
+
+                    // Set all the times to now (to prevent instant timeout)
                     connection.LastMessageOut = DateTime.Now;
                     connection.LastMessageIn = DateTime.Now;
                     connection.ConnectionStarted = DateTime.Now;
-                    connection.ChallengeAnswer = 0;
                     connection.HandshakeLastSendTime = DateTime.Now;
-                    connection.Roundtrip = 0;
 
                     addressPendingConnectionLookup.Add(endpoint, connection);
 
