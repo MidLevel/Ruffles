@@ -261,7 +261,7 @@ namespace Ruffles.Core
             }
 
             // Allocate the memory
-            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
+            HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 1);
 
             // Write headers
             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.UnconnectedData, false);
@@ -270,7 +270,7 @@ namespace Ruffles.Core
             Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 1, payload.Count);
 
             // Send the packet
-            SendRawRealEndPoint(endpoint, payload);
+            SendRawRealEndPoint(endpoint, new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount);
 
             // Release memory
             memoryManager.DeAlloc(memory);
