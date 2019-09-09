@@ -270,7 +270,7 @@ namespace Ruffles.Core
             Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 1, payload.Count);
 
             // Send the packet
-            SendRawRealEndPoint(endpoint, new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount);
+            SendRawRealEndPoint(endpoint, new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount));
 
             // Release memory
             memoryManager.DeAlloc(memory);
