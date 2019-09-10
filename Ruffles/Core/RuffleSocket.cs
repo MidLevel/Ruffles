@@ -700,6 +700,21 @@ namespace Ruffles.Core
                             // This client has not answered us in way too long. Let it go
                             DisconnectConnection(connections[i], false, true);
                         }
+                        else if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionQualityGracePeriod)
+                        {
+                            // They are no longer covered by connection quality grace. Check their ping and packet loss
+
+                            if ((double)connections[i].OutgoingResentPackets / connections[i].OutgoingResentPackets > config.MaxPacketLossPercentage)
+                            {
+                                // They have too high of a packet drop. Disconnect them
+                                DisconnectConnection(connections[i], false, true);
+                            }
+                            else if (connections[i].Roundtrip > config.MaxRoundtripTime)
+                            {
+                                // They have too high of a roundtrip time. Disconnect them
+                                DisconnectConnection(connections[i], false, true);
+                            }
+                        }
                     }
                 }
             }

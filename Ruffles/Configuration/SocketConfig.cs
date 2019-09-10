@@ -107,7 +107,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The MTU growth factor.
         /// </summary>
-        public float MTUGrowthFactor = 1.25f;
+        public double MTUGrowthFactor = 1.25f;
 
         /// <summary>
         /// The default size of fragment arrays.
@@ -141,6 +141,18 @@ namespace Ruffles.Configuration
         /// The amount milliseconds between heartbeat keep-alive packets are sent.
         /// </summary>
         public ulong HeartbeatDelay = 20_000;
+        /// <summary>
+        /// The maximum percentage of reliable packets that are allowed to be dropped before a connection times out.
+        /// </summary>
+        public double MaxPacketLossPercentage = 0.6f;
+        /// <summary>
+        /// The maximum roundtrip time before a connection times out.
+        /// </summary>
+        public uint MaxRoundtripTime = 1500;
+        /// <summary>
+        /// The grace period for a connection where PacketLoss and Roundtrip timeouts are not checked.
+        /// </summary>
+        public ulong ConnectionQualityGracePeriod = 5000;
 
         // Handshake resends
         /// <summary>
