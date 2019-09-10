@@ -107,7 +107,9 @@ namespace Ruffles.Memory
         {
             uint allocSize = Math.Max(minHeapMemorySize, CalculateMultiple(size, heapMemorySizeMultiple));
 
-            if (!_pooledHeapMemory.TryDequeue(out HeapMemory memory))
+            bool pooled;
+
+            if (!(pooled = _pooledHeapMemory.TryDequeue(out HeapMemory memory)))
             {
                 int createdHeapMemory = Interlocked.Increment(ref _createdHeapMemory);
 
@@ -119,17 +121,18 @@ namespace Ruffles.Memory
 
                 memory = new HeapMemory(allocSize);
             }
-            else
-            {
-                // If we got one from the pool, we need to clear it
-                Array.Clear(memory.Buffer, 0, size);
-            }
 
             memory.EnsureSize(allocSize);
 
             memory.isDead = false;
             memory.VirtualCount = size;
             memory.VirtualOffset = 0;
+
+            if (pooled)
+            {
+                // If we got one from the pool, we need to clear it
+                Array.Clear(memory.Buffer, 0, (int)size);
+            }
 
 #if DEBUG
             // The allocation stacktrace allows us to see where the alloc occured that caused the leak
