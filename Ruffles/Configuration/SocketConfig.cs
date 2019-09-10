@@ -107,7 +107,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The MTU growth factor.
         /// </summary>
-        public double MTUGrowthFactor = 1.25f;
+        public double MTUGrowthFactor = 1.25;
 
         /// <summary>
         /// The default size of fragment arrays.
@@ -144,7 +144,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The maximum percentage of reliable packets that are allowed to be dropped before a connection times out.
         /// </summary>
-        public double MaxPacketLossPercentage = 0.6f;
+        public double MaxPacketLossPercentage = 0.6;
         /// <summary>
         /// The maximum roundtrip time before a connection times out.
         /// </summary>
