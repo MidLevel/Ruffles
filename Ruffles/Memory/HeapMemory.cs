@@ -48,14 +48,17 @@ namespace Ruffles.Memory
         {
             try
             {
-                if (!isDead)
+                // If shutdown of the CLR has started, or the application domain is being unloaded. We don't want to print leak warnings. As these are legitimate deallocs and not leaks.
+                if (!Environment.HasShutdownStarted)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory was just leaked from the MemoryManager [Size=" + Buffer.Length + "]");
-                }
-                else
-                {
-                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogWarning("Dead memory was just leaked from the MemoryManager [Size=" + _buffer.Length + "]");
-
+                    if (!isDead)
+                    {
+                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory was just leaked from the MemoryManager [Size=" + Buffer.Length + "]");
+                    }
+                    else
+                    {
+                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogWarning("Dead memory was just leaked from the MemoryManager [Size=" + _buffer.Length + "]");
+                    }
                 }
             }
             catch
