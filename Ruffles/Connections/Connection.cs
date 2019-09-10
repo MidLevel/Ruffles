@@ -1,4 +1,6 @@
-﻿using System;
+﻿#define ALLOW_CONNECTION_STUB
+
+using System;
 using System.Net;
 using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
@@ -189,6 +191,13 @@ namespace Ruffles.Connections
 
         internal Connection(SocketConfig config, MemoryManager memoryManager)
         {
+#if ALLOW_CONNECTION_STUB
+            if (IsStub)
+            {
+                // NOOP
+                return;
+            }
+#endif
             if (config.EnableHeartbeats)
             {
                 HeartbeatChannel = new UnreliableSequencedChannel(0, this, config, memoryManager);
@@ -197,11 +206,25 @@ namespace Ruffles.Connections
 
         internal void SendRaw(ArraySegment<byte> payload, bool noMerge, ushort headerSize)
         {
+#if ALLOW_CONNECTION_STUB
+            if (IsStub)
+            {
+                // NOOP
+                return;
+            }
+#endif
             Socket.SendRaw(this, payload, noMerge, headerSize);
         }
 
         internal void Disconnect(bool sendMessage)
         {
+#if ALLOW_CONNECTION_STUB
+            if (IsStub)
+            {
+                // NOOP
+                return;
+            }
+#endif
             Socket.DisconnectConnection(this, sendMessage, false);
         }
 
@@ -275,10 +298,18 @@ namespace Ruffles.Connections
             }
         }
 
+#if ALLOW_CONNECTION_STUB
+        private bool IsStub { get; set; }
+
         // Used by Test project
         internal static Connection Stub(SocketConfig config, MemoryManager manager)
         {
-            return new Connection(config, manager);
+            return new Connection(config, manager)
+            {
+                IsStub = true,
+                MTU = config.MinimumMTU
+            };
         }
+#endif
     }
 }

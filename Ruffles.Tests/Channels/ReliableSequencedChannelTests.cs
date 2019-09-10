@@ -13,7 +13,10 @@ namespace Ruffles.Tests.Channels
         [Test()]
         public void TestSimpleMessage()
         {
-            Configuration.SocketConfig config = new Configuration.SocketConfig();
+            Configuration.SocketConfig config = new Configuration.SocketConfig()
+            {
+                MinimumMTU = 1050
+            };
 
             MemoryManager memoryManager = new MemoryManager(config);
 
@@ -37,7 +40,10 @@ namespace Ruffles.Tests.Channels
         [Test()]
         public void TestOutOfOrder()
         {
-            Configuration.SocketConfig config = new Configuration.SocketConfig();
+            Configuration.SocketConfig config = new Configuration.SocketConfig()
+            {
+                MinimumMTU = 1050
+            };
 
             MemoryManager memoryManager = new MemoryManager(config);
 
