@@ -1,10 +1,10 @@
 ﻿using System;
-using Ruffles.Memory;
+using Ruffles.Messaging;
 using Ruffles.Utils;
 
-namespace Ruffles.Messaging
+namespace Ruffles.Collections
 {
-    internal class HeapableSlidingWindow<T> where T : IMemoryReleasable
+    internal class SlidingWindow<T>
     {
         private readonly int[] _indexes;
         private readonly T[] _array;
@@ -12,9 +12,7 @@ namespace Ruffles.Messaging
         private readonly bool _resetOld;
         private ulong _lastHighestSequence;
 
-        private readonly MemoryManager _memoryManager;
-
-        public HeapableSlidingWindow(int size, bool resetOld, byte wrapSize, MemoryManager memoryManager)
+        public SlidingWindow(int size, bool resetOld, byte wrapSize)
         {
             if (resetOld && size % 8 != 0)
             {
@@ -25,17 +23,6 @@ namespace Ruffles.Messaging
             _indexes = new int[size];
             _wrapSize = wrapSize;
             _resetOld = resetOld;
-
-            _memoryManager = memoryManager;
-        }
-
-        public T GetUnsafe(int index, out bool isSafe)
-        {
-            int arrayIndex = NumberUtils.WrapMod(index, _array.Length);
-
-            isSafe = _indexes[arrayIndex] == index;
-
-            return _array[arrayIndex];
         }
 
         public T this[int index]
@@ -79,7 +66,6 @@ namespace Ruffles.Messaging
             for (int i = 0; i < _array.Length; i++)
             {
                 _indexes[i] = 0;
-                _array[i].DeAlloc(_memoryManager);
                 _array[i] = default(T);
             }
 

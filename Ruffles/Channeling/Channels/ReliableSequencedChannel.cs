@@ -1,4 +1,5 @@
 ﻿using System;
+using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Memory;

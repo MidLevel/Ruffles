@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using Ruffles.Messaging;
 using Ruffles.Utils;
 
-namespace Ruffles.Messaging
+namespace Ruffles.Collections
 {
     internal class SlidingSet<T>
     {
