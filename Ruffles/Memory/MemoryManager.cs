@@ -119,6 +119,11 @@ namespace Ruffles.Memory
 
                 memory = new HeapMemory(allocSize);
             }
+            else
+            {
+                // If we got one from the pool, we need to clear it
+                Array.Clear(memory.Buffer, 0, size);
+            }
 
             memory.EnsureSize(allocSize);
 
