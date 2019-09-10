@@ -138,6 +138,40 @@ namespace Ruffles.Connections
         /// <value>The total amount of bytes.</value>
         public ulong IncomingDuplicateUserBytes { get; set; }
 
+        /// <summary>
+        /// Gets the maximum amount of bytes that can be sent in a single message.
+        /// </summary>
+        /// <value>The maximum transmission unit.</value>
+        public ushort MTU
+        {
+            get
+            {
+                return _mtu;
+            }
+            internal set
+            {
+                if (_mtu != value)
+                {
+                    _mtu = value;
+
+                    if (OnMTUChanged != null)
+                    {
+                        OnMTUChanged(_mtu);
+                    }
+                }
+            }
+        }
+        // Backing field for MTU property
+        private ushort _mtu;
+        /// <summary>
+        /// Called when the MTU changes.
+        /// </summary>
+        public event MTUChangedDelegate OnMTUChanged;
+        /// <summary>
+        /// Delegate representing a MTU change.
+        /// </summary>
+        public delegate void MTUChangedDelegate(ushort MTU);
+
         internal readonly UnreliableSequencedChannel HeartbeatChannel;
         internal MessageMerger Merger;
         internal IChannel[] Channels;
@@ -152,12 +186,6 @@ namespace Ruffles.Connections
         // Handshake resend values
         internal byte HandshakeResendAttempts;
         internal DateTime HandshakeLastSendTime;
-
-        /// <summary>
-        /// Gets the maximum amount of bytes that can be sent in a single message.
-        /// </summary>
-        /// <value>The maximum transmission unit.</value>
-        public ushort MTU { get; internal set; }
 
         internal Connection(SocketConfig config, MemoryManager memoryManager)
         {
