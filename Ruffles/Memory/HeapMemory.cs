@@ -25,6 +25,10 @@ namespace Ruffles.Memory
         private byte[] _buffer;
         internal bool isDead;
 
+#if DEBUG
+        internal string allocStacktrace;
+#endif
+
         public HeapMemory(uint size)
         {
             _buffer = new byte[size];
@@ -53,11 +57,20 @@ namespace Ruffles.Memory
                 {
                     if (!isDead)
                     {
+#if DEBUG
+                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory was just leaked from the MemoryManager [Size=" + Buffer.Length + "] AllocStack: " + allocStacktrace);
+#else
                         if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory was just leaked from the MemoryManager [Size=" + Buffer.Length + "]");
+
+#endif
                     }
                     else
                     {
+#if DEBUG
+                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogWarning("Dead memory was just leaked from the MemoryManager [Size=" + _buffer.Length + "] AllocStack: " + allocStacktrace);
+#else
                         if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogWarning("Dead memory was just leaked from the MemoryManager [Size=" + _buffer.Length + "]");
+#endif
                     }
                 }
             }

@@ -126,6 +126,11 @@ namespace Ruffles.Memory
             memory.VirtualCount = size;
             memory.VirtualOffset = 0;
 
+#if DEBUG
+            // The allocation stacktrace allows us to see where the alloc occured that caused the leak
+            memory.allocStacktrace = Environment.StackTrace;
+#endif
+
             return memory;
         }
 
