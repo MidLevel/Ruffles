@@ -399,7 +399,7 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
+        public object[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
         {
             // Calculate the amount of fragments required
             int fragmentsRequired = (payload.Count + (connection.MTU - 1)) / connection.MTU;
@@ -434,32 +434,32 @@ namespace Ruffles.Channeling.Channels
                 headerSize = 6;
 
                 // Alloc array
-                HeapMemory[] fragments = new HeapMemory[fragmentsRequired];
+                object[] memoryParts = memoryManager.AllocPointers((uint)fragmentsRequired);
 
                 int position = 0;
 
-                for (ushort i = 0; i < fragments.Length; i++)
+                for (ushort i = 0; i < fragmentsRequired; i++)
                 {
                     // Calculate message size
                     int messageSize = Math.Min(connection.MTU, payload.Count - position);
 
                     // Allocate memory for each fragment
-                    fragments[i] = memoryManager.AllocHeapMemory((uint)(messageSize + 6));
+                    memoryParts[i] = memoryManager.AllocHeapMemory((uint)(messageSize + 6));
 
                     // Write headers
-                    fragments[i].Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
-                    fragments[i].Buffer[1] = channelId;
+                    ((HeapMemory)memoryParts[i]).Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
+                    ((HeapMemory)memoryParts[i]).Buffer[1] = channelId;
 
                     // Write the sequence
-                    fragments[i].Buffer[2] = (byte)_lastOutboundSequenceNumber;
-                    fragments[i].Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
+                    ((HeapMemory)memoryParts[i]).Buffer[2] = (byte)_lastOutboundSequenceNumber;
+                    ((HeapMemory)memoryParts[i]).Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
 
                     // Write the fragment
-                    fragments[i].Buffer[4] = (byte)(i & 32767);
-                    fragments[i].Buffer[5] = (byte)(((i & 32767) >> 8) | (byte)(i == fragments.Length - 1 ? 128 : 0));
+                    ((HeapMemory)memoryParts[i]).Buffer[4] = (byte)(i & 32767);
+                    ((HeapMemory)memoryParts[i]).Buffer[5] = (byte)(((i & 32767) >> 8) | (byte)(i == fragmentsRequired - 1 ? 128 : 0));
 
                     // Write the payload
-                    Buffer.BlockCopy(payload.Array, payload.Offset + position, fragments[i].Buffer, 6, messageSize);
+                    Buffer.BlockCopy(payload.Array, payload.Offset + position, ((HeapMemory)memoryParts[i]).Buffer, 6, messageSize);
 
                     // Increase the position
                     position += messageSize;
@@ -469,9 +469,9 @@ namespace Ruffles.Channeling.Channels
                 dealloc = false;
 
                 // Alloc outgoing fragment structs
-                object[] outgoingFragments = memoryManager.AllocPointers((uint)fragments.Length);
+                object[] outgoingFragments = memoryManager.AllocPointers((uint)fragmentsRequired);
 
-                for (int i = 0; i < fragments.Length; i++)
+                for (int i = 0; i < fragmentsRequired; i++)
                 {
                     // Add the memory to the outgoing sequencer array
                     outgoingFragments[i] = new PendingOutgoingFragment()
@@ -481,7 +481,7 @@ namespace Ruffles.Channeling.Channels
                         LastSent = DateTime.Now,
                         FirstSent = DateTime.Now,
                         Sequence = _lastOutboundSequenceNumber,
-                        Memory = fragments[i]
+                        Memory = ((HeapMemory)memoryParts[i])
                     };
                 }
 
@@ -492,7 +492,7 @@ namespace Ruffles.Channeling.Channels
                     Fragments = outgoingFragments
                 };
 
-                return fragments;
+                return memoryParts;
             }
         }
 

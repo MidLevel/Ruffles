@@ -7,7 +7,7 @@ namespace Ruffles.Channeling
     {
         HeapMemory HandlePoll();
         ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore);
-        HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc);
+        object[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc);
         void HandleAck(ArraySegment<byte> payload);
         void Reset();
         void InternalUpdate();

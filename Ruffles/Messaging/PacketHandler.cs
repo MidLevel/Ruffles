@@ -93,13 +93,13 @@ namespace Ruffles.Messaging
 
             lock (_memoryPointerLock)
             {
-                HeapMemory[] messageMemory = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
+                object[] messageMemory = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
 
                 if (messageMemory != null)
                 {
                     for (int i = 0; i < messageMemory.Length; i++)
                     {
-                        connection.SendRaw(new ArraySegment<byte>(messageMemory[i].Buffer, (int)messageMemory[i].VirtualOffset, (int)messageMemory[i].VirtualCount), noDelay, headerSize);
+                        connection.SendRaw(new ArraySegment<byte>(((HeapMemory)messageMemory[i]).Buffer, (int)((HeapMemory)messageMemory[i]).VirtualOffset, (int)((HeapMemory)messageMemory[i]).VirtualCount), noDelay, headerSize);
                     }
                 }
 
@@ -108,7 +108,7 @@ namespace Ruffles.Messaging
                     // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
                     for (int i = 0; i < messageMemory.Length; i++)
                     {
-                        memoryManager.DeAlloc(messageMemory[i]);
+                        memoryManager.DeAlloc(((HeapMemory)messageMemory[i]));
                     }
                 }
             }
