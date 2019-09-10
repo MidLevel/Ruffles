@@ -610,6 +610,9 @@ namespace Ruffles.Core
                             
                             // Send the challenge
                             connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
                         }
                     }
                     else if (connections[i].State == ConnectionState.SolvingChallenge)
@@ -1613,6 +1616,9 @@ namespace Ruffles.Core
 
                                 // Send the response
                                 connection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                                // Dealloc the memory
+                                memoryManager.DeAlloc(memory);
                             }
                         }
                         else
