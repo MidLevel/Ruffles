@@ -69,7 +69,7 @@ namespace Ruffles.Configuration
         /// The maximum size of a merged packet. 
         /// Increasing this increases the memory usage for each connection.
         /// </summary>
-        public ushort MaxMergeMessageSize = 1450;
+        public ushort MaxMergeMessageSize = 1024;
         /// <summary>
         /// The maximum delay before merged packets are sent.
         /// </summary>
@@ -85,9 +85,18 @@ namespace Ruffles.Configuration
 
         // Fragmentation
         /// <summary>
-        /// The maximum user size of a single message.
+        /// The maximum MTU size that will be attempted using path MTU.
         /// </summary>
-        public ushort MaxMessageSize = 1450;
+        public ushort MaximumMTU = 4096;
+        /// <summary>
+        /// The minimum MTU size. This is the default maximum packet size.
+        /// </summary>
+        public ushort MinimumMTU = 512;
+        /// <summary>
+        /// Whether or not to enable path MTU.
+        /// </summary>
+        public bool EnablePathMTU = true;
+
         /// <summary>
         /// The default size of fragment arrays.
         /// </summary>
@@ -101,7 +110,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The maxmimum packet size. Should be larger than the MTU.
         /// </summary>
-        public ushort MaxBufferSize = 1500;
+        public ushort MaxBufferSize = 1024 * 5;
         /// <summary>
         /// The maximum amount of connections. Increasing this increases the memory impact.
         /// </summary>
@@ -166,7 +175,7 @@ namespace Ruffles.Configuration
         /// The amplification prevention padding of handshake requests. 
         /// All handshake packets sent by the connector will be of this size.
         /// </summary>
-        public ushort AmplificationPreventionHandshakePadding = 1024;
+        public ushort AmplificationPreventionHandshakePadding = 512;
 
         // Channels
         /// <summary>
@@ -239,12 +248,12 @@ namespace Ruffles.Configuration
                 messages.Add("MaxFragments cannot be greater than 2^15=32768");
             }
 
-            if (MaxMergeMessageSize > MaxMessageSize)
+            if (MaxMergeMessageSize > MaximumMTU)
             {
                 messages.Add("MaxMergeMessageSize cannot be greater than MaxMessageSize");
             }
 
-            if (AmplificationPreventionHandshakePadding > MaxMessageSize)
+            if (AmplificationPreventionHandshakePadding > MaximumMTU)
             {
                 messages.Add("AmplificationPreventionHandshakePadding cannot be greater than MaxMessageSize");
             }

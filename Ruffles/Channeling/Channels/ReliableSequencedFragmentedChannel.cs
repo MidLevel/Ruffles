@@ -389,7 +389,7 @@ namespace Ruffles.Channeling.Channels
         public HeapMemory[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
         {
             // Calculate the amount of fragments required
-            int fragmentsRequired = (payload.Count + (config.MaxMessageSize - 1)) / config.MaxMessageSize;
+            int fragmentsRequired = (payload.Count + (connection.MTU - 1)) / connection.MTU;
 
             if (fragmentsRequired > config.MaxFragments)
             {
@@ -415,7 +415,7 @@ namespace Ruffles.Channeling.Channels
                 for (ushort i = 0; i < fragments.Length; i++)
                 {
                     // Calculate message size
-                    int messageSize = Math.Min(config.MaxMessageSize, payload.Count - position);
+                    int messageSize = Math.Min(connection.MTU, payload.Count - position);
 
                     // Allocate memory for each fragment
                     fragments[i] = memoryManager.AllocHeapMemory((uint)(messageSize + 6));

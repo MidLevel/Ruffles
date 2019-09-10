@@ -149,6 +149,12 @@ namespace Ruffles.Connections
         internal byte HandshakeResendAttempts;
         internal DateTime HandshakeLastSendTime;
 
+        /// <summary>
+        /// Gets the maximum amount of bytes that can be sent in a single message.
+        /// </summary>
+        /// <value>The maximum transmission unit.</value>
+        public ushort MTU { get; internal set; }
+
         internal Connection(SocketConfig config, MemoryManager memoryManager)
         {
             if (config.EnableHeartbeats)
@@ -192,6 +198,8 @@ namespace Ruffles.Connections
             ConnectionStarted = DateTime.MinValue;
 
             Roundtrip = 0;
+
+            MTU = 0;
 
             HandshakeLastSendTime = DateTime.MinValue;
             HandshakeResendAttempts = 0;

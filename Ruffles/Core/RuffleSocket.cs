@@ -59,7 +59,6 @@ namespace Ruffles.Core
 
         private readonly SocketConfig config;
         private readonly NetworkSimulator simulator;
-        private readonly byte[] outgoingInternalBuffer;
         private readonly byte[] incomingBuffer;
 
         private readonly SlidingSet<ulong> challengeInitializationVectors;
@@ -97,9 +96,6 @@ namespace Ruffles.Core
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.EventQueueSize + " event slots");
             userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(config.EventQueueSize);
-
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Math.Max((int)config.AmplificationPreventionHandshakePadding, 128) + " bytes of outgoingInternalBuffer");
-            outgoingInternalBuffer = new byte[Math.Max((int)config.AmplificationPreventionHandshakePadding, 128)];
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.MaxBufferSize + " bytes of incomingBuffer");
             incomingBuffer = new byte[config.MaxBufferSize];
@@ -269,7 +265,7 @@ namespace Ruffles.Core
         /// <param name="endpoint">Endpoint.</param>
         public void SendUnconnected(ArraySegment<byte> payload, IPEndPoint endpoint)
         {
-            if (payload.Count > config.MaxMessageSize)
+            if (payload.Count > config.MinimumMTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error)  Logging.LogError("Tried to send unconnected message that was too large. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
                 return;
@@ -308,7 +304,17 @@ namespace Ruffles.Core
                 connection.HandshakeResendAttempts = 1;
                 connection.HandshakeLastSendTime = DateTime.Now;
 
-                outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
+                // Calculate the minimum size we could use for a packet
+                int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+
+                // Calculate the actual size with respect to amplification padding
+                int size = Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding);
+
+                // Allocate the memory
+                HeapMemory memory = memoryManager.AllocHeapMemory((uint)size);
+
+                // Set the header
+                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
                 if (config.TimeBasedConnectionChallenge)
                 {
@@ -321,7 +327,7 @@ namespace Ruffles.Core
                     connection.PreConnectionChallengeTimestamp = unixTimestamp;
 
                     // Write the current unix time
-                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
 
                     ulong counter = 0;
                     ulong iv = RandomProvider.GetRandomULong();
@@ -350,17 +356,19 @@ namespace Ruffles.Core
                     connection.PreConnectionChallengeCounter = counter;
 
                     // Write counter
-                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
 
                     // Write IV
-                    for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
                 }
-
-                int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Sending connection request to " + endpoint);
 
-                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding));
+                // Send the packet
+                connection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                // Dealloc the memory
+                memoryManager.DeAlloc(memory);
             }
             else
             {
@@ -504,23 +512,36 @@ namespace Ruffles.Core
                             connections[i].HandshakeResendAttempts++;
                             connections[i].HandshakeLastSendTime = DateTime.Now;
 
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
+                            // Calculate the minimum size we can fit the packet in
+                            int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+
+                            // Calculate the actual size with respect to amplification padding
+                            int size = Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding);
+
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory((uint)size);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
                             if (config.TimeBasedConnectionChallenge)
                             {
                                 // Write the response unix time
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + x] = ((byte)(connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
 
                                 // Write counter
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + sizeof(ulong) + x] = ((byte)(connections[i].PreConnectionChallengeCounter >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + sizeof(ulong) + x] = ((byte)(connections[i].PreConnectionChallengeCounter >> (x * 8)));
 
                                 // Write IV
-                                for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(connections[i].PreConnectionChallengeIV >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(connections[i].PreConnectionChallengeIV >> (x * 8)));
                             }
 
-                            int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding));
+
+                            connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
                         }
                     }
                     else if (connections[i].State == ConnectionState.RequestingChallenge)
@@ -530,13 +551,23 @@ namespace Ruffles.Core
                             connections[i].HandshakeResendAttempts++;
                             connections[i].HandshakeLastSendTime = DateTime.Now;
 
+                            // Packet size
+                            uint size = 1 + sizeof(ulong) + 1;
+
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory(size);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeRequest, false);
+
                             // Write connection challenge
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeRequest, false);
-                            for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(connections[i].ConnectionChallenge >> (x * 8)));
-                            outgoingInternalBuffer[1 + sizeof(ulong)] = connections[i].ChallengeDifficulty;
+                            for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + x] = ((byte)(connections[i].ConnectionChallenge >> (x * 8)));
+
+                            // Write the connection difficulty
+                            memory.Buffer[1 + sizeof(ulong)] = connections[i].ChallengeDifficulty;
                             
                             // Send the challenge
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true, 1 + sizeof(ulong) + 1);
+                            connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
                         }
                     }
                     else if (connections[i].State == ConnectionState.SolvingChallenge)
@@ -546,34 +577,57 @@ namespace Ruffles.Core
                             connections[i].HandshakeResendAttempts++;
                             connections[i].HandshakeLastSendTime = DateTime.Now;
 
+                            // Calculate the minimum size we can fit the packet in
+                            int minSize = 1 + sizeof(ulong);
+
+                            // Calculate the actual size with respect to amplification padding
+                            int size = Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding);
+
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory((uint)size);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeResponse, false);
+
                             // Write the challenge response
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeResponse, false);
-                            for (byte x = 0; x < sizeof(ulong); x++) outgoingInternalBuffer[1 + x] = ((byte)(connections[i].ChallengeAnswer >> (x * 8)));
+                            for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + x] = ((byte)(connections[i].ChallengeAnswer >> (x * 8)));
                             
                             // Send the challenge response
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding));
+                            connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
                         }
                     }
                     else if (connections[i].State == ConnectionState.Connected)
                     {
                         if (!connections[i].HailStatus.Completed && (DateTime.Now - connections[i].HailStatus.LastAttempt).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HailStatus.Attempts < config.MaxHandshakeResends)
                         {
-                            // Send the response
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Hail, false);
+                            connections[i].HailStatus.Attempts++;
+                            connections[i].HailStatus.LastAttempt = DateTime.Now;
+
+                            // Packet size
+                            int size = 2 + (byte)config.ChannelTypes.Length;
+
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory((uint)size);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Hail, false);
 
                             // Write the amount of channels
-                            outgoingInternalBuffer[1] = (byte)config.ChannelTypes.Length;
+                            memory.Buffer[1] = (byte)config.ChannelTypes.Length;
 
                             // Write the channel types
                             for (byte x = 0; x < (byte)config.ChannelTypes.Length; x++)
                             {
-                                outgoingInternalBuffer[2 + x] = (byte)config.ChannelTypes[x];
+                                memory.Buffer[2 + x] = (byte)config.ChannelTypes[x];
                             }
 
-                            connections[i].HailStatus.Attempts++;
-                            connections[i].HailStatus.LastAttempt = DateTime.Now;
+                            connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
 
-                            connections[i].SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true, (ushort)(2 + (byte)config.ChannelTypes.Length));
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
                         }
                     }
                 }
@@ -901,13 +955,26 @@ namespace Ruffles.Core
                             connection.HandshakeResendAttempts = 1;
                             connection.HandshakeLastSendTime = DateTime.Now;
 
+                            // Packet size
+                            uint size = 1 + sizeof(ulong) + 1;
+
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory(size);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeRequest, false);
+
                             // Write connection challenge
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeRequest, false);
-                            for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(connection.ConnectionChallenge >> (i * 8)));
-                            outgoingInternalBuffer[1 + sizeof(ulong)] = connection.ChallengeDifficulty;
+                            for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + i] = ((byte)(connection.ConnectionChallenge >> (i * 8)));
+
+                            // Write the challenge difficulty
+                            memory.Buffer[1 + sizeof(ulong)] = connection.ChallengeDifficulty;
 
                             // Send the challenge
-                            connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1 + sizeof(ulong) + 1), true, 1 + sizeof(ulong) + 1);
+                            connection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent a challenge of difficulty " + connection.ChallengeDifficulty);
                         }
@@ -969,12 +1036,26 @@ namespace Ruffles.Core
                             connection.HandshakeLastSendTime = DateTime.Now;
                             connection.State = ConnectionState.SolvingChallenge;
 
+                            // Calculate the minimum size we can fit the packet in
+                            int minSize = 1 + sizeof(ulong);
+
+                            // Calculate the actual size with respect to amplification padding
+                            int size = Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding);
+
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory((uint)size);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeResponse, false);
+
                             // Write the challenge response
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.ChallengeResponse, false);
-                            for (byte i = 0; i < sizeof(ulong); i++) outgoingInternalBuffer[1 + i] = ((byte)(additionsRequired >> (i * 8)));
+                            for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + i] = ((byte)(additionsRequired >> (i * 8)));
 
                             // Send the challenge response
-                            connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding)), true, (ushort)Math.Max(1 + sizeof(ulong), (int)config.AmplificationPreventionHandshakePadding));
+                            connection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Server " + endpoint + " challenge of difficulty " + connection.ChallengeDifficulty + " was solved. Answer was sent");
                         }
@@ -1037,19 +1118,29 @@ namespace Ruffles.Core
                                 connection.HailStatus.HasAcked = false;
                                 connection.HailStatus.LastAttempt = DateTime.Now;
 
-                                // Send the response
-                                outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Hail, false);
+                                // Packet size
+                                int size = 2 + (byte)config.ChannelTypes.Length;
+
+                                // Allocate memory
+                                HeapMemory memory = memoryManager.AllocHeapMemory((uint)size);
+
+                                // Write the header
+                                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Hail, false);
 
                                 // Write the amount of channels
-                                outgoingInternalBuffer[1] = (byte)config.ChannelTypes.Length;
+                                memory.Buffer[1] = (byte)config.ChannelTypes.Length;
 
                                 // Write the channel types
                                 for (byte i = 0; i < (byte)config.ChannelTypes.Length; i++)
                                 {
-                                    outgoingInternalBuffer[2 + i] = (byte)config.ChannelTypes[i];
+                                    memory.Buffer[2 + i] = (byte)config.ChannelTypes[i];
                                 }
 
-                                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 2 + (byte)config.ChannelTypes.Length), true, (ushort)(2 + (byte)config.ChannelTypes.Length));
+                                // Send the response
+                                connection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                                // Release memory
+                                memoryManager.DeAlloc(memory);
 
                                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent a hail");
 
@@ -1110,11 +1201,17 @@ namespace Ruffles.Core
 
                         if (connectedConnection != null && connectedConnection.State == ConnectionState.Connected)
                         {
-                            // Send the confirmation
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.HailConfirmed, false);
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory(1);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.HailConfirmed, false);
 
                             // Send confirmation
-                            connectedConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true, 1);
+                            connectedConnection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Hail confirmation sent to " + endpoint);
                         }
@@ -1271,11 +1368,17 @@ namespace Ruffles.Core
                                 MemoryManager = memoryManager
                             });
 
-                            // Send the confirmation
-                            outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.HailConfirmed, false);
+                            // Allocate memory
+                            HeapMemory memory = memoryManager.AllocHeapMemory(1);
+
+                            // Write the header
+                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.HailConfirmed, false);
 
                             // Send confirmation
-                            pendingConnection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true, 1);
+                            pendingConnection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                            // Release memory
+                            memoryManager.DeAlloc(memory);
 
                             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " was sent hail confimrations");
                         }
@@ -1496,11 +1599,17 @@ namespace Ruffles.Core
             {
                 // Send disconnect message
 
+                // Allocate memory
+                HeapMemory memory = memoryManager.AllocHeapMemory(1);
+
                 // Write disconnect header
-                outgoingInternalBuffer[0] = HeaderPacker.Pack((byte)MessageType.Disconnect, false);
+                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Disconnect, false);
 
                 // Send disconnect message
-                connection.SendRaw(new ArraySegment<byte>(outgoingInternalBuffer, 0, 1), true, 1);
+                connection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                // Release memory
+                memoryManager.DeAlloc(memory);
             }
 
             if (config.ReuseConnections)
@@ -1597,7 +1706,8 @@ namespace Ruffles.Core
                         ChannelTypes = new ChannelType[0],
                         HandshakeLastSendTime = DateTime.Now,
                         Roundtrip = 0,
-                        Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null
+                        Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
+                        MTU = config.MinimumMTU
                     };
 
                     // Make sure the array is not null
@@ -1687,6 +1797,9 @@ namespace Ruffles.Core
 
                     // Set the difficulty
                     connection.ChallengeDifficulty = config.ChallengeDifficulty;
+
+                    // Reset the MTU
+                    connection.MTU = config.MinimumMTU;
 
                     // Set all the times to now (to prevent instant timeout)
                     connection.LastMessageOut = DateTime.Now;
