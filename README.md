@@ -77,6 +77,8 @@ Automatically discovers the largest MTU possible for each connection.
 ## Roadmap
 This is stuff I want to and plan to add
 
+* More typesafe pointer arrays (to lessen the chance of introducing bugs when passing pointer arrays)
+* Adaptable window sizes
 * Basic bandwidth control, limit the amount of acks that are sent etc
 * More Fragmentation Types
 * Explicit Nack
