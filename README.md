@@ -71,12 +71,13 @@ Ack packets are merged into bitfields to make them much more compact.
 ### Connection Statistics
 Detailed statistics can retrieved from connections, including the bytes sent, packets sent, round trip times and more.
 
+### Path MTU
+Automatically discovers the largest MTU possible for each connection.
 
 ## Roadmap
 This is stuff I want to and plan to add
 
 * Basic bandwidth control, limit the amount of acks that are sent etc
-* Path MTU
 * More Fragmentation Types
 * Explicit Nack
 * Reliable StateUpdate / LastPacket channel
