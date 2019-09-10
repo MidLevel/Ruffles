@@ -135,6 +135,19 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
+                PendingOutgoingPacket unsafeOutgoing = _sendSequencer.GetUnsafe(_lastOutboundSequenceNumber + 1, out bool isSafe);
+
+                if (unsafeOutgoing.Alive && !isSafe)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Outgoing packet window is exhausted. Disconnecting");
+
+                    connection.Disconnect(false);
+
+                    dealloc = false;
+                    headerSize = 0;
+                    return null;
+                }
+
                 // Increment the sequence number
                 _lastOutboundSequenceNumber++;
 
@@ -255,6 +268,7 @@ namespace Ruffles.Channeling.Channels
                         {
                             // If they don't ack the message, disconnect them
                             connection.Disconnect(false);
+                            return;
                         }
                         else if ((DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.Roundtrip * config.ReliabilityResendRoundtripMultiplier)
                         {

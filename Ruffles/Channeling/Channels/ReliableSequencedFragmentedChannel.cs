@@ -314,6 +314,9 @@ namespace Ruffles.Channeling.Channels
                         if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Incoming packet window is exhausted. Disconnecting");
 
                         connection.Disconnect(false);
+
+                        hasMore = false;
+                        return null;
                     }
                     else if (!_receiveSequencer[sequence].Alive)
                     {
@@ -639,7 +642,6 @@ namespace Ruffles.Channeling.Channels
                                 {
                                     // If they don't ack the message, disconnect them
                                     connection.Disconnect(false);
-
                                     return;
                                 }
                                 else if ((DateTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments[j]).LastSent).TotalMilliseconds > connection.Roundtrip * config.ReliabilityResendRoundtripMultiplier)
