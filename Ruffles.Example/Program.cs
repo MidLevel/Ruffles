@@ -18,7 +18,7 @@ namespace Ruffles.Example
                 ChannelType.Reliable,
                 ChannelType.ReliableSequenced,
                 ChannelType.Unreliable,
-                ChannelType.UnreliableSequenced,
+                ChannelType.UnreliableOrdered,
                 ChannelType.ReliableSequencedFragmented
             },
             DualListenPort = 5674,

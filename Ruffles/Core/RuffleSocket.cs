@@ -1304,9 +1304,9 @@ namespace Ruffles.Core
                                             pendingConnection.ChannelTypes[i] = ChannelType.Unreliable;
                                         }
                                         break;
-                                    case (byte)ChannelType.UnreliableSequenced:
+                                    case (byte)ChannelType.UnreliableOrdered:
                                         {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.UnreliableSequenced;
+                                            pendingConnection.ChannelTypes[i] = ChannelType.UnreliableOrdered;
                                         }
                                         break;
                                     case (byte)ChannelType.ReliableSequenced:
@@ -1324,9 +1324,9 @@ namespace Ruffles.Core
                                             pendingConnection.ChannelTypes[i] = ChannelType.ReliableSequencedFragmented;
                                         }
                                         break;
-                                    case (byte)ChannelType.ReliableStateUpdate:
+                                    case (byte)ChannelType.ReliableOrdered:
                                         {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableStateUpdate;
+                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableOrdered;
                                         }
                                         break;
                                     default:
@@ -1369,7 +1369,7 @@ namespace Ruffles.Core
                                             pendingConnection.Channels[i] = new UnreliableChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
-                                    case ChannelType.UnreliableSequenced:
+                                    case ChannelType.UnreliableOrdered:
                                         {
                                             pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection, config, memoryManager);
                                         }
@@ -1389,9 +1389,9 @@ namespace Ruffles.Core
                                             pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
-                                    case ChannelType.ReliableStateUpdate:
+                                    case ChannelType.ReliableOrdered:
                                         {
-                                            pendingConnection.Channels[i] = new ReliableStateUpdate(i, pendingConnection, config, memoryManager);
+                                            pendingConnection.Channels[i] = new ReliableOrderedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     default:
@@ -1870,7 +1870,7 @@ namespace Ruffles.Core
                                     connection.Channels[x] = new UnreliableChannel(x, connection, config, memoryManager);
                                 }
                                 break;
-                            case ChannelType.UnreliableSequenced:
+                            case ChannelType.UnreliableOrdered:
                                 {
                                     connection.Channels[x] = new UnreliableSequencedChannel(x, connection, config, memoryManager);
                                 }
@@ -1890,9 +1890,9 @@ namespace Ruffles.Core
                                     connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
-                            case ChannelType.ReliableStateUpdate:
+                            case ChannelType.ReliableOrdered:
                                 {
-                                    connection.Channels[x] = new ReliableStateUpdate(x, connection, config, memoryManager);
+                                    connection.Channels[x] = new ReliableOrderedChannel(x, connection, config, memoryManager);
                                 }
                                 break;
                             default:

@@ -19,7 +19,7 @@
         /// Messages are not guaranteed to be delivered, the order is guaranteed.
         /// Older packets and duplicate packets are dropped.
         /// </summary>
-        UnreliableSequenced,
+        UnreliableOrdered,
         /// <summary>
         /// All messages are guaranteed to be delivered, the order is guaranteed. 
         /// Duplicate packets are dropped.
@@ -41,6 +41,6 @@
         /// If sending multiple messages, at least one message is guaranteed to be delivered.
         /// Duplicate packets are dropped
         /// </summary>
-        ReliableStateUpdate
+        ReliableOrdered
     }
 }

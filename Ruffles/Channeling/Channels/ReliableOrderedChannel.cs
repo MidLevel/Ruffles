@@ -7,7 +7,7 @@ using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
 {
-    internal class ReliableStateUpdate : IChannel
+    internal class ReliableOrderedChannel : IChannel
     {
         private struct PendingOutgoingPacket : IMemoryReleasable
         {
@@ -45,7 +45,7 @@ namespace Ruffles.Channeling.Channels
         // Lock for the channel, this allows sends and receives being done on different threads.
         private readonly object _lock = new object();
 
-        internal ReliableStateUpdate(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
+        internal ReliableOrderedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
