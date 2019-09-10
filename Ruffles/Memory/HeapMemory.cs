@@ -1,4 +1,6 @@
-﻿using Ruffles.Exceptions;
+﻿using System;
+using Ruffles.Exceptions;
+using Ruffles.Utils;
 
 namespace Ruffles.Memory
 {
@@ -39,6 +41,26 @@ namespace Ruffles.Memory
                 _buffer = new byte[size];
 
                 System.Buffer.BlockCopy(oldBuffer, 0, _buffer, 0, oldBuffer.Length);
+            }
+        }
+
+        ~HeapMemory()
+        {
+            try
+            {
+                if (!isDead)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory was just leaked from the MemoryManager [Size=" + Buffer.Length + "]");
+                }
+                else
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogWarning("Dead memory was just leaked from the MemoryManager [Size=" + _buffer.Length + "]");
+
+                }
+            }
+            catch
+            {
+                // Supress
             }
         }
     }
