@@ -43,15 +43,17 @@ All messages are guaranteed to be delivered with the order also being guaranteed
 All messages are guaranteed to be delivered with the order also being guaranteed, duplicates are dropped. Uses a fixed sliding window. Allows large messages to be fragmented.
 #### Unreliable
 Delivery is not guaranteed, nor is the order. Duplicates are dropped.
-#### UnreliableSequenced
+#### UnreliableOrdered
 Delivery is not guaranteed but the order is. Older packets and duplicate packets are dropped.
 #### UnreliableRaw
 Delivery is not guaranteed nor is the order. Duplicates are not dropped.
 #### UnconnectedMessages
 Raw UDP packets that does not require a connection.
+#### ReliableOrdered
+All messages are not guaranteed to be delivered. If you send multiple messages, at least one is guranteed to arrive. If you send a single message, it is guaranteed to arrive. Messages will always been in order. Duplicates are dropped.
 
 ### Threading
-Ruffles can run in many different threading environments, it can be run passively single threaded, actively single threaded, or in a threaded environment where everything is done via message queues while remaining garbage free.
+Ruffles is nativley multi threaded and uses a background worker thread by default to handle network I/O.
 
 ### Dependency Free
 Ruffles is 100% dependency free, it's thus very portable and should run on most platforms.
@@ -82,7 +84,6 @@ This is stuff I want to and plan to add
 * Basic bandwidth control, limit the amount of acks that are sent etc
 * More Fragmentation Types
 * Explicit Nack
-* Reliable StateUpdate / LastPacket channel
 * MLAPI.Relay Support
 * MLAPI.NAT (Holepuncher) support
 * Bloatless Moduled Library (Make all the garbage features like relay support separate modules to keep the core library bloat free and small)
