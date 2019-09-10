@@ -1324,6 +1324,11 @@ namespace Ruffles.Core
                                             pendingConnection.ChannelTypes[i] = ChannelType.ReliableSequencedFragmented;
                                         }
                                         break;
+                                    case (byte)ChannelType.ReliableStateUpdate:
+                                        {
+                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableStateUpdate;
+                                        }
+                                        break;
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
@@ -1382,6 +1387,11 @@ namespace Ruffles.Core
                                     case ChannelType.ReliableSequencedFragmented:
                                         {
                                             pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, config, memoryManager);
+                                        }
+                                        break;
+                                    case ChannelType.ReliableStateUpdate:
+                                        {
+                                            pendingConnection.Channels[i] = new ReliableStateUpdate(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     default:
@@ -1878,6 +1888,11 @@ namespace Ruffles.Core
                             case ChannelType.ReliableSequencedFragmented:
                                 {
                                     connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, config, memoryManager);
+                                }
+                                break;
+                            case ChannelType.ReliableStateUpdate:
+                                {
+                                    connection.Channels[x] = new ReliableStateUpdate(x, connection, config, memoryManager);
                                 }
                                 break;
                             default:

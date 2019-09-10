@@ -30,6 +30,17 @@
         /// Duplicate packets are not dropped.
         /// </summary>
         UnreliableRaw,
-        ReliableSequencedFragmented
+        /// <summary>
+        /// Messages are guaranteed to be delivered, the order is guaranteed.
+        /// Messages can be of a size larger than the MTU.
+        /// Duplicate packets are dropped
+        /// </summary>
+        ReliableSequencedFragmented,
+        /// <summary>
+        /// All messages are not guaranteed to be delivered, the order is guaranteed.
+        /// If sending multiple messages, at least one message is guaranteed to be delivered.
+        /// Duplicate packets are dropped
+        /// </summary>
+        ReliableStateUpdate
     }
 }
