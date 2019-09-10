@@ -745,31 +745,36 @@ namespace Ruffles.Core
 
         private EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
         private EndPoint _fromIPv6Endpoint = new IPEndPoint(IPAddress.IPv6Any, 0);
+
+        private readonly List<Socket> _selectSockets = new List<Socket>();
         private void InternalPollSocket()
         {
-            if (ipv4Socket != null && ipv4Socket.Poll(config.MaxSocketBlockMilliseconds * 1000, SelectMode.SelectRead))
-            {
-                // TODO: Handle SocketException when buffer is too small.
-                try
-                {
-                    int size = ipv4Socket.ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _fromIPv4Endpoint);
+            _selectSockets.Clear();
 
-                    HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _fromIPv4Endpoint);
-                }
-                catch (Exception e)
-                {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
-                }
+            if (ipv4Socket != null)
+            {
+                _selectSockets.Add(ipv4Socket);
             }
 
-            if (ipv6Socket != null && ipv6Socket.Poll(config.MaxSocketBlockMilliseconds * 1000, SelectMode.SelectRead))
+            if (ipv6Socket != null)
             {
-                // TODO: Handle SocketException when buffer is too small.
+                _selectSockets.Add(ipv6Socket);
+            }
+
+            // Check what sockets have data
+            Socket.Select(_selectSockets, null, null, config.MaxSocketBlockMilliseconds * 1000);
+
+            // Iterate the sockets with data
+            for (int i = 0; i < _selectSockets.Count; i++)
+            {
                 try
                 {
-                    int size = ipv6Socket.ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _fromIPv6Endpoint);
+                    // Get a endpoint reference
+                    EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
 
-                    HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _fromIPv6Endpoint);
+                    int size = _selectSockets[i].ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _endpoint);
+
+                    HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint);
                 }
                 catch (Exception e)
                 {
