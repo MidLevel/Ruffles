@@ -242,7 +242,7 @@ namespace Ruffles.Channeling.Channels
                     if (isAcked)
                     {
                         // Handle the bit ack
-                        HandleAck((ushort)(sequence - i));
+                        HandleAck((ushort)(sequence - (i + 1)));
                     }
                 }
             }
