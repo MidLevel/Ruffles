@@ -307,9 +307,17 @@ namespace Ruffles.Channeling.Channels
                 {
                     // This is a packet after the last. One that is not yet completed
 
-                    // If this is the first fragment we ever get, index the data.
-                    if (!_receiveSequencer[sequence].Alive)
+                    PendingIncomingPacket unsafeIncoming = _receiveSequencer.GetUnsafe(sequence, out bool isSafe);
+
+                    if (unsafeIncoming.Alive && !isSafe)
                     {
+                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Incoming packet window is exhausted. Disconnecting");
+
+                        connection.Disconnect(false);
+                    }
+                    else if (!_receiveSequencer[sequence].Alive)
+                    {
+                        // If this is the first fragment we ever get, index the data.
                         int fragmentPointerSize = isFinal ? fragment + 1 : config.FragmentArrayBaseSize;
 
                         object[] fragmentPointers = memoryManager.AllocPointers((uint)fragmentPointerSize);
@@ -403,6 +411,19 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
+                PendingOutgoingPacket unsafeOutgoing = _sendSequencer.GetUnsafe(_lastOutboundSequenceNumber + 1, out bool isSafe);
+
+                if (unsafeOutgoing.Alive && !isSafe)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Outgoing packet window is exhausted. Disconnecting");
+
+                    connection.Disconnect(false);
+
+                    dealloc = false;
+                    headerSize = 0;
+                    return null;
+                }
+
                 // Increment the sequence number
                 _lastOutboundSequenceNumber++;
 

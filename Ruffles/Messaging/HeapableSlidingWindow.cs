@@ -29,6 +29,15 @@ namespace Ruffles.Messaging
             _memoryManager = memoryManager;
         }
 
+        public T GetUnsafe(int index, out bool isSafe)
+        {
+            int arrayIndex = NumberUtils.WrapMod(index, _array.Length);
+
+            isSafe = _indexes[arrayIndex] == index;
+
+            return _array[arrayIndex];
+        }
+
         public T this[int index]
         {
             get

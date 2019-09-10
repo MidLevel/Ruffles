@@ -138,24 +138,37 @@ namespace Ruffles.Channeling.Channels
 
                     return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
                 }
-                else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0 && !_receiveSequencer[sequence].Alive)
+                else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0)
                 {
-                    // Alloc payload plus header memory
-                    HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 2);
+                    // Future packet
 
-                    // Copy the payload
-                    Buffer.BlockCopy(payload.Array, payload.Offset + 2, memory.Buffer, 0, payload.Count - 2);
+                    PendingIncomingPacket unsafeIncoming = _receiveSequencer.GetUnsafe(sequence, out bool isSafe);
 
-                    // Add to sequencer
-                    _receiveSequencer[sequence] = new PendingIncomingPacket()
+                    if (unsafeIncoming.Alive && !isSafe)
                     {
-                        Alive = true,
-                        Memory = memory,
-                        Sequence = sequence
-                    };
+                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Incoming packet window is exhausted. Disconnecting");
 
-                    // Send ack
-                    SendAck(sequence);
+                        connection.Disconnect(false);
+                    }
+                    else if (!_receiveSequencer[sequence].Alive)
+                    {
+                        // Alloc payload plus header memory
+                        HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 2);
+
+                        // Copy the payload
+                        Buffer.BlockCopy(payload.Array, payload.Offset + 2, memory.Buffer, 0, payload.Count - 2);
+
+                        // Add to sequencer
+                        _receiveSequencer[sequence] = new PendingIncomingPacket()
+                        {
+                            Alive = true,
+                            Memory = memory,
+                            Sequence = sequence
+                        };
+
+                        // Send ack
+                        SendAck(sequence);
+                    }
                 }
 
                 hasMore = false;
@@ -177,6 +190,19 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
+                PendingOutgoingPacket unsafeOutgoing = _sendSequencer.GetUnsafe(_lastOutboundSequenceNumber + 1, out bool isSafe);
+
+                if (unsafeOutgoing.Alive && !isSafe)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Outgoing packet window is exhausted. Disconnecting");
+
+                    connection.Disconnect(false);
+
+                    dealloc = false;
+                    headerSize = 0;
+                    return null;
+                }
+
                 // Increment the sequence number
                 _lastOutboundSequenceNumber++;
 
