@@ -456,6 +456,11 @@ namespace Ruffles.Core
                             RunChannelInternalUpdate();
                         }
 
+                        if (config.EnablePathMTU)
+                        {
+                            RunPathMTU();
+                        }
+
                         _lastTimeoutCheckRan = DateTime.Now;
                     }
                 }
@@ -478,6 +483,43 @@ namespace Ruffles.Core
                     {
                         connections[i].SendRaw(mergedPayload.Value, true, headerSize);
                     }
+                }
+            }
+        }
+
+        private void RunPathMTU()
+        {
+            for (int i = 0; i < connections.Length; i++)
+            {
+                if (connections[i] != null && !connections[i].Dead && connections[i].State == ConnectionState.Connected && 
+                    connections[i].MTU < config.MaximumMTU && connections[i].MTUStatus.Attempts < config.MaxMTUAttempts && (DateTime.Now - connections[i].MTUStatus.LastAttempt).TotalMilliseconds > config.MTUAttemptDelay)
+                {
+                    uint attemptedMtu = (uint)(connections[i].MTU * config.MTUGrowthFactor);
+
+                    if (attemptedMtu > config.MaximumMTU)
+                    {
+                        attemptedMtu = config.MaximumMTU;
+                    }
+
+                    if (attemptedMtu < config.MinimumMTU)
+                    {
+                        attemptedMtu = config.MinimumMTU;
+                    }
+
+                    connections[i].MTUStatus.Attempts++;
+                    connections[i].MTUStatus.LastAttempt = DateTime.Now;
+
+                    // Allocate memory
+                    HeapMemory memory = memoryManager.AllocHeapMemory((uint)attemptedMtu);
+
+                    // Set the header
+                    memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.MTURequest, false);
+
+                    // Send the request
+                    connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+
+                    // Dealloc the memory
+                    memoryManager.DeAlloc(memory);
                 }
             }
         }
@@ -1552,6 +1594,84 @@ namespace Ruffles.Core
                         else
                         {
                             if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Got unconnected message but SocketConfig.AllowUnconnectedMessages is disabled.");
+                        }
+                    }
+                    break;
+                case (byte)MessageType.MTURequest:
+                    {
+                        if (config.EnablePathMTU)
+                        {
+                            Connection connection = GetConnection(endpoint);
+
+                            if (connection != null)
+                            {
+                                // Alloc memory for response
+                                HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count);
+
+                                // Write the header
+                                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.MTUResponse, false);
+
+                                // Send the response
+                                connection.SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
+                            }
+                        }
+                        else
+                        {
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " connection could not be found");
+                        }
+                    }
+                    break;
+                case (byte)MessageType.MTUResponse:
+                    {
+                        if (config.EnablePathMTU)
+                        {
+                            Connection connection = GetConnection(endpoint);
+
+                            if (connection != null)
+                            {
+                                connection.IncomingPackets++;
+
+                                if (wirePacket)
+                                {
+                                    connection.IncomingWirePackets++;
+                                    connection.IncomingTotalBytes += (ulong)payload.Count;
+                                }
+
+                                // Calculate the new MTU
+                                uint attemptedMtu = (uint)(connection.MTU * config.MTUGrowthFactor);
+
+                                if (attemptedMtu > config.MaximumMTU)
+                                {
+                                    attemptedMtu = config.MaximumMTU;
+                                }
+
+                                if (attemptedMtu < config.MinimumMTU)
+                                {
+                                    attemptedMtu = config.MinimumMTU;
+                                }
+
+                                if (attemptedMtu == payload.Count)
+                                {
+                                    // This is a valid response
+
+                                    // Set new MTU
+                                    connection.MTU = (ushort)attemptedMtu;
+
+                                    // Set new status
+                                    connection.MTUStatus = new MessageStatus()
+                                    {
+                                        Attempts = 0,
+                                        HasAcked = false,
+                                        LastAttempt = DateTime.MinValue
+                                    };
+
+                                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " MTU was increased to " + connection.MTU);
+                                }
+                            }
+                            else
+                            {
+                                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " connection could not be found");
+                            }
                         }
                     }
                     break;

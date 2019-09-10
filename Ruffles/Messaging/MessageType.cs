@@ -12,6 +12,8 @@
         Disconnect,
         Ack,
         Merge,
-        UnconnectedData
+        UnconnectedData,
+        MTURequest,
+        MTUResponse
     }
 }

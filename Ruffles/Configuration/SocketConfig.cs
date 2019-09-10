@@ -96,6 +96,18 @@ namespace Ruffles.Configuration
         /// Whether or not to enable path MTU.
         /// </summary>
         public bool EnablePathMTU = true;
+        /// <summary>
+        /// The maximum amount of MTU requests to attempt.
+        /// </summary>
+        public byte MaxMTUAttempts = 8;
+        /// <summary>
+        /// The delay in milliseconds between MTU resend attempts.
+        /// </summary>
+        public ulong MTUAttemptDelay = 1000;
+        /// <summary>
+        /// The MTU growth factor.
+        /// </summary>
+        public float MTUGrowthFactor = 1.25f;
 
         /// <summary>
         /// The default size of fragment arrays.

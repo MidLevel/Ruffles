@@ -31,6 +31,10 @@ namespace Ruffles.Connections
         /// <value>The connection state.</value>
         public ConnectionState State { get; internal set; }
         internal MessageStatus HailStatus;
+
+        // MTU
+        internal MessageStatus MTUStatus;
+
         /// <summary>
         /// Gets the current connection end point.
         /// </summary>
@@ -188,6 +192,8 @@ namespace Ruffles.Connections
             EndPoint = null;
 
             HailStatus = new MessageStatus();
+
+            MTUStatus = new MessageStatus();
 
             ConnectionChallenge = 0;
             ChallengeDifficulty = 0;
