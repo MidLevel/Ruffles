@@ -378,7 +378,7 @@ namespace Ruffles.Channeling.Channels
                             connection.Disconnect(false);
                             return;
                         }
-                        else if ((DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.Roundtrip * config.ReliabilityResendRoundtripMultiplier)
+                        else if ((DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier)
                         {
                             _sendSequencer[i] = new PendingOutgoingPacket()
                             {

@@ -67,7 +67,7 @@ namespace Ruffles.Connections
         /// Gets the estimated roundtrip.
         /// </summary>
         /// <value>The estimated roundtrip.</value>
-        public double Roundtrip { get; internal set; } = 0;
+        public double SmoothRoundtrip { get; internal set; } = 0;
         /// <summary>
         /// Gets the total amount of outgoing packets. This counts merged packets as individual packets, rather than one merge packet.
         /// </summary>
@@ -207,8 +207,8 @@ namespace Ruffles.Connections
 
         internal void AddRoundtripSample(ulong sample)
         {
-            double rttDistance = sample - Roundtrip;
-            Roundtrip += (rttDistance * 0.1d);
+            double rttDistance = sample - SmoothRoundtrip;
+            SmoothRoundtrip += (rttDistance * 0.1d);
         }
 
         internal void Reset()
@@ -231,7 +231,7 @@ namespace Ruffles.Connections
             LastMessageIn = DateTime.MinValue;
             ConnectionStarted = DateTime.MinValue;
 
-            Roundtrip = 0;
+            SmoothRoundtrip = 0;
 
             MTU = 0;
 
@@ -275,11 +275,10 @@ namespace Ruffles.Connections
             }
         }
 
-#if DEBUG
+        // Used by Test project
         internal static Connection Stub(SocketConfig config, MemoryManager manager)
         {
             return new Connection(config, manager);
         }
-#endif
     }
 }

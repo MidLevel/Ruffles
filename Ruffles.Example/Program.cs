@@ -150,7 +150,7 @@ namespace Ruffles.Example
 
                 if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastStatusPrint).TotalSeconds >= 5)
                 {
-                    Console.WriteLine("Ping: " + serverConnection.Roundtrip + "ms, " + clientConnection.Roundtrip + "ms");
+                    Console.WriteLine("Ping: " + serverConnection.SmoothRoundtrip + "ms, " + clientConnection.SmoothRoundtrip + "ms");
                     lastStatusPrint = DateTime.Now;
                 }
             }

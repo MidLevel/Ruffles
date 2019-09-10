@@ -709,7 +709,7 @@ namespace Ruffles.Core
                                 // They have too high of a packet drop. Disconnect them
                                 DisconnectConnection(connections[i], false, true);
                             }
-                            else if (connections[i].Roundtrip > config.MaxRoundtripTime)
+                            else if (connections[i].SmoothRoundtrip > config.MaxRoundtripTime)
                             {
                                 // They have too high of a roundtrip time. Disconnect them
                                 DisconnectConnection(connections[i], false, true);
@@ -1861,7 +1861,7 @@ namespace Ruffles.Core
                         Channels = new IChannel[0],
                         ChannelTypes = new ChannelType[0],
                         HandshakeLastSendTime = DateTime.Now,
-                        Roundtrip = 0,
+                        SmoothRoundtrip = 0,
                         Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
                         MTU = config.MinimumMTU
                     };

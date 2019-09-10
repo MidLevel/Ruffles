@@ -214,7 +214,7 @@ namespace Ruffles.Channeling.Channels
                         connection.Disconnect(false);
                         return;
                     }
-                    else if ((DateTime.Now - _lastOutgoingPacket.LastSent).TotalMilliseconds > connection.Roundtrip * config.ReliabilityResendRoundtripMultiplier)
+                    else if ((DateTime.Now - _lastOutgoingPacket.LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier)
                     {
                         _lastOutgoingPacket = new PendingOutgoingPacket()
                         {
