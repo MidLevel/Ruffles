@@ -136,7 +136,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The maximum percentage of reliable packets that are allowed to be dropped before a connection times out.
         /// </summary>
-        public double MaxPacketLossPercentage = 0.6;
+        public double MaxPacketLossPercentage = 0.8;
         /// <summary>
         /// The maximum roundtrip time before a connection times out.
         /// </summary>
