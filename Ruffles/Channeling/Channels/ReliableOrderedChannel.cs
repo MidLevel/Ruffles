@@ -1,4 +1,5 @@
 ﻿using System;
+using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Memory;
@@ -31,6 +32,7 @@ namespace Ruffles.Channeling.Channels
 
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
+        private readonly SlidingWindow<DateTime> _lastAckTimes;
 
         // Outgoing sequencing
         private ushort _lastOutboundSequenceNumber;
@@ -61,6 +63,8 @@ namespace Ruffles.Channeling.Channels
                 Memory = null,
                 Sequence = 0
             };
+
+            _lastAckTimes = new SlidingWindow<DateTime>(config.ReliableAckFlowWindowSize, true, sizeof(ushort));
         }
 
         public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
@@ -260,22 +264,29 @@ namespace Ruffles.Channeling.Channels
 
         private void SendAck(ushort sequence)
         {
-            // Alloc ack memory
-            HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
+            // Check the last ack time
+            if ((DateTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier)
+            {
+                // Set the last ack time
+                _lastAckTimes[sequence] = DateTime.Now;
 
-            // Write header
-            ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
-            ackMemory.Buffer[1] = (byte)channelId;
+                // Alloc ack memory
+                HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
 
-            // Write sequence
-            ackMemory.Buffer[2] = (byte)sequence;
-            ackMemory.Buffer[3] = (byte)(sequence >> 8);
+                // Write header
+                ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
+                ackMemory.Buffer[1] = (byte)channelId;
 
-            // Send ack
-            connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false, 4);
+                // Write sequence
+                ackMemory.Buffer[2] = (byte)sequence;
+                ackMemory.Buffer[3] = (byte)(sequence >> 8);
 
-            // Return memory
-            memoryManager.DeAlloc(ackMemory);
+                // Send ack
+                connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false, 4);
+
+                // Return memory
+                memoryManager.DeAlloc(ackMemory);
+            }
         }
     }
 }

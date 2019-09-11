@@ -205,6 +205,10 @@ namespace Ruffles.Configuration
         /// </summary>
         public ushort ReliabilityWindowSize = 512;
         /// <summary>
+        /// The window size for last ack times.
+        /// </summary>
+        public ushort ReliableAckFlowWindowSize = 1024;
+        /// <summary>
         /// The maximum amount of resends reliable channels will attempt per packet before timing the connection out.
         /// </summary>
         public ulong ReliabilityMaxResendAttempts = 30;
