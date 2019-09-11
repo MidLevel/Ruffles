@@ -59,10 +59,6 @@ namespace Ruffles.Configuration
         /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.
         /// </summary>
         public bool ReuseConnections = true;
-        /// <summary>
-        /// Whether or not to pool pointer arrays. This is benefitial if your application is garbage critical.
-        /// </summary>
-        public bool PoolPointerArrays = true;
 
         // Bandwidth
         /// <summary>
