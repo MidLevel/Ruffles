@@ -32,9 +32,7 @@ namespace Ruffles.Channeling.Channels
             this.config = config;
         }
 
-        private readonly HeapMemory[] SINGLE_MESSAGE_ARRAY = new HeapMemory[1];
-
-        public object[] CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
+        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
         {
             if (payload.Count > connection.MTU)
             {
@@ -69,10 +67,13 @@ namespace Ruffles.Channeling.Channels
                 // Tell the caller to deallc the memory
                 dealloc = true;
 
-                // Assign memory
-                SINGLE_MESSAGE_ARRAY[0] = memory;
+                // Allocate pointers
+                HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
-                return SINGLE_MESSAGE_ARRAY;
+                // Point the first pointer to the memory
+                pointers.Pointers[pointers.VirtualOffset] = memory;
+
+                return pointers;
             }
         }
 

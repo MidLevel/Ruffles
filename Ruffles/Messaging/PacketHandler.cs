@@ -93,24 +93,27 @@ namespace Ruffles.Messaging
 
             lock (_memoryPointerLock)
             {
-                object[] messageMemory = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
+                HeapPointers memoryPointers = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
 
-                if (messageMemory != null)
+                if (memoryPointers != null)
                 {
-                    for (int i = 0; i < messageMemory.Length; i++)
+                    for (int i = 0; i < memoryPointers.VirtualCount; i++)
                     {
-                        connection.SendRaw(new ArraySegment<byte>(((HeapMemory)messageMemory[i]).Buffer, (int)((HeapMemory)messageMemory[i]).VirtualOffset, (int)((HeapMemory)messageMemory[i]).VirtualCount), noDelay, headerSize);
+                        connection.SendRaw(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noDelay, headerSize);
                     }
                 }
 
                 if (dealloc)
                 {
                     // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
-                    for (int i = 0; i < messageMemory.Length; i++)
+                    for (int i = 0; i < memoryPointers.VirtualCount; i++)
                     {
-                        memoryManager.DeAlloc(((HeapMemory)messageMemory[i]));
+                        memoryManager.DeAlloc(((HeapMemory)memoryPointers.Pointers[i]));
                     }
                 }
+
+                // Dealloc the array always.
+                memoryManager.DeAlloc(memoryPointers);
             }
         }
     }

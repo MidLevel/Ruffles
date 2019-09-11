@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Threading;
 using Ruffles.Collections;
 using Ruffles.Configuration;
@@ -8,7 +7,7 @@ using Ruffles.Utils;
 
 namespace Ruffles.Memory
 {
-    internal class MemoryManager : IDisposable
+    internal class MemoryManager
     {
         private int _createdHeapMemory = 0;
         private bool _hasWarnedAboutHeapMemoryLeaks = false;
@@ -19,8 +18,7 @@ namespace Ruffles.Memory
 
         private int _createdPointerArrays = 0;
         private bool _hasWarnedAboutPointerArrayLeaks = false;
-        private readonly object _pointerLock = new object();
-        private readonly List<object[]> _pooledPointerArrays = new List<object[]>();
+        private readonly ConcurrentQueue<HeapPointers> _pooledPointerArrays = new ConcurrentQueue<HeapPointers>();
 
         private const uint minPointerArraySize = 64;
         private const uint pointerArraySizeMultiple = 64;
@@ -48,59 +46,43 @@ namespace Ruffles.Memory
             _configuration = config;
         }
 
-        internal object[] AllocPointers(uint size)
+        internal HeapPointers AllocHeapPointers(uint size)
         {
             uint allocSize = Math.Max(minPointerArraySize, CalculateMultiple(size, pointerArraySizeMultiple));
 
-            if (!_configuration.PoolPointerArrays)
+            bool pooled;
+
+            if (!(pooled = _pooledPointerArrays.TryDequeue(out HeapPointers pointers)))
             {
-                return new object[allocSize];
-            }
-            else
-            {
-                lock (_pointerLock)
+                int createdHeapPointers = Interlocked.Increment(ref _createdPointerArrays);
+
+                if (createdHeapPointers >= 1024 && !_hasWarnedAboutPointerArrayLeaks)
                 {
-                    object[] pointers = null;
-
-                    if (_configuration.PoolPointerArrays)
-                    {
-                        for (int i = 0; i < _pooledPointerArrays.Count; i++)
-                        {
-                            if (_pooledPointerArrays[i].Length >= size)
-                            {
-                                pointers = _pooledPointerArrays[i];
-                                _pooledPointerArrays.RemoveAt(i);
-                                break;
-                            }
-                        }
-                    }
-
-                    if (pointers == null)
-                    {
-                        _createdPointerArrays++;
-
-                        if (_createdPointerArrays >= 1024 && !_hasWarnedAboutPointerArrayLeaks)
-                        {
-                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [POINTERS ARRAYS]");
-                            _hasWarnedAboutPointerArrayLeaks = true;
-                        }
-
-                        if (_pooledPointerArrays.Count > 0)
-                        {
-                            // Delete this one for expansion.
-                            _pooledPointerArrays.RemoveAt(0);
-                        }
-
-                        pointers = new object[allocSize];
-                    }
-                    else
-                    {
-                        Array.Clear(pointers, 0, pointers.Length);
-                    }
-
-                    return pointers;
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP POINTERS]");
+                    _hasWarnedAboutPointerArrayLeaks = true;
                 }
+
+                pointers = new HeapPointers(allocSize);
             }
+
+            pointers.EnsureSize(allocSize);
+
+            pointers.isDead = false;
+            pointers.VirtualCount = size;
+            pointers.VirtualOffset = 0;
+
+            if (pooled)
+            {
+                // If we got one from the pool, we need to clear it
+                Array.Clear(pointers.Pointers, 0, pointers.Pointers.Length);
+            }
+
+#if DEBUG
+            // The allocation stacktrace allows us to see where the alloc occured that caused the leak
+            pointers.allocStacktrace = Environment.StackTrace;
+#endif
+
+            return pointers;
         }
 
         internal HeapMemory AllocHeapMemory(uint size)
@@ -131,7 +113,7 @@ namespace Ruffles.Memory
             if (pooled)
             {
                 // If we got one from the pool, we need to clear it
-                Array.Clear(memory.Buffer, 0, (int)size);
+                Array.Clear(memory.Buffer, 0, memory.Buffer.Length);
             }
 
 #if DEBUG
@@ -156,23 +138,18 @@ namespace Ruffles.Memory
             _pooledHeapMemory.Enqueue(memory);
         }
 
-        internal void DeAlloc(object[] pointers)
+        internal void DeAlloc(HeapPointers pointers)
         {
-            if (_configuration.PoolPointerArrays)
+            if (pointers.isDead)
             {
-                lock (_pointerLock)
-                {
-                    _pooledPointerArrays.Add(pointers);
-                }
+                throw new MemoryException("Cannot deallocate already dead memory");
             }
-        }
 
-        public void Dispose()
-        {
-            lock (_pointerLock)
-            {
-                _pooledPointerArrays.Clear();
-            }
+            pointers.isDead = true;
+            pointers.VirtualOffset = 0;
+            pointers.VirtualCount = 0;
+
+            _pooledPointerArrays.Enqueue(pointers);
         }
     }
 }

@@ -110,10 +110,6 @@ namespace Ruffles.Configuration
         public double MTUGrowthFactor = 1.25;
 
         /// <summary>
-        /// The default size of fragment arrays.
-        /// </summary>
-        public ushort FragmentArrayBaseSize = 64;
-        /// <summary>
         /// The maximum amount of fragments allowed to be used.
         /// </summary>
         public ushort MaxFragments = 512;
