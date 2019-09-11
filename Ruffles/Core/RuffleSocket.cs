@@ -65,7 +65,12 @@ namespace Ruffles.Core
 
         private readonly MemoryManager memoryManager;
 
-        private readonly Thread _networkThread;
+        private Thread _networkThread;
+
+        public bool IsRunning { get; private set; }
+        public bool IsTerminated { get; private set; }
+
+        private bool _initialized;
 
         public RuffleSocket(SocketConfig config)
         {
@@ -108,27 +113,92 @@ namespace Ruffles.Core
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
             memoryManager = new MemoryManager(config);
+        }
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Binding socket");
-            bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
-
-            if (!bindSuccess)
+        /// <summary>
+        /// Starts the socket.
+        /// </summary>
+        public bool Start()
+        {
+            if (IsRunning)
             {
-                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to bind socket");
-            }
-            else
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
+                throw new InvalidOperationException("Socket already started");
             }
 
+            if (!_initialized)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Binding socket");
+                bool bindSuccess = Bind(config.IPv4ListenAddress, config.IPv6ListenAddress, config.DualListenPort, config.UseIPv6Dual);
+
+                if (!bindSuccess)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to bind socket");
+                    return false;
+                }
+                else
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
+                    _initialized = true;
+                }
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting networking thread");
+
+            // Create network thread
             _networkThread = new Thread(StartNetworkLogic)
             {
                 Name = "NetworkThread",
                 IsBackground = true
             };
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting networking thread");
+            // Set running state to true
+            IsRunning = true;
+
+            // Start network thread
             _networkThread.Start();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Stops the socket.
+        /// </summary>
+        public void Stop()
+        {
+            if (IsRunning)
+            {
+                throw new InvalidOperationException("Cannot stop a non running socket");
+            }
+
+            // Disconnect all clients
+            for (int i = 0; i < connections.Length; i++)
+            {
+                if (!connections[i].Dead && connections[i].State != ConnectionState.Disconnected)
+                {
+                    connections[i].Disconnect(true);
+                }
+            }
+
+            IsRunning = false;
+            _networkThread.Join();
+        }
+
+        /// <summary>
+        /// Shuts the socket down.
+        /// </summary>
+        public void Shutdown()
+        {
+            if (!_initialized)
+            {
+                throw new InvalidOperationException("Cannot shutdown a non initialized socket");
+            }
+
+            IsTerminated = true;
+            _initialized = false;
+
+            Stop();
+            ipv4Socket.Close();
+            ipv6Socket.Close();
         }
 
         private bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool ipv6Dual)
@@ -417,7 +487,7 @@ namespace Ruffles.Core
 
         private void StartNetworkLogic()
         {
-            while (true)
+            while (IsRunning)
             {
                 try
                 {

@@ -53,6 +53,9 @@ namespace Ruffles.Example
 
             RuffleSocket client = new RuffleSocket(ClientConfig);
 
+            client.Start();
+            server.Start();
+
             if (IPv6)
             {
                 // IPv6 Connect
