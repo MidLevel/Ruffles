@@ -704,14 +704,16 @@ namespace Ruffles.Core
                         {
                             // They are no longer covered by connection quality grace. Check their ping and packet loss
 
-                            if ((1 - (double)connections[i].OutgoingConfirmedPackets / connections[i].OutgoingResentPackets) > config.MaxPacketLossPercentage)
+                            if ((connections[i].OutgoingConfirmedPackets > 128 || connections[i].OutgoingResentPackets > 128) && (1 - (double)connections[i].OutgoingConfirmedPackets / connections[i].OutgoingResentPackets) > config.MaxPacketLossPercentage)
                             {
                                 // They have too high of a packet drop. Disconnect them
+                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because their packetLoss is too large. [OCP=" + connections[i].OutgoingConfirmedPackets + "] [ORP=" + connections[i].OutgoingResentPackets + "]");
                                 DisconnectConnection(connections[i], false, true);
                             }
                             else if (connections[i].SmoothRoundtrip > config.MaxRoundtripTime)
                             {
                                 // They have too high of a roundtrip time. Disconnect them
+                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because their roundTripTime is too large. [SRTT=" + connections[i].SmoothRoundtrip + "] [RTT=" + connections[i].Roundtrip + "]");
                                 DisconnectConnection(connections[i], false, true);
                             }
                         }
@@ -1861,9 +1863,13 @@ namespace Ruffles.Core
                         Channels = new IChannel[0],
                         ChannelTypes = new ChannelType[0],
                         HandshakeLastSendTime = DateTime.Now,
-                        SmoothRoundtrip = 0,
                         Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
-                        MTU = config.MinimumMTU
+                        MTU = config.MinimumMTU,
+                        SmoothRoundtrip = 0,
+                        RoundtripVarience = 0,
+                        HighestRoundtripVarience = 0,
+                        Roundtrip = 500,
+                        LowestRoundtrip = 500
                     };
 
                     // Make sure the array is not null

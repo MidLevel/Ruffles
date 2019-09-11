@@ -66,10 +66,31 @@ namespace Ruffles.Connections
         /// <value>The time the connection started.</value>
         public DateTime ConnectionStarted { get; internal set; }
         /// <summary>
-        /// Gets the estimated roundtrip.
+        /// Gets the estimated smoothed roundtrip.
         /// </summary>
-        /// <value>The estimated roundtrip.</value>
-        public double SmoothRoundtrip { get; internal set; } = 0;
+        /// <value>The estimated smoothed roundtrip.</value>
+        public uint SmoothRoundtrip { get; internal set; }
+        /// <summary>
+        /// Gets the mean roundtrip.
+        /// </summary>
+        /// <value>The roundtrip.</value>
+        public uint Roundtrip { get; internal set; }
+        /// <summary>
+        /// Gets the roundtrip varience.
+        /// </summary>
+        /// <value>The roundtrip varience.</value>
+        public uint RoundtripVarience { get; internal set; }
+        /// <summary>
+        /// Gets the lowest roundtrip time recorded.
+        /// </summary>
+        /// <value>The lowest roundtrip.</value>
+        public uint LowestRoundtrip { get; internal set; }
+        /// <summary>
+        /// Gets the highest roundtrip varience recorded.
+        /// </summary>
+        /// <value>The highest roundtrip varience.</value>
+        public uint HighestRoundtripVarience { get; internal set; }
+
         /// <summary>
         /// Gets the total amount of outgoing packets. This counts merged packets as individual packets, rather than one merge packet.
         /// </summary>
@@ -230,8 +251,42 @@ namespace Ruffles.Connections
 
         internal void AddRoundtripSample(ulong sample)
         {
-            double rttDistance = sample - SmoothRoundtrip;
-            SmoothRoundtrip += (rttDistance * 0.1d);
+            if (sample == 0)
+            {
+                sample = 1;
+            }
+
+            if (SmoothRoundtrip == 0)
+            {
+                SmoothRoundtrip = (uint)((1 - 0.125) + 0.125 * sample);
+            }
+            else
+            {
+                SmoothRoundtrip = (uint)((1 - 0.125) * SmoothRoundtrip + 0.125 * sample);
+            }
+
+            RoundtripVarience -= (RoundtripVarience / 4);
+
+            if (SmoothRoundtrip >= Roundtrip)
+            {
+                Roundtrip += (SmoothRoundtrip - Roundtrip) / 8;
+                RoundtripVarience += (SmoothRoundtrip - Roundtrip) / 4;
+            }
+            else
+            {
+                Roundtrip -= (Roundtrip - SmoothRoundtrip) / 8;
+                RoundtripVarience += (Roundtrip - SmoothRoundtrip) / 4;
+            }
+
+            if (Roundtrip < LowestRoundtrip)
+            {
+                LowestRoundtrip = Roundtrip;
+            }
+
+            if (RoundtripVarience > HighestRoundtripVarience)
+            {
+                HighestRoundtripVarience = RoundtripVarience;
+            }
         }
 
         internal void Reset()
@@ -255,6 +310,10 @@ namespace Ruffles.Connections
             ConnectionStarted = DateTime.MinValue;
 
             SmoothRoundtrip = 0;
+            Roundtrip = 500;
+            LowestRoundtrip = 500;
+            RoundtripVarience = 0;
+            HighestRoundtripVarience = 0;
 
             MTU = 0;
 
