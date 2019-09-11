@@ -67,10 +67,44 @@ namespace Ruffles.Core
 
         private Thread _networkThread;
 
+        private bool _initialized;
+
         public bool IsRunning { get; private set; }
         public bool IsTerminated { get; private set; }
 
-        private bool _initialized;
+        /// <summary>
+        /// Gets the local IPv4 listening endpoint.
+        /// </summary>
+        /// <value>The local IPv4 endpoint.</value>
+        public EndPoint LocalIPv4EndPoint
+        {
+            get
+            {
+                if (ipv4Socket == null)
+                {
+                    return new IPEndPoint(IPAddress.Any, 0);
+                }
+
+                return ipv4Socket.LocalEndPoint;
+            }
+        }
+
+        /// <summary>
+        /// Gets the local IPv6 listening endpoint.
+        /// </summary>
+        /// <value>The local IPv6 endpoint.</value>
+        public EndPoint LocalIPv6EndPoint
+        {
+            get
+            {
+                if (ipv6Socket == null)
+                {
+                    return new IPEndPoint(IPAddress.IPv6Any, 0);
+                }
+
+                return ipv6Socket.LocalEndPoint;
+            }
+        }
 
         public RuffleSocket(SocketConfig config)
         {
