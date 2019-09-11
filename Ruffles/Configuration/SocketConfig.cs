@@ -34,7 +34,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The port that will be used to listen on both IPv4 and IPv6 if UseDualMode is turned on.
         /// </summary>
-        public ushort DualListenPort = 5674;
+        public ushort DualListenPort = 0;
         /// <summary>
         /// Whether or not the socket will listen on IPv4 and IPv6 in dual mode on the same port.
         /// </summary>
