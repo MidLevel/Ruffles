@@ -704,7 +704,7 @@ namespace Ruffles.Core
                         {
                             // They are no longer covered by connection quality grace. Check their ping and packet loss
 
-                            if ((double)connections[i].OutgoingResentPackets / connections[i].OutgoingResentPackets > config.MaxPacketLossPercentage)
+                            if ((1 - (double)connections[i].OutgoingConfirmedPackets / connections[i].OutgoingResentPackets) > config.MaxPacketLossPercentage)
                             {
                                 // They have too high of a packet drop. Disconnect them
                                 DisconnectConnection(connections[i], false, true);
