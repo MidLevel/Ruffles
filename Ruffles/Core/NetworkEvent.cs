@@ -52,14 +52,17 @@ namespace Ruffles.Core
         /// </summary>
         public void Recycle()
         {
-            if (InternalMemory != null)
+            if (InternalMemory != null && MemoryManager != null)
             {
-                if (!AllowUserRecycle)
+                if (AllowUserRecycle)
                 {
-                    throw new MemoryException("Cannot deallocate non recyclable memory");
+                    MemoryManager.DeAlloc(InternalMemory);
                 }
+            }
 
-                MemoryManager.DeAlloc(InternalMemory);
+            if (Connection != null && Connection.Dead && !Connection.Recycled)
+            {
+                Connection.Recycled = true;
             }
         }
     }

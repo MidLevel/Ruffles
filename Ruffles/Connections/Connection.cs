@@ -346,17 +346,6 @@ namespace Ruffles.Connections
 
         }
 
-        /// <summary>
-        /// Recycle this connection so that it can be reused by Ruffles.
-        /// </summary>
-        public void Recycle()
-        {
-            if (Dead && !Recycled)
-            {
-                Recycled = true;
-            }
-        }
-
 #if ALLOW_CONNECTION_STUB
         private bool IsStub { get; set; }
 
