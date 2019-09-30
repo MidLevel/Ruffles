@@ -47,13 +47,8 @@ namespace Ruffles.Configuration
         // Performance
         /// <summary>
         /// The max socket block time in milliseconds. This will affect how long the internal loop will block.
-        /// The amount is double for dual mode sockets.
         /// </summary>
-        public ushort MaxSocketBlockMilliseconds = 5;
-        /// <summary>
-        /// The minimum delay for running the internal resend and timeout logic.
-        /// </summary>
-        public ulong MinConnectionPollDelay = 50;
+        public ushort SocketPollTime = 50;
         /// <summary>
         /// Whether or not to reuse connections. Disabling this has a impact on memory and CPU.
         /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -516,56 +517,47 @@ namespace Ruffles.Core
             return false;
         }
 
-
-        private DateTime _lastTimeoutCheckRan = DateTime.MinValue;
-
         private void StartNetworkLogic()
         {
             while (IsRunning)
             {
                 try
                 {
-                    InternalPollSocket();
+                    InternalPollSocket(config.SocketPollTime);
 
                     if (simulator != null)
                     {
                         simulator.RunLoop();
                     }
 
-                    // Run timeout loop once every ConnectionPollDelay ms
-                    if ((DateTime.Now - _lastTimeoutCheckRan).TotalMilliseconds >= config.MinConnectionPollDelay)
+                    if (config.EnablePacketMerging)
                     {
-                        if (config.EnablePacketMerging)
-                        {
-                            CheckMergedPackets();
-                        }
+                        CheckMergedPackets();
+                    }
 
-                        if (config.EnableTimeouts)
-                        {
-                            CheckConnectionTimeouts();
-                        }
+                    if (config.EnableTimeouts)
+                    {
+                        CheckConnectionTimeouts();
+                    }
 
-                        if (config.EnableHeartbeats)
-                        {
-                            CheckConnectionHeartbeats();
-                        }
+                    if (config.EnableHeartbeats)
+                    {
+                        CheckConnectionHeartbeats();
+                    }
 
-                        if (config.EnableConnectionRequestResends)
-                        {
-                            CheckConnectionResends();
-                        }
+                    if (config.EnableConnectionRequestResends)
+                    {
+                        CheckConnectionResends();
+                    }
 
-                        if (config.EnableChannelUpdates)
-                        {
-                            RunChannelInternalUpdate();
-                        }
+                    if (config.EnableChannelUpdates)
+                    {
+                        RunChannelInternalUpdate();
+                    }
 
-                        if (config.EnablePathMTU)
-                        {
-                            RunPathMTU();
-                        }
-
-                        _lastTimeoutCheckRan = DateTime.Now;
+                    if (config.EnablePathMTU)
+                    {
+                        RunPathMTU();
                     }
                 }
                 catch (Exception e)
@@ -853,40 +845,49 @@ namespace Ruffles.Core
         private EndPoint _fromIPv6Endpoint = new IPEndPoint(IPAddress.IPv6Any, 0);
 
         private readonly List<Socket> _selectSockets = new List<Socket>();
-        private void InternalPollSocket()
+        private readonly Stopwatch _selectWatch = new Stopwatch();
+        private void InternalPollSocket(int ms)
         {
-            _selectSockets.Clear();
+            _selectWatch.Reset();
+            _selectWatch.Start();
 
-            if (ipv4Socket != null)
+            do
             {
-                _selectSockets.Add(ipv4Socket);
-            }
+                _selectSockets.Clear();
 
-            if (ipv6Socket != null)
-            {
-                _selectSockets.Add(ipv6Socket);
-            }
-
-            // Check what sockets have data
-            Socket.Select(_selectSockets, null, null, config.MaxSocketBlockMilliseconds * 1000);
-
-            // Iterate the sockets with data
-            for (int i = 0; i < _selectSockets.Count; i++)
-            {
-                try
+                if (ipv4Socket != null)
                 {
-                    // Get a endpoint reference
-                    EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
-
-                    int size = _selectSockets[i].ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _endpoint);
-
-                    HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint);
+                    _selectSockets.Add(ipv4Socket);
                 }
-                catch (Exception e)
+
+                if (ipv6Socket != null)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                    _selectSockets.Add(ipv6Socket);
                 }
-            }
+
+                // Check what sockets have data
+                Socket.Select(_selectSockets, null, null, (ms - (int)_selectWatch.ElapsedMilliseconds) * 1000);
+
+                // Iterate the sockets with data
+                for (int i = 0; i < _selectSockets.Count; i++)
+                {
+                    try
+                    {
+                        // Get a endpoint reference
+                        EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
+
+                        int size = _selectSockets[i].ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _endpoint);
+
+                        HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint);
+                    }
+                    catch (Exception e)
+                    {
+                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                    }
+                }
+            } while (_selectWatch.ElapsedMilliseconds < ms);
+
+            _selectWatch.Stop();
         }
 
         /// <summary>

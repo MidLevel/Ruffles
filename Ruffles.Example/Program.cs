@@ -108,12 +108,9 @@ namespace Ruffles.Example
                         clientId = serverEvent.Connection.Id;
                         clientConnection = serverEvent.Connection;
                     }
-
-                    if (serverEvent.Type == NetworkEventType.Disconnect || serverEvent.Type == NetworkEventType.Timeout)
-                    {
-                        serverEvent.Connection.Recycle();
-                    }
                 }
+
+                serverEvent.Recycle();
 
                 if (clientEvent.Type != NetworkEventType.Nothing)
                 {
@@ -132,14 +129,10 @@ namespace Ruffles.Example
                     {
                         messagesReceived++;
                         Console.WriteLine("Got message: \"" + Encoding.ASCII.GetString(clientEvent.Data.Array, clientEvent.Data.Offset, clientEvent.Data.Count) + "\"");
-                        clientEvent.Recycle();
-                    }
-
-                    if (clientEvent.Type == NetworkEventType.Disconnect || clientEvent.Type == NetworkEventType.Timeout)
-                    {
-                        clientEvent.Connection.Recycle();
                     }
                 }
+
+                clientEvent.Recycle();
 
                 if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
                 {
