@@ -200,7 +200,7 @@ namespace Ruffles.Core
         /// </summary>
         public void Stop()
         {
-            if (IsRunning)
+            if (!IsRunning)
             {
                 throw new InvalidOperationException("Cannot stop a non running socket");
             }
