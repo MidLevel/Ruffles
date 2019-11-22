@@ -452,13 +452,16 @@ namespace Ruffles.Core
                     }
                     while ((hash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty) != 0);
 
-                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts");
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts. [Counter=" + (counter - 1) + "] [IV=" + iv + "] [Time=" + unixTimestamp + "] [Hash=" + hash + "]");
 
                     // Make counter 1 less
                     counter--;
 
                     // Save for resends
                     connection.PreConnectionChallengeCounter = counter;
+
+                    // Mark it as solved (for resending)
+                    connection.PreConnectionChallengeSolved = true;
 
                     // Write counter
                     for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
@@ -645,7 +648,7 @@ namespace Ruffles.Core
                 {
                     if (connections[i].State == ConnectionState.RequestingConnection)
                     {
-                        if ((DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.ConnectionRequestMinResendDelay && connections[i].HandshakeResendAttempts < config.MaxConnectionRequestResends)
+                        if ((!config.TimeBasedConnectionChallenge || connections[i].PreConnectionChallengeSolved) && (DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.ConnectionRequestMinResendDelay && connections[i].HandshakeResendAttempts < config.MaxConnectionRequestResends)
                         {
                             connections[i].HandshakeResendAttempts++;
                             connections[i].HandshakeLastSendTime = DateTime.Now;
@@ -672,9 +675,15 @@ namespace Ruffles.Core
 
                                 // Write IV
                                 for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(connections[i].PreConnectionChallengeIV >> (x * 8)));
+
+                                // Print debug
+                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest with challenge [Counter=" + connections[i].PreConnectionChallengeCounter + "] [IV=" + connections[i].PreConnectionChallengeIV + "] [Time=" + connections[i].PreConnectionChallengeTimestamp + "] [Hash=" + HashProvider.GetStableHash64(connections[i].PreConnectionChallengeTimestamp, connections[i].PreConnectionChallengeCounter, connections[i].PreConnectionChallengeIV) + "]");
                             }
-
-
+                            else
+                            {
+                                // Print debug
+                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest");
+                            }
 
                             connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
 
@@ -703,7 +712,10 @@ namespace Ruffles.Core
 
                             // Write the connection difficulty
                             memory.Buffer[1 + sizeof(ulong)] = connections[i].ChallengeDifficulty;
-                            
+
+                            // Print debug
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ChallengeRequest");
+
                             // Send the challenge
                             connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
 
@@ -732,7 +744,10 @@ namespace Ruffles.Core
 
                             // Write the challenge response
                             for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + x] = ((byte)(connections[i].ChallengeAnswer >> (x * 8)));
-                            
+
+                            // Print debug
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ChallengeResponse");
+
                             // Send the challenge response
                             connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
 
@@ -764,6 +779,9 @@ namespace Ruffles.Core
                             {
                                 memory.Buffer[2 + x] = (byte)config.ChannelTypes[x];
                             }
+
+                            // Print debug
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending Hail");
 
                             connections[i].SendRaw(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true, (ushort)memory.VirtualCount);
 
@@ -1099,7 +1117,7 @@ namespace Ruffles.Core
                             if (!isCollided)
                             {
                                 // They failed the challenge
-                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They submitted an invalid answer");
+                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They submitted an invalid answer. [ClaimedHash=" + claimedHash + "] [Counter=" + counter + "] [IV=" + userIv + "] [Time=" + challengeUnixTime + "]");
                                 return;
                             }
 
@@ -1229,7 +1247,7 @@ namespace Ruffles.Core
                             // Release memory
                             memoryManager.DeAlloc(memory);
 
-                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Server " + endpoint + " challenge of difficulty " + connection.ChallengeDifficulty + " was solved. Answer was sent");
+                            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Server " + endpoint + " challenge of difficulty " + connection.ChallengeDifficulty + " was solved. Answer was sent. [CollidedValue=" + collidedValue + "]");
                         }
                     }
                     break;

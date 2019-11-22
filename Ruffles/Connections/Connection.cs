@@ -203,6 +203,7 @@ namespace Ruffles.Connections
         // Pre connection challenge values
         internal ulong PreConnectionChallengeTimestamp;
         internal ulong PreConnectionChallengeCounter;
+        internal bool PreConnectionChallengeSolved;
         internal ulong PreConnectionChallengeIV;
 
 
@@ -326,6 +327,7 @@ namespace Ruffles.Connections
             PreConnectionChallengeTimestamp = 0;
             PreConnectionChallengeCounter = 0;
             PreConnectionChallengeIV = 0;
+            PreConnectionChallengeSolved = false;
 
             OutgoingPackets = 0;
             OutgoingWirePackets = 0;
