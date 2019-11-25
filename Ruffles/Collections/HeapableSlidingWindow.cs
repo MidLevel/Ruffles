@@ -62,6 +62,12 @@ namespace Ruffles.Collections
                         {
                             int resetArrayIndex = NumberUtils.WrapMod(((int) _lastHighestSequence + index + i), _array.Length);
                             _indexes[resetArrayIndex] = ((int) _lastHighestSequence + index + i);
+
+                            if (_array[resetArrayIndex] != null && _array[resetArrayIndex].IsAlloced)
+                            {
+                                _array[resetArrayIndex].DeAlloc(_memoryManager);
+                            }
+
                             _array[resetArrayIndex] = default(T);
                         }
 
