@@ -200,7 +200,7 @@ namespace Ruffles.Core
         /// </summary>
         public void Stop()
         {
-            if (IsRunning)
+            if (!IsRunning)
             {
                 throw new InvalidOperationException("Cannot stop a non running socket");
             }
@@ -208,7 +208,7 @@ namespace Ruffles.Core
             // Disconnect all clients
             for (int i = 0; i < connections.Length; i++)
             {
-                if (!connections[i].Dead && connections[i].State != ConnectionState.Disconnected)
+                if (connections[i] != null && !connections[i].Dead && connections[i].State != ConnectionState.Disconnected)
                 {
                     connections[i].Disconnect(true);
                 }
@@ -231,7 +231,11 @@ namespace Ruffles.Core
             IsTerminated = true;
             _initialized = false;
 
-            Stop();
+            if (IsRunning)
+            {
+                Stop();
+            }
+
             ipv4Socket.Close();
             ipv6Socket.Close();
         }
