@@ -33,14 +33,23 @@ namespace Ruffles.Core
 
         internal void PublishEvent(NetworkEvent @event)
         {
+            bool delivered = false;
+
             if (config.EnablePollEvents)
             {
+                delivered = true;
                 userEventQueue.Enqueue(@event);
             }
 
             if (config.EnableCallbackEvents && OnNetworkEvent != null)
             {
+                delivered = true;
                 OnNetworkEvent(@event);
+            }
+
+            if (!delivered)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Unable to deliver event. Make sure you have PollEvents enabled and/or CallbackEvents enabled with a registered handler");
             }
         }
 
