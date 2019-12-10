@@ -58,6 +58,9 @@ namespace Ruffles.Core
         private readonly Dictionary<EndPoint, Connection> addressConnectionLookup = new Dictionary<EndPoint, Connection>();
         private readonly Dictionary<EndPoint, Connection> addressPendingConnectionLookup = new Dictionary<EndPoint, Connection>();
 
+        // Lock for adding or removing connections. This is done to allow for a quick ref to be gained on the user thread when connecting.
+        private readonly object connectionAddRemoveLock = new object();
+
         // TODO: Removed hardcoded size
         private readonly ConcurrentCircularQueue<NetworkEvent> userEventQueue;
 
@@ -407,6 +410,8 @@ namespace Ruffles.Core
 
         /// <summary>
         /// Starts a connection to a endpoint.
+        /// This does the connection logic on the calling thread. NOT the network thread. 
+        /// If you have a high security connection, the solver will run on the caller thread.
         /// </summary>
         /// <returns>The pending connection.</returns>
         /// <param name="endpoint">The endpoint to connect to.</param>
@@ -1854,36 +1859,48 @@ namespace Ruffles.Core
 
         internal void ConnectPendingConnection(Connection connection)
         {
-            // Remove it from pending
-            addressPendingConnectionLookup.Remove(connection.EndPoint);
-            addressConnectionLookup.Add(connection.EndPoint, connection);
+            // Lock to prevent modifying a half dead connection
+            lock (connectionAddRemoveLock)
+            {
+                // Remove it from pending
+                addressPendingConnectionLookup.Remove(connection.EndPoint);
+                addressConnectionLookup.Add(connection.EndPoint, connection);
 
-            connection.State = ConnectionState.Connected;
+                connection.State = ConnectionState.Connected;
 
-            pendingConnections++;
+                pendingConnections++;
+            }
         }
 
         internal Connection GetPendingConnection(EndPoint endpoint)
         {
-            if (addressPendingConnectionLookup.ContainsKey(endpoint))
+            // Lock to prevent grabbing a half dead connection
+            lock (connectionAddRemoveLock)
             {
-                return addressPendingConnectionLookup[endpoint];
-            }
-            else
-            {
-                return null;
+                if (addressPendingConnectionLookup.ContainsKey(endpoint))
+                {
+                    return addressPendingConnectionLookup[endpoint];
+                }
+                else
+                {
+                    return null;
+                }
             }
         }
 
         internal Connection GetConnection(EndPoint endpoint)
         {
-            if (addressConnectionLookup.ContainsKey(endpoint))
+            // Lock to prevent grabbing a half dead connection
+            lock (connectionAddRemoveLock)
             {
-                return addressConnectionLookup[endpoint];
-            }
-            else
-            {
-                return null;
+                if (addressConnectionLookup.ContainsKey(endpoint))
+                {
+                    return addressConnectionLookup[endpoint];
+                }
+                else
+                {
+                    return null;
+                }
             }
         }
 
@@ -1906,219 +1923,227 @@ namespace Ruffles.Core
                 memoryManager.DeAlloc(memory);
             }
 
-            if (config.ReuseConnections)
+            // Lock when removing the connection to prevent another thread grabbing it before its fully dead.
+            lock (connectionAddRemoveLock)
             {
-                // Mark as dead, this will allow it to be reclaimed
-                connection.Dead = true;
-
-                // Reset all channels, releasing memory etc
-                for (int i = 0; i < connection.Channels.Length; i++)
+                if (config.ReuseConnections)
                 {
-                    connection.Channels[i].Reset();
+                    // Reset all channels, releasing memory etc
+                    for (int i = 0; i < connection.Channels.Length; i++)
+                    {
+                        connection.Channels[i].Reset();
+                    }
+
+                    if (config.EnableHeartbeats)
+                    {
+                        // Release all memory from the heartbeat channel
+                        connection.HeartbeatChannel.Reset();
+                    }
+
+                    if (config.EnablePacketMerging)
+                    {
+                        // Clean the merger
+                        connection.Merger.Clear();
+                    }
+
+                    // Mark as dead, this will allow it to be reclaimed. (Note: do this last to prevent it being grabbed before its cleaned up)
+                    connection.Dead = true;
+                }
+                else
+                {
+                    // Release to GC unless user has a hold of it
+                    connections[connection.Id] = null;
                 }
 
-                if (config.EnableHeartbeats)
+                // Remove connection lookups
+                if (connection.State != ConnectionState.Connected)
                 {
-                    // Release all memory from the heartbeat channel
-                    connection.HeartbeatChannel.Reset();
+                    addressPendingConnectionLookup.Remove(connection.EndPoint);
+
+                    pendingConnections--;
+                }
+                else
+                {
+                    addressConnectionLookup.Remove(connection.EndPoint);
                 }
 
-                if (config.EnablePacketMerging)
+                // Set the state to disconnected
+                connection.State = ConnectionState.Disconnected;
+
+                // Send disconnect to userspace
+                PublishEvent(new NetworkEvent()
                 {
-                    // Clean the merger
-                    connection.Merger.Clear();
-                }
+                    Connection = connection,
+                    Socket = this,
+                    Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect,
+                    AllowUserRecycle = false,
+                    ChannelId = 0,
+                    Data = new ArraySegment<byte>(),
+                    InternalMemory = null,
+                    SocketReceiveTime = DateTime.Now,
+                    MemoryManager = memoryManager
+                });
             }
-            else
-            {
-                // Release to GC unless user has a hold of it
-                connections[connection.Id] = null;
-            }
-
-            // Remove connection lookups
-            if (connection.State != ConnectionState.Connected)
-            {
-                addressPendingConnectionLookup.Remove(connection.EndPoint);
-
-                pendingConnections--;
-            }
-            else
-            {
-                addressConnectionLookup.Remove(connection.EndPoint);
-            }
-
-            // Set the state to disconnected
-            connection.State = ConnectionState.Disconnected;
-
-            // Send disconnect to userspace
-            PublishEvent(new NetworkEvent()
-            {
-                Connection = connection,
-                Socket = this,
-                Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect,
-                AllowUserRecycle = false,
-                ChannelId = 0,
-                Data = new ArraySegment<byte>(),
-                InternalMemory = null,
-                SocketReceiveTime = DateTime.Now,
-                MemoryManager = memoryManager
-            });
         }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
         {
-            // Make sure they are not already connected to prevent an attack where a single person can fill all the slots.
-            if (addressPendingConnectionLookup.ContainsKey(endpoint) || addressConnectionLookup.ContainsKey(endpoint) || pendingConnections > config.MaxPendingConnections)
+            // Lock when adding connection to prevent grabbing a half alive connection.
+            lock (connectionAddRemoveLock)
             {
-                return null;
-            }
-
-            Connection connection = null;
-
-            for (ushort i = 0; i < connections.Length; i++)
-            {
-                if (connections[i] == null)
+                // Make sure they are not already connected to prevent an attack where a single person can fill all the slots.
+                if (addressPendingConnectionLookup.ContainsKey(endpoint) || addressConnectionLookup.ContainsKey(endpoint) || pendingConnections > config.MaxPendingConnections)
                 {
-                    // Alloc on the heap
-                    connection = new Connection(config, memoryManager)
-                    {
-                        Dead = false,
-                        Recycled = false,
-                        Id = i,
-                        State = state,
-                        HailStatus = new MessageStatus(),
-                        Socket = this,
-                        EndPoint = endpoint,
-                        ConnectionChallenge = RandomProvider.GetRandomULong(),
-                        ChallengeDifficulty = config.ChallengeDifficulty,
-                        LastMessageIn = DateTime.Now,
-                        LastMessageOut = DateTime.Now,
-                        ConnectionStarted = DateTime.Now,
-                        HandshakeResendAttempts = 0,
-                        ChallengeAnswer = 0,
-                        Channels = new IChannel[0],
-                        ChannelTypes = new ChannelType[0],
-                        HandshakeLastSendTime = DateTime.Now,
-                        Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
-                        MTU = config.MinimumMTU,
-                        SmoothRoundtrip = 0,
-                        RoundtripVarience = 0,
-                        HighestRoundtripVarience = 0,
-                        Roundtrip = 500,
-                        LowestRoundtrip = 500
-                    };
+                    return null;
+                }
 
-                    // Make sure the array is not null
-                    if (config.ChannelTypes == null)
-                    {
-                        config.ChannelTypes = new ChannelType[0];
-                    }
+                Connection connection = null;
 
-                    // Alloc the channel array
-                    connection.Channels = new IChannel[config.ChannelTypes.Length];
-
-                    // Alloc the channels
-                    for (byte x = 0; x < config.ChannelTypes.Length; x++)
+                for (ushort i = 0; i < connections.Length; i++)
+                {
+                    if (connections[i] == null)
                     {
-                        switch (config.ChannelTypes[x])
+                        // Alloc on the heap
+                        connection = new Connection(config, memoryManager)
                         {
-                            case ChannelType.Reliable:
-                                {
-                                    connection.Channels[x] = new ReliableChannel(x, connection, config, memoryManager);
-                                }
-                                break;
-                            case ChannelType.Unreliable:
-                                {
-                                    connection.Channels[x] = new UnreliableChannel(x, connection, config, memoryManager);
-                                }
-                                break;
-                            case ChannelType.UnreliableOrdered:
-                                {
-                                    connection.Channels[x] = new UnreliableSequencedChannel(x, connection, config, memoryManager);
-                                }
-                                break;
-                            case ChannelType.ReliableSequenced:
-                                {
-                                    connection.Channels[x] = new ReliableSequencedChannel(x, connection, config, memoryManager);
-                                }
-                                break;
-                            case ChannelType.UnreliableRaw:
-                                {
-                                    connection.Channels[x] = new UnreliableRawChannel(x, connection, config, memoryManager);
-                                }
-                                break;
-                            case ChannelType.ReliableSequencedFragmented:
-                                {
-                                    connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, config, memoryManager);
-                                }
-                                break;
-                            case ChannelType.ReliableOrdered:
-                                {
-                                    connection.Channels[x] = new ReliableOrderedChannel(x, connection, config, memoryManager);
-                                }
-                                break;
-                            default:
-                                {
-                                    // Unknown channel type. Disconnect.
-                                    // TODO: Fix
-                                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                    DisconnectConnection(connection, false, false);
-                                }
-                                break;
+                            Dead = false,
+                            Recycled = false,
+                            Id = i,
+                            State = state,
+                            HailStatus = new MessageStatus(),
+                            Socket = this,
+                            EndPoint = endpoint,
+                            ConnectionChallenge = RandomProvider.GetRandomULong(),
+                            ChallengeDifficulty = config.ChallengeDifficulty,
+                            LastMessageIn = DateTime.Now,
+                            LastMessageOut = DateTime.Now,
+                            ConnectionStarted = DateTime.Now,
+                            HandshakeResendAttempts = 0,
+                            ChallengeAnswer = 0,
+                            Channels = new IChannel[0],
+                            ChannelTypes = new ChannelType[0],
+                            HandshakeLastSendTime = DateTime.Now,
+                            Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
+                            MTU = config.MinimumMTU,
+                            SmoothRoundtrip = 0,
+                            RoundtripVarience = 0,
+                            HighestRoundtripVarience = 0,
+                            Roundtrip = 500,
+                            LowestRoundtrip = 500
+                        };
+
+                        // Make sure the array is not null
+                        if (config.ChannelTypes == null)
+                        {
+                            config.ChannelTypes = new ChannelType[0];
                         }
+
+                        // Alloc the channel array
+                        connection.Channels = new IChannel[config.ChannelTypes.Length];
+
+                        // Alloc the channels
+                        for (byte x = 0; x < config.ChannelTypes.Length; x++)
+                        {
+                            switch (config.ChannelTypes[x])
+                            {
+                                case ChannelType.Reliable:
+                                    {
+                                        connection.Channels[x] = new ReliableChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                case ChannelType.Unreliable:
+                                    {
+                                        connection.Channels[x] = new UnreliableChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                case ChannelType.UnreliableOrdered:
+                                    {
+                                        connection.Channels[x] = new UnreliableSequencedChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                case ChannelType.ReliableSequenced:
+                                    {
+                                        connection.Channels[x] = new ReliableSequencedChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                case ChannelType.UnreliableRaw:
+                                    {
+                                        connection.Channels[x] = new UnreliableRawChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                case ChannelType.ReliableSequencedFragmented:
+                                    {
+                                        connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                case ChannelType.ReliableOrdered:
+                                    {
+                                        connection.Channels[x] = new ReliableOrderedChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                default:
+                                    {
+                                        // Unknown channel type. Disconnect.
+                                        // TODO: Fix
+                                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
+                                        DisconnectConnection(connection, false, false);
+                                    }
+                                    break;
+                            }
+                        }
+
+                        connections[i] = connection;
+                        addressPendingConnectionLookup.Add(endpoint, connection);
+
+                        pendingConnections++;
+
+                        break;
                     }
+                    else if (connections[i].Dead && connections[i].Recycled)
+                    {
+                        // This is no longer used, reuse it
+                        connection = connections[i];
 
-                    connections[i] = connection;
-                    addressPendingConnectionLookup.Add(endpoint, connection);
+                        // Reset the core connection, including statistics and other data
+                        connection.Reset();
 
-                    pendingConnections++;
+                        // Set the Id
+                        connection.Id = i;
 
-                    break;
+                        // Set the state
+                        connection.State = state;
+
+                        // Set the socket
+                        connection.Socket = this;
+
+                        // Set the endpoint
+                        connection.EndPoint = endpoint;
+
+                        // Generate a new challenge
+                        connection.ConnectionChallenge = RandomProvider.GetRandomULong();
+
+                        // Set the difficulty
+                        connection.ChallengeDifficulty = config.ChallengeDifficulty;
+
+                        // Reset the MTU
+                        connection.MTU = config.MinimumMTU;
+
+                        // Set all the times to now (to prevent instant timeout)
+                        connection.LastMessageOut = DateTime.Now;
+                        connection.LastMessageIn = DateTime.Now;
+                        connection.ConnectionStarted = DateTime.Now;
+                        connection.HandshakeLastSendTime = DateTime.Now;
+
+                        addressPendingConnectionLookup.Add(endpoint, connection);
+
+                        pendingConnections++;
+
+                        break;
+                    }
                 }
-                else if (connections[i].Dead && connections[i].Recycled)
-                {
-                    // This is no longer used, reuse it
-                    connection = connections[i];
 
-                    // Reset the core connection, including statistics and other data
-                    connection.Reset();
-
-                    // Set the Id
-                    connection.Id = i;
-
-                    // Set the state
-                    connection.State = state;
-
-                    // Set the socket
-                    connection.Socket = this;
-
-                    // Set the endpoint
-                    connection.EndPoint = endpoint;
-
-                    // Generate a new challenge
-                    connection.ConnectionChallenge = RandomProvider.GetRandomULong();
-
-                    // Set the difficulty
-                    connection.ChallengeDifficulty = config.ChallengeDifficulty;
-
-                    // Reset the MTU
-                    connection.MTU = config.MinimumMTU;
-
-                    // Set all the times to now (to prevent instant timeout)
-                    connection.LastMessageOut = DateTime.Now;
-                    connection.LastMessageIn = DateTime.Now;
-                    connection.ConnectionStarted = DateTime.Now;
-                    connection.HandshakeLastSendTime = DateTime.Now;
-
-                    addressPendingConnectionLookup.Add(endpoint, connection);
-
-                    pendingConnections++;
-
-                    break;
-                }
+                return connection;
             }
-
-            return connection;
         }
     }
 }

@@ -14,7 +14,23 @@ To compare to the examples above, ENET is amazing and is pretty much what Ruffle
 
 
 ## Features
-Ruffles is still **WIP**, more features might come.
+Ruffles have many features that other libs lacks. See below for a summary and a detailed explanation of each.
+
+* Connection challenge
+* DOS amplification prevention
+* Slot filling prevention
+* Connection managment
+* High performance and garbage free
+* Channeling
+* Threaded by default
+* Thread safe
+* Dependency free
+* IPv4 and IPv6 dual mode
+* Small packet merging
+* Fragmentation
+* Ack merging
+* Connection statistics
+* Path MTU discovery
 
 ### Connection Challenge
 The Ruffle protocol requires a challenge to be completed before a connection can be established. Currently, the challenge is a hashcash like challenge that is supplied by the server, brute force solved by the client and submitted. (Uses Fowler-Noll-Vo hash function instead of SHA1 currently).
@@ -54,6 +70,9 @@ All messages are not guaranteed to be delivered. If you send multiple messages, 
 
 ### Threading
 Ruffles is nativley multi threaded and uses a background worker thread by default to handle network I/O.
+
+### Thread Safe
+All public APIs in Ruffles are designed to be thread safe and can be accessed from any thread.
 
 ### Dependency Free
 Ruffles is 100% dependency free, it's thus very portable and should run on most platforms.
