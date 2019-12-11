@@ -101,19 +101,19 @@ namespace Ruffles.Messaging
                     {
                         connection.SendRaw(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noDelay, headerSize);
                     }
-                }
 
-                if (dealloc)
-                {
-                    // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
-                    for (int i = 0; i < memoryPointers.VirtualCount; i++)
+                    if (dealloc)
                     {
-                        memoryManager.DeAlloc(((HeapMemory)memoryPointers.Pointers[i]));
+                        // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
+                        for (int i = 0; i < memoryPointers.VirtualCount; i++)
+                        {
+                            memoryManager.DeAlloc(((HeapMemory)memoryPointers.Pointers[i]));
+                        }
                     }
-                }
 
-                // Dealloc the array always.
-                memoryManager.DeAlloc(memoryPointers);
+                    // Dealloc the array always.
+                    memoryManager.DeAlloc(memoryPointers);
+                }
             }
         }
     }
