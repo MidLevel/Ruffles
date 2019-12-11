@@ -334,7 +334,12 @@ namespace Ruffles.Connections
             HandshakeResendAttempts = 0;
 
             HeartbeatChannel.Reset();
-            Merger.Clear();
+
+            if (Merger != null)
+            {
+                // Merger can be null if you
+                Merger.Clear();
+            }
 
             PreConnectionChallengeTimestamp = 0;
             PreConnectionChallengeCounter = 0;
