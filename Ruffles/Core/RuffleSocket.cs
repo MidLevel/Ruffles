@@ -923,7 +923,7 @@ namespace Ruffles.Core
 
                         int size = _selectSockets[i].ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _endpoint);
 
-                        HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint);
+                        HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint, true);
                     }
                     catch (Exception e)
                     {
@@ -1027,7 +1027,9 @@ namespace Ruffles.Core
             }
         }
 
-        internal void HandlePacket(ArraySegment<byte> payload, EndPoint endpoint, bool wirePacket = true)
+
+        private readonly List<ArraySegment<byte>> _mergeSegmentResults = new List<ArraySegment<byte>>();
+        internal void HandlePacket(ArraySegment<byte> payload, EndPoint endpoint, bool allowMergeUnpack, bool wirePacket = true)
         {
             if (payload.Count < 1)
             {
@@ -1056,19 +1058,25 @@ namespace Ruffles.Core
                             if (!config.EnablePacketMerging)
                             {
                                 // Big missmatch here.
-                                DisconnectConnection(connection, false, false);
+                                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Packet was merged but packet merging was disabled. Skipping merge packet");
+                                return;
+                            }
+
+                            if (!allowMergeUnpack)
+                            {
+                                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Packet was double merged. Skipping nested merge packet");
                                 return;
                             }
 
                             // Unpack the merged packet
-                            List<ArraySegment<byte>> segments = connection.Merger.Unpack(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1));
+                            MessageMerger.Unpack(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), _mergeSegmentResults);
 
-                            if (segments != null)
+                            if (_mergeSegmentResults != null)
                             {
-                                for (int i = 0; i < segments.Count; i++)
+                                for (int i = 0; i < _mergeSegmentResults.Count; i++)
                                 {
                                     // Handle the segment
-                                    HandlePacket(segments[i], endpoint, false);
+                                    HandlePacket(_mergeSegmentResults[i], endpoint, false, false);
                                 }
                             }
                         }

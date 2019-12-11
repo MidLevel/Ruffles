@@ -98,65 +98,65 @@ namespace Ruffles.Messaging
         }
 
 
-        // DONT MAKE STATIC FOR THREAD SAFETY.
-        private readonly List<ArraySegment<byte>> _unpackSegments = new List<ArraySegment<byte>>();
-
-        // DONT MAKE STATIC FOR THREAD SAFETY.
-        internal List<ArraySegment<byte>> Unpack(ArraySegment<byte> payload)
+        internal static void Unpack(ArraySegment<byte> payload, List<ArraySegment<byte>> list)
         {
-            lock (_lock)
+            if (list == null)
             {
-                // TODO: VarInt
-                if (payload.Count < 3)
-                {
-                    // Payload is too small
-                    return null;
-                }
-
+                list = new List<ArraySegment<byte>>();
+            }
+            else if (list.Count > 0)
+            {
                 // Clear the segments list
-                _unpackSegments.Clear();
+                list.Clear();
+            }
 
-                // The offset for walking the buffer
-                int packetOffset = 0;
+            // TODO: VarInt
+            if (payload.Count < 3)
+            {
+                // Payload is too small
+                return;
+            }
 
-                while (true)
+            // The offset for walking the buffer
+            int packetOffset = 0;
+
+            while (true)
+            {
+                if (payload.Count < packetOffset + 2)
                 {
-                    if (payload.Count < packetOffset + 2)
-                    {
-                        // No more data to be read
-                        return _unpackSegments;
-                    }
-
-                    // TODO: VarInt
-                    // Read the size
-                    ushort size = (ushort)(payload.Array[payload.Offset + packetOffset] | (ushort)(payload.Array[payload.Offset + packetOffset + 1] << 8));
-
-                    if (size < 1)
-                    {
-                        // The size is too small. Doesnt fit the header
-                        return _unpackSegments;
-                    }
-
-                    // Make sure the size can even fit
-                    if (payload.Count < (packetOffset + 2 + size))
-                    {
-                        // Payload is too small to fit the claimed size. Exit
-                        return _unpackSegments;
-                    }
-
-                    // Read the header
-                    HeaderPacker.Unpack(payload.Array[payload.Offset + packetOffset + 2], out byte type, out bool fragment);
-
-                    // Prevent merging a merge
-                    if (type != (byte)MessageType.Merge)
-                    {
-                        // Add the new segment
-                        _unpackSegments.Add(new ArraySegment<byte>(payload.Array, payload.Offset + packetOffset + 2, size));
-                    }
-
-                    // Increment the packetOffset
-                    packetOffset += 2 + size;
+                    // No more data to be read
+                    return;
                 }
+
+                // TODO: VarInt
+                // Read the size
+                ushort size = (ushort)(payload.Array[payload.Offset + packetOffset] | (ushort)(payload.Array[payload.Offset + packetOffset + 1] << 8));
+
+                if (size < 1)
+                {
+                    // The size is too small. Doesnt fit the header
+                    return;
+                }
+
+                // Make sure the size can even fit
+                if (payload.Count < (packetOffset + 2 + size))
+                {
+                    // Payload is too small to fit the claimed size. Exit
+                    return;
+                }
+
+                // Read the header
+                HeaderPacker.Unpack(payload.Array[payload.Offset + packetOffset + 2], out byte type, out bool fragment);
+
+                // Prevent merging a merge
+                if (type != (byte)MessageType.Merge)
+                {
+                    // Add the new segment
+                    list.Add(new ArraySegment<byte>(payload.Array, payload.Offset + packetOffset + 2, size));
+                }
+
+                // Increment the packetOffset
+                packetOffset += 2 + size;
             }
         }
     }
