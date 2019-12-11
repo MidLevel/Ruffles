@@ -118,6 +118,7 @@ namespace Ruffles.Configuration
         // Timeouts
         /// <summary>
         /// The amount of milliseconds from the connection request that the connection has to solve the challenge and complete the connection handshake.
+        /// Note that this timeout only starts counting after the connection request has been approved.
         /// </summary>
         public ulong HandshakeTimeout = 30_000;
         /// <summary>
@@ -145,15 +146,25 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The amount of milliseconds between resends during the handshake process.
         /// </summary>
-        public ulong HandshakeResendDelay = 200;
+        public ulong HandshakeResendDelay = 500;
         /// <summary>
         /// The maximum amount of packet resends to perform per stage of the handshake process.
         /// </summary>
         public byte MaxHandshakeResends = 20;
 
         // Connection request resends
-        public ulong ConnectionRequestMinResendDelay = 50;
+        /// <summary>
+        /// The delay between connection request resends in milliseconds.
+        /// </summary>
+        public ulong ConnectionRequestMinResendDelay = 500;
+        /// <summary>
+        /// The maximum amount of connection requests to be sent.
+        /// </summary>
         public byte MaxConnectionRequestResends = 5;
+        /// <summary>
+        /// The amount of time in milliseconds before a pending connection times out.
+        /// </summary>
+        public ulong ConnectionRequestTimeout = 5000;
 
         // Security
         /// <summary>

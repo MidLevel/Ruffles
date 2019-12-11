@@ -817,9 +817,18 @@ namespace Ruffles.Core
             {
                 if (connections[i] != null && !connections[i].Dead)
                 {
-                    if (connections[i].State != ConnectionState.Connected)
+                    if (connections[i].State == ConnectionState.RequestingConnection)
                     {
-                        if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.HandshakeTimeout)
+                        if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionRequestTimeout)
+                        {
+                            // This client has taken too long to connect. Let it go.
+                            DisconnectConnection(connections[i], false, true);
+                        }
+                    }
+                    else if (connections[i].State != ConnectionState.Connected)
+                    {
+                        // They are not requesting connection. But they are not connected. This means they are doing a handshake
+                        if ((DateTime.Now - connections[i].HandshakeStarted).TotalMilliseconds > config.HandshakeTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
                             DisconnectConnection(connections[i], false, true);
@@ -1214,6 +1223,7 @@ namespace Ruffles.Core
                                 return;
                             }
 
+                            connection.HandshakeStarted = DateTime.Now;
                             connection.LastMessageIn = DateTime.Now;
 
                             connection.ConnectionChallenge = (((ulong)payload.Array[payload.Offset + 1 + 0]) |
@@ -1866,6 +1876,7 @@ namespace Ruffles.Core
                 addressPendingConnectionLookup.Remove(connection.EndPoint);
                 addressConnectionLookup.Add(connection.EndPoint, connection);
 
+                connection.ConnectionCompleted = DateTime.Now;
                 connection.State = ConnectionState.Connected;
 
                 pendingConnections++;
@@ -2018,6 +2029,8 @@ namespace Ruffles.Core
                             LastMessageIn = DateTime.Now,
                             LastMessageOut = DateTime.Now,
                             ConnectionStarted = DateTime.Now,
+                            HandshakeStarted = DateTime.Now,
+                            ConnectionCompleted = DateTime.Now,
                             HandshakeResendAttempts = 0,
                             ChallengeAnswer = 0,
                             Channels = new IChannel[0],
@@ -2132,7 +2145,9 @@ namespace Ruffles.Core
                         connection.LastMessageOut = DateTime.Now;
                         connection.LastMessageIn = DateTime.Now;
                         connection.ConnectionStarted = DateTime.Now;
+                        connection.HandshakeStarted = DateTime.Now;
                         connection.HandshakeLastSendTime = DateTime.Now;
+                        connection.ConnectionCompleted = DateTime.Now;
 
                         addressPendingConnectionLookup.Add(endpoint, connection);
 

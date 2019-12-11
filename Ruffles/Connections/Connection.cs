@@ -66,6 +66,16 @@ namespace Ruffles.Connections
         /// <value>The time the connection started.</value>
         public DateTime ConnectionStarted { get; internal set; }
         /// <summary>
+        /// Gets the time the handshake process started.
+        /// </summary>
+        /// <value>The time the handshake started.</value>
+        public DateTime HandshakeStarted { get; internal set; }
+        /// <summary>
+        /// Gets the time the connection was completed.
+        /// </summary>
+        /// <value>The time the connection was completed.</value>
+        public DateTime ConnectionCompleted { get; internal set; }
+        /// <summary>
         /// Gets the estimated smoothed roundtrip.
         /// </summary>
         /// <value>The estimated smoothed roundtrip.</value>
@@ -309,6 +319,8 @@ namespace Ruffles.Connections
             LastMessageOut = DateTime.MinValue;
             LastMessageIn = DateTime.MinValue;
             ConnectionStarted = DateTime.MinValue;
+            HandshakeStarted = DateTime.MinValue;
+            ConnectionCompleted = DateTime.MinValue;
 
             SmoothRoundtrip = 0;
             Roundtrip = 500;
