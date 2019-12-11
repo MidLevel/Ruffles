@@ -79,9 +79,6 @@ namespace Ruffles.Messaging
             }
         }
 
-        // Lock when sending messages to prevent a pointer from being overwritten.
-        private static readonly object _memoryPointerLock = new object();
-
         internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay, MemoryManager memoryManager)
         {
             if (channelId < 0 || channelId >= connection.Channels.Length)
@@ -91,29 +88,26 @@ namespace Ruffles.Messaging
 
             IChannel channel = connection.Channels[channelId];
 
-            lock (_memoryPointerLock)
-            {
-                HeapPointers memoryPointers = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
+            HeapPointers memoryPointers = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
 
-                if (memoryPointers != null)
+            if (memoryPointers != null)
+            {
+                for (int i = 0; i < memoryPointers.VirtualCount; i++)
                 {
+                    connection.SendRaw(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noDelay, headerSize);
+                }
+
+                if (dealloc)
+                {
+                    // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
                     for (int i = 0; i < memoryPointers.VirtualCount; i++)
                     {
-                        connection.SendRaw(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noDelay, headerSize);
+                        memoryManager.DeAlloc(((HeapMemory)memoryPointers.Pointers[i]));
                     }
-
-                    if (dealloc)
-                    {
-                        // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
-                        for (int i = 0; i < memoryPointers.VirtualCount; i++)
-                        {
-                            memoryManager.DeAlloc(((HeapMemory)memoryPointers.Pointers[i]));
-                        }
-                    }
-
-                    // Dealloc the array always.
-                    memoryManager.DeAlloc(memoryPointers);
                 }
+
+                // Dealloc the array always.
+                memoryManager.DeAlloc(memoryPointers);
             }
         }
     }
