@@ -533,7 +533,7 @@ namespace Ruffles.Core
                 connection.HandshakeLastSendTime = DateTime.Now;
 
                 // Calculate the minimum size we could use for a packet
-                int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+                int minSize = 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
                 // Calculate the actual size with respect to amplification padding
                 int size = Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding);
@@ -544,6 +544,9 @@ namespace Ruffles.Core
                 // Set the header
                 memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
+                // Copy the identification token
+                Buffer.BlockCopy(Constants.RUFFLES_PROTOCOL_IDENTIFICATION, 0, memory.Buffer, 1, Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length);
+
                 if (config.TimeBasedConnectionChallenge)
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Using time based connection challenge. Writing solve with difficulty " + config.ChallengeDifficulty);
@@ -552,19 +555,19 @@ namespace Ruffles.Core
                     connection.PreConnectionChallengeTimestamp = unixTimestamp;
 
                     // Write the current unix time
-                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + i] = ((byte)(unixTimestamp >> (i * 8)));
 
                     // Save for resends
                     connection.PreConnectionChallengeCounter = counter;
 
                     // Write counter
-                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
 
                     // Save for resends
                     connection.PreConnectionChallengeIV = iv;
 
                     // Write IV
-                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
+                    for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
 
                     // Mark it as solved (for resending)
                     connection.PreConnectionChallengeSolved = true;
@@ -802,7 +805,7 @@ namespace Ruffles.Core
                             connections[i].HandshakeLastSendTime = DateTime.Now;
 
                             // Calculate the minimum size we can fit the packet in
-                            int minSize = 1 + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
+                            int minSize = 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
                             // Calculate the actual size with respect to amplification padding
                             int size = Math.Max(minSize, (int)config.AmplificationPreventionHandshakePadding);
@@ -813,16 +816,19 @@ namespace Ruffles.Core
                             // Write the header
                             memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest, false);
 
+                            // Copy the identification token
+                            Buffer.BlockCopy(Constants.RUFFLES_PROTOCOL_IDENTIFICATION, 0, memory.Buffer, 1, Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length);
+
                             if (config.TimeBasedConnectionChallenge)
                             {
                                 // Write the response unix time
-                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + x] = ((byte)(connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + x] = ((byte)(connections[i].PreConnectionChallengeTimestamp >> (x * 8)));
 
                                 // Write counter
-                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + sizeof(ulong) + x] = ((byte)(connections[i].PreConnectionChallengeCounter >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + x] = ((byte)(connections[i].PreConnectionChallengeCounter >> (x * 8)));
 
                                 // Write IV
-                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + (sizeof(ulong) * 2) + x] = ((byte)(connections[i].PreConnectionChallengeIV >> (x * 8)));
+                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + x] = ((byte)(connections[i].PreConnectionChallengeIV >> (x * 8)));
 
                                 // Print debug
                                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest with challenge [Counter=" + connections[i].PreConnectionChallengeCounter + "] [IV=" + connections[i].PreConnectionChallengeIV + "] [Time=" + connections[i].PreConnectionChallengeTimestamp + "] [Hash=" + HashProvider.GetStableHash64(connections[i].PreConnectionChallengeTimestamp, connections[i].PreConnectionChallengeCounter, connections[i].PreConnectionChallengeIV) + "]");
@@ -1231,10 +1237,20 @@ namespace Ruffles.Core
                     break;
                 case (byte)MessageType.ConnectionRequest:
                     {
-                        if (payload.Count < config.AmplificationPreventionHandshakePadding)
+                        if (payload.Count < config.AmplificationPreventionHandshakePadding || payload.Count < 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length)
                         {
-                            // This message is too small. They might be trying to use us for amplification. 
+                            // This message is too small. They might be trying to use us for amplification.
                             return;
+                        }
+
+                        for (int i = 0; i < Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length; i++)
+                        {
+                            if (payload.Array[payload.Offset + 1 + i] != Constants.RUFFLES_PROTOCOL_IDENTIFICATION[i])
+                            {
+                                // The identification number did not match
+                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Connection request packet was filtered away. Identification did not match");
+                                return;
+                            }
                         }
 
                         if (config.TimeBasedConnectionChallenge)
@@ -1243,14 +1259,14 @@ namespace Ruffles.Core
                             ulong currentUnixTime = (ulong)DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
 
                             // Read the time they used
-                            ulong challengeUnixTime = (((ulong)payload.Array[payload.Offset + 1]) |
-                                                        ((ulong)payload.Array[payload.Offset + 1 + 1] << 8) |
-                                                        ((ulong)payload.Array[payload.Offset + 1 + 2] << 16) |
-                                                        ((ulong)payload.Array[payload.Offset + 1 + 3] << 24) |
-                                                        ((ulong)payload.Array[payload.Offset + 1 + 4] << 32) |
-                                                        ((ulong)payload.Array[payload.Offset + 1 + 5] << 40) |
-                                                        ((ulong)payload.Array[payload.Offset + 1 + 6] << 48) |
-                                                        ((ulong)payload.Array[payload.Offset + 1 + 7] << 56));
+                            ulong challengeUnixTime = (((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length]) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + 1] << 8) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + 2] << 16) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + 3] << 24) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + 4] << 32) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + 5] << 40) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + 6] << 48) |
+                                                        ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + 7] << 56));
 
                             // The seconds diff
                             long secondsDiff = (long)currentUnixTime - (long)challengeUnixTime;
@@ -1263,24 +1279,24 @@ namespace Ruffles.Core
                             }
 
                             // Read the counter they used to collide the hash
-                            ulong counter = (((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong)]) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 1] << 8) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 2] << 16) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 3] << 24) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 4] << 32) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 5] << 40) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 6] << 48) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + sizeof(ulong) + 7] << 56));
+                            ulong counter = (((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong)]) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + 1] << 8) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + 2] << 16) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + 3] << 24) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + 4] << 32) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + 5] << 40) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + 6] << 48) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + 7] << 56));
 
                             // Read the initialization vector they used
-                            ulong userIv = (((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2)]) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 1] << 8) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 2] << 16) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 3] << 24) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 4] << 32) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 5] << 40) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 6] << 48) |
-                                            ((ulong)payload.Array[payload.Offset + 1 + (sizeof(ulong) * 2) + 7] << 56));
+                            ulong userIv = (((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2)]) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 1] << 8) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 2] << 16) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 3] << 24) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 4] << 32) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 5] << 40) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 6] << 48) |
+                                            ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 7] << 56));
 
                             // Ensure they dont reuse a IV
                             if (challengeInitializationVectors[userIv])
