@@ -11,14 +11,14 @@ namespace Ruffles.Memory
     {
         private int _createdHeapMemory = 0;
         private bool _hasWarnedAboutHeapMemoryLeaks = false;
-        private readonly ConcurrentQueue<HeapMemory> _pooledHeapMemory = new ConcurrentQueue<HeapMemory>();
+        private readonly ConcurrentCircularQueue<HeapMemory> _pooledHeapMemory;
 
         private const uint minHeapMemorySize = 64;
         private const uint heapMemorySizeMultiple = 64;
 
         private int _createdPointerArrays = 0;
         private bool _hasWarnedAboutPointerArrayLeaks = false;
-        private readonly ConcurrentQueue<HeapPointers> _pooledPointerArrays = new ConcurrentQueue<HeapPointers>();
+        private readonly ConcurrentCircularQueue<HeapPointers> _pooledPointerArrays;
 
         private const uint minPointerArraySize = 64;
         private const uint pointerArraySizeMultiple = 64;
@@ -44,6 +44,8 @@ namespace Ruffles.Memory
         internal MemoryManager(SocketConfig config)
         {
             _configuration = config;
+            _pooledHeapMemory = new ConcurrentCircularQueue<HeapMemory>(_configuration.MemoryManagerMaxHeapMemory);
+            _pooledPointerArrays = new ConcurrentCircularQueue<HeapPointers>(_configuration.MemoryManagerMaxHeapPointers);
         }
 
         internal HeapPointers AllocHeapPointers(uint size)
@@ -135,7 +137,11 @@ namespace Ruffles.Memory
             memory.VirtualOffset = 0;
             memory.VirtualCount = 0;
 
-            _pooledHeapMemory.Enqueue(memory);
+            if (!_pooledHeapMemory.TryEnqueue(memory))
+            {
+                // Failed to enqueue memory. Queue is full
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return heap memory. The queue is full. The memory will be given to the garbage collector. [HEAP MEMORY]");
+            }
         }
 
         internal void DeAlloc(HeapPointers pointers)
@@ -149,7 +155,11 @@ namespace Ruffles.Memory
             pointers.VirtualOffset = 0;
             pointers.VirtualCount = 0;
 
-            _pooledPointerArrays.Enqueue(pointers);
+            if (!_pooledPointerArrays.TryEnqueue(pointers))
+            {
+                // Failed to enqueue pointers. Queue is full
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return heap pointers. The queue is full. The memory will be given to the garbage collector. [HEAP POINTERS]");
+            }
         }
     }
 }

@@ -25,6 +25,14 @@ namespace Ruffles.Configuration
         /// The size of the internal event queue.
         /// </summary>
         public ushort InternalEventQueueSize = 1024;
+        /// <summary>
+        /// The maximum amount of heap pointers that will be kept as strong references by the memory manager.
+        /// </summary>
+        public ushort MemoryManagerMaxHeapPointers = 1024;
+        /// <summary>
+        /// The maximum amount of heap memory that will be kept as strong references by the memory manager.
+        /// </summary>
+        public ushort MemoryManagerMaxHeapMemory = 1024;
 
         // Connection
         /// <summary>
