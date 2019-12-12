@@ -120,3 +120,6 @@ Ruffles is designed to be mostly lockless. There are however a few situations wh
 * If the user sends two packets that is due for merging at the same time. This can be avoided by sending with ``noDelay = true``.
 * If the user calls ConnectNow and Ruffles is modifying connections (Disconnecting, Connecting or Timing out). This can be avoided by using ``ConnectLater``.
 * If the user calls DisconnectNow and Ruffles is modifying connections (Disconnecting, Connecting or Timing out). This can be avoided by using ``DisconnectLater``.
+
+## Fragmented
+The fragmented channel currently does not have any flow rate for ack resends.
