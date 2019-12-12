@@ -275,7 +275,7 @@ namespace Ruffles.Channeling.Channels
                             connection.Disconnect(false);
                             return;
                         }
-                        else if ((DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier)
+                        else if ((DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (DateTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                         {
                             _sendSequencer[i] = new PendingOutgoingPacket()
                             {
@@ -313,7 +313,7 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence)
         {
             // Check the last ack time
-            if ((DateTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier)
+            if ((DateTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (DateTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > config.ReliabilityMinAckResendDelay)
             {
                 // Set the last ack time
                 _lastAckTimes[sequence] = DateTime.Now;
