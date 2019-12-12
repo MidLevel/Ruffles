@@ -63,6 +63,7 @@ namespace Ruffles.Core
 
         // TODO: Removed hardcoded size
         private readonly ConcurrentCircularQueue<NetworkEvent> userEventQueue;
+        private readonly ConcurrentCircularQueue<InternalEvent> internalEventQueue;
 
         private ushort pendingConnections = 0;
 
@@ -148,6 +149,9 @@ namespace Ruffles.Core
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.EventQueueSize + " event slots");
             userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(config.EventQueueSize);
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.InternalEventQueueSize + " internal event slots");
+            internalEventQueue = new ConcurrentCircularQueue<InternalEvent>(config.InternalEventQueueSize);
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.MaxBufferSize + " bytes of incomingBuffer");
             incomingBuffer = new byte[config.MaxBufferSize];
@@ -410,15 +414,116 @@ namespace Ruffles.Core
 
         /// <summary>
         /// Starts a connection to a endpoint.
-        /// This does the connection logic on the calling thread. NOT the network thread. 
+        /// This does the connection security logic on the calling thread. NOT the network thread. 
         /// If you have a high security connection, the solver will run on the caller thread.
+        /// Note that this call will block the network thread and will cause slowdowns. Use ConnectLater for non blocking IO
         /// </summary>
         /// <returns>The pending connection.</returns>
         /// <param name="endpoint">The endpoint to connect to.</param>
-        public Connection Connect(EndPoint endpoint)
+        public Connection ConnectNow(EndPoint endpoint)
         {
-            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect to " + endpoint);
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect (now) to " + endpoint);
 
+            ulong unixTimestamp = 0;
+            ulong iv = 0;
+            ulong counter = 0;
+
+            if (config.TimeBasedConnectionChallenge)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Using time based connection challenge. Calculating with difficulty " + config.ChallengeDifficulty);
+
+                // Current unix time
+                unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+
+                // Generate IV
+                iv = RandomProvider.GetRandomULong();
+
+                // Find collision
+                ulong hash;
+                do
+                {
+                    // Attempt to calculate a new hash collision
+                    hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
+
+                    // Increment counter
+                    counter++;
+                }
+                while ((hash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty) != 0);
+
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts. [Counter=" + (counter - 1) + "] [IV=" + iv + "] [Time=" + unixTimestamp + "] [Hash=" + hash + "]");
+
+                // Make counter 1 less
+                counter--;
+            }
+
+            return ConnectInternal(endpoint, unixTimestamp, counter, iv);
+        }
+
+        /// <summary>
+        /// Starts a connection to a endpoint.
+        /// This does the connection security logic on the calling thread. NOT the network thread. 
+        /// If you have a high security connection, the solver will run on the caller thread.
+        /// This call will NOT block the network thread and is faster than ConnectNow.
+        /// </summary>
+        /// <param name="endpoint">The endpoint to connect to.</param>
+        public void ConnectLater(EndPoint endpoint)
+        {
+            if (!config.EnableQueuedIOEvents)
+            {
+                throw new InvalidOperationException("Cannot call ConnectLater when EnableQueuedIOEvents is disabled");
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect (later) to " + endpoint);
+
+            InternalEvent @event = new InternalEvent()
+            {
+                Type = InternalEvent.InternalEventType.Connect,
+                Endpoint = endpoint
+            };
+
+            if (config.TimeBasedConnectionChallenge)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Using time based connection challenge. Calculating with difficulty " + config.ChallengeDifficulty);
+
+                // Current unix time
+                ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+
+                // Save for resends
+                @event.PreConnectionChallengeTimestamp = unixTimestamp;
+
+                ulong counter = 0;
+                ulong iv = RandomProvider.GetRandomULong();
+
+                // Save for resends
+                @event.PreConnectionChallengeIV = iv;
+
+                // Find collision
+                ulong hash;
+                do
+                {
+                    // Attempt to calculate a new hash collision
+                    hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
+
+                    // Increment counter
+                    counter++;
+                }
+                while ((hash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty) != 0);
+
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts. [Counter=" + (counter - 1) + "] [IV=" + iv + "] [Time=" + unixTimestamp + "] [Hash=" + hash + "]");
+
+                // Make counter 1 less
+                counter--;
+
+                // Save for resends
+                @event.PreConnectionChallengeCounter = counter;
+            }
+
+            // Queue the event for the network thread
+            internalEventQueue.Enqueue(@event);
+        }
+
+        private Connection ConnectInternal(EndPoint endpoint, ulong unixTimestamp, ulong counter, ulong iv)
+        {
             Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingConnection);
 
             if (connection != null)
@@ -441,10 +546,7 @@ namespace Ruffles.Core
 
                 if (config.TimeBasedConnectionChallenge)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Using time based connection challenge. Difficulty " + config.ChallengeDifficulty);
-
-                    // Current unix time
-                    ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Using time based connection challenge. Writing solve with difficulty " + config.ChallengeDifficulty);
 
                     // Save for resends
                     connection.PreConnectionChallengeTimestamp = unixTimestamp;
@@ -452,40 +554,20 @@ namespace Ruffles.Core
                     // Write the current unix time
                     for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + i] = ((byte)(unixTimestamp >> (i * 8)));
 
-                    ulong counter = 0;
-                    ulong iv = RandomProvider.GetRandomULong();
-
-                    // Save for resends
-                    connection.PreConnectionChallengeIV = iv;
-
-                    // Find collision
-                    ulong hash;
-                    do
-                    {
-                        // Attempt to calculate a new hash collision
-                        hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
-
-                        // Increment counter
-                        counter++;
-                    }
-                    while ((hash << (sizeof(ulong) * 8 - config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - config.ChallengeDifficulty) != 0);
-
-                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts. [Counter=" + (counter - 1) + "] [IV=" + iv + "] [Time=" + unixTimestamp + "] [Hash=" + hash + "]");
-
-                    // Make counter 1 less
-                    counter--;
-
                     // Save for resends
                     connection.PreConnectionChallengeCounter = counter;
-
-                    // Mark it as solved (for resending)
-                    connection.PreConnectionChallengeSolved = true;
 
                     // Write counter
                     for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + sizeof(ulong) + i] = ((byte)(counter >> (i * 8)));
 
+                    // Save for resends
+                    connection.PreConnectionChallengeIV = iv;
+
                     // Write IV
                     for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
+
+                    // Mark it as solved (for resending)
+                    connection.PreConnectionChallengeSolved = true;
                 }
 
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Sending connection request to " + endpoint);
@@ -506,14 +588,59 @@ namespace Ruffles.Core
 
         /// <summary>
         /// Disconnect the specified connection.
+        /// This call will NOT block the network thread and is faster than DisconnectNow.
         /// </summary>
         /// <param name="connection">The connection to disconnect.</param>
         /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public bool Disconnect(Connection connection, bool sendMessage)
+        public bool DisconnectLater(Connection connection, bool sendMessage)
+        {
+            if (!config.EnableQueuedIOEvents)
+            {
+                throw new InvalidOperationException("Cannot call DisconnectLater when EnableQueuedIOEvents is disabled");
+            }
+
+            if (connection != null && !connection.Dead && connection.State == ConnectionState.Connected)
+            {
+                // Queue the event for the network thread
+                internalEventQueue.Enqueue(new InternalEvent()
+                {
+                    Type = InternalEvent.InternalEventType.Disconnect,
+                    Connection = connection,
+                    SendMessage = sendMessage
+                });
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Disconnect the specified connection.
+        /// This call will NOT block the network thread and is faster than DisconnectNow.
+        /// </summary>
+        /// <param name="connectionId">The connectionId to disconnect.</param>
+        /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
+        public bool DisconnectLater(ulong connectionId, bool sendMessage)
+        {
+            if (connectionId < (ulong)connections.Length && connectionId >= 0)
+            {
+                return DisconnectLater(connections[connectionId], sendMessage);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Disconnect the specified connection.
+        /// </summary>
+        /// <param name="connection">The connection to disconnect.</param>
+        /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
+        public bool DisconnectNow(Connection connection, bool sendMessage)
         {
             if (connection != null && !connection.Dead && connection.State == ConnectionState.Connected)
             {
-                DisconnectConnection(connection, sendMessage, false);
+                DisconnectInternal(connection, sendMessage, false);
 
                 return true;
             }
@@ -526,13 +653,11 @@ namespace Ruffles.Core
         /// </summary>
         /// <param name="connectionId">The connectionId to disconnect.</param>
         /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public bool Disconnect(ulong connectionId, bool sendMessage)
+        public bool DisconnectNow(ulong connectionId, bool sendMessage)
         {
             if (connectionId < (ulong)connections.Length && connectionId >= 0)
             {
-                Disconnect(connections[connectionId], sendMessage);
-
-                return true;
+                return DisconnectNow(connections[connectionId], sendMessage);
             }
 
             return false;
@@ -579,6 +704,11 @@ namespace Ruffles.Core
                     if (config.EnablePathMTU)
                     {
                         RunPathMTU();
+                    }
+
+                    if (config.EnableQueuedIOEvents)
+                    {
+                        PollInternalIOQueue();
                     }
                 }
                 catch (Exception e)
@@ -822,7 +952,7 @@ namespace Ruffles.Core
                         if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionRequestTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
-                            DisconnectConnection(connections[i], false, true);
+                            DisconnectInternal(connections[i], false, true);
                         }
                     }
                     else if (connections[i].State != ConnectionState.Connected)
@@ -831,7 +961,7 @@ namespace Ruffles.Core
                         if ((DateTime.Now - connections[i].HandshakeStarted).TotalMilliseconds > config.HandshakeTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
-                            DisconnectConnection(connections[i], false, true);
+                            DisconnectInternal(connections[i], false, true);
                         }
                     }
                     else
@@ -839,7 +969,7 @@ namespace Ruffles.Core
                         if ((DateTime.Now - connections[i].LastMessageIn).TotalMilliseconds > config.ConnectionTimeout)
                         {
                             // This client has not answered us in way too long. Let it go
-                            DisconnectConnection(connections[i], false, true);
+                            DisconnectInternal(connections[i], false, true);
                         }
                         else if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionQualityGracePeriod)
                         {
@@ -849,13 +979,13 @@ namespace Ruffles.Core
                             {
                                 // They have too high of a packet drop. Disconnect them
                                 if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because their packetLoss is too large. [OCP=" + connections[i].OutgoingConfirmedPackets + "] [ORP=" + connections[i].OutgoingResentPackets + "]");
-                                DisconnectConnection(connections[i], false, true);
+                                DisconnectInternal(connections[i], false, true);
                             }
                             else if (connections[i].SmoothRoundtrip > config.MaxRoundtripTime)
                             {
                                 // They have too high of a roundtrip time. Disconnect them
                                 if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because their roundTripTime is too large. [SRTT=" + connections[i].SmoothRoundtrip + "] [RTT=" + connections[i].Roundtrip + "]");
-                                DisconnectConnection(connections[i], false, true);
+                                DisconnectInternal(connections[i], false, true);
                             }
                         }
                     }
@@ -882,6 +1012,23 @@ namespace Ruffles.Core
                         // DeAlloc the memory
                         memoryManager.DeAlloc(heartbeatMemory);
                     }
+                }
+            }
+        }
+
+        private void PollInternalIOQueue()
+        {
+            while (internalEventQueue.TryDequeue(out InternalEvent @event))
+            {
+                if (@event.Type == InternalEvent.InternalEventType.Connect)
+                {
+                    // Send connection
+                    ConnectInternal(@event.Endpoint, @event.PreConnectionChallengeTimestamp, @event.PreConnectionChallengeCounter, @event.PreConnectionChallengeIV);
+                }
+                else if (@event.Type == InternalEvent.InternalEventType.Disconnect)
+                {
+                    // Disconnect
+                    DisconnectInternal(@event.Connection, @event.SendMessage, false);
                 }
             }
         }
@@ -1227,7 +1374,7 @@ namespace Ruffles.Core
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
                                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Server " + endpoint + " sent us a payload that was too small. Disconnecting");
-                                DisconnectConnection(connection, false, false);
+                                DisconnectInternal(connection, false, false);
                                 return;
                             }
 
@@ -1311,7 +1458,7 @@ namespace Ruffles.Core
                             if (payload.Count < 9)
                             {
                                 // The message is not large enough to contain all the data neccecary. Wierd server?
-                                DisconnectConnection(connection, false, false);
+                                DisconnectInternal(connection, false, false);
                                 return;
                             }
 
@@ -1389,7 +1536,7 @@ namespace Ruffles.Core
                                 // Failed, disconnect them
                                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " failed the challenge. Disconnecting");
 
-                                DisconnectConnection(connection, false, false);
+                                DisconnectInternal(connection, false, false);
                             }
                         }
                         else
@@ -1448,7 +1595,7 @@ namespace Ruffles.Core
                                 // Invalid size.
                                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent a payload that was too small. Disconnecting");
 
-                                DisconnectConnection(pendingConnection, false, false);
+                                DisconnectInternal(pendingConnection, false, false);
                                 return;
                             }
 
@@ -1461,7 +1608,7 @@ namespace Ruffles.Core
                             {
                                 // Invalid size.
                                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent a payload that was too small. Disconnecting");
-                                DisconnectConnection(pendingConnection, false, false);
+                                DisconnectInternal(pendingConnection, false, false);
                                 return;
                             }
 
@@ -1514,7 +1661,7 @@ namespace Ruffles.Core
                                         {
                                             // Unknown channel type. Disconnect.
                                             if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                            DisconnectConnection(pendingConnection, false, false);
+                                            DisconnectInternal(pendingConnection, false, false);
                                             return;
                                         }
                                 }
@@ -1579,7 +1726,7 @@ namespace Ruffles.Core
                                         {
                                             // Unknown channel type. Disconnect.
                                             if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                            DisconnectConnection(pendingConnection, false, false);
+                                            DisconnectInternal(pendingConnection, false, false);
                                             return;
                                         }
                                 }
@@ -1923,7 +2070,7 @@ namespace Ruffles.Core
             }
         }
 
-        internal void DisconnectConnection(Connection connection, bool sendMessage, bool timeout)
+        internal void DisconnectInternal(Connection connection, bool sendMessage, bool timeout)
         {
             if (connection.State == ConnectionState.Connected && sendMessage && !timeout)
             {
@@ -2107,7 +2254,7 @@ namespace Ruffles.Core
                                         // Unknown channel type. Disconnect.
                                         // TODO: Fix
                                         if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                        DisconnectConnection(connection, false, false);
+                                        DisconnectInternal(connection, false, false);
                                     }
                                     break;
                             }
