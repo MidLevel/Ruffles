@@ -235,6 +235,14 @@ namespace Ruffles.Configuration
         /// This is to account for flucuations in the network.
         /// </summary>
         public double ReliabilityResendRoundtripMultiplier = 1.2;
+        /// <summary>
+        /// The minimum delay before a reliale packet is resent.
+        /// </summary>
+        public ulong ReliabilityMinPacketResendDelay = 100;
+        /// <summary>
+        /// The minimum delay before an ack is resent.
+        /// </summary>
+        public ulong ReliabilityMinAckResendDelay = 100;
 
         // Simulation
         /// <summary>
