@@ -59,12 +59,12 @@ namespace Ruffles.Example
             if (IPv6)
             {
                 // IPv6 Connect
-                client.Connect(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
+                client.ConnectNow(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
             }
             else
             {
                 // IPv4 Connect
-                client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
+                client.ConnectNow(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
             }
 
             // The server stores the clients id here

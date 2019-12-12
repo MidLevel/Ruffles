@@ -257,7 +257,7 @@ namespace Ruffles.Connections
                 return;
             }
 #endif
-            Socket.DisconnectConnection(this, sendMessage, false);
+            Socket.DisconnectInternal(this, sendMessage, false);
         }
 
         internal void AddRoundtripSample(ulong sample)
