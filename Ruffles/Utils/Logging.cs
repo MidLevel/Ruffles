@@ -62,7 +62,7 @@ namespace Ruffles.Utils
             {
                 try
                 {
-                    Type unityDebugType = Type.GetType("UnityEngine.Debug");
+                    Type unityDebugType = Type.GetType("UnityEngine.Debug, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null");
 
                     if (unityDebugType != null)
                     {

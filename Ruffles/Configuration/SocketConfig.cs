@@ -21,6 +21,18 @@ namespace Ruffles.Configuration
         /// If this gets full no more events can be processed and the application will freeze until it is polled.
         /// </summary>
         public ushort EventQueueSize = 1024 * 8;
+        /// <summary>
+        /// The size of the internal event queue.
+        /// </summary>
+        public ushort InternalEventQueueSize = 1024;
+        /// <summary>
+        /// The maximum amount of heap pointers that will be kept as strong references by the memory manager.
+        /// </summary>
+        public ushort MemoryManagerMaxHeapPointers = 1024;
+        /// <summary>
+        /// The maximum amount of heap memory that will be kept as strong references by the memory manager.
+        /// </summary>
+        public ushort MemoryManagerMaxHeapMemory = 1024;
 
         // Connection
         /// <summary>
@@ -223,6 +235,14 @@ namespace Ruffles.Configuration
         /// This is to account for flucuations in the network.
         /// </summary>
         public double ReliabilityResendRoundtripMultiplier = 1.2;
+        /// <summary>
+        /// The minimum delay before a reliale packet is resent.
+        /// </summary>
+        public ulong ReliabilityMinPacketResendDelay = 100;
+        /// <summary>
+        /// The minimum delay before an ack is resent.
+        /// </summary>
+        public ulong ReliabilityMinAckResendDelay = 100;
 
         // Simulation
         /// <summary>
@@ -264,6 +284,11 @@ namespace Ruffles.Configuration
         /// Whether or not packet merging should be enabled.
         /// </summary>
         public bool EnablePacketMerging = true;
+        /// <summary>
+        /// Whether or not to enable internal IO event queueing.
+        /// Disabling this will prevent ConnectLater and DisconnectLater from working.
+        /// </summary>
+        public bool EnableQueuedIOEvents = true;
 
         public List<string> GetInvalidConfiguration()
         {

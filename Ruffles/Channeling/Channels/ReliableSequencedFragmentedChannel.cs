@@ -623,7 +623,7 @@ namespace Ruffles.Channeling.Channels
                                     connection.Disconnect(false);
                                     return;
                                 }
-                                else if ((DateTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier)
+                                else if ((DateTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (DateTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                                 {
                                     _sendSequencer[i].Fragments.Pointers[j] = new PendingOutgoingFragment()
                                     {
