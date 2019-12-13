@@ -50,6 +50,7 @@ namespace Ruffles.Memory
             _configuration = config;
             _pooledHeapMemory = new ConcurrentCircularQueue<HeapMemory>(_configuration.MemoryManagerMaxHeapMemory);
             _pooledPointerArrays = new ConcurrentCircularQueue<HeapPointers>(_configuration.MemoryManagerMaxHeapPointers);
+            _pooledMemoryWrappers = new ConcurrentCircularQueue<MemoryWrapper>(_configuration.MemoryManagerMaxMemoryWrappers);
         }
 
         internal HeapPointers AllocHeapPointers(uint size)

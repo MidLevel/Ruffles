@@ -33,6 +33,10 @@ namespace Ruffles.Configuration
         /// The maximum amount of heap memory that will be kept as strong references by the memory manager.
         /// </summary>
         public ushort MemoryManagerMaxHeapMemory = 1024;
+        /// <summary>
+        /// The maximum amount of memory wrappers that will be kept as strong references by the memory manager.
+        /// </summary>
+        public ushort MemoryManagerMaxMemoryWrappers = 1024;
 
         // Connection
         /// <summary>
