@@ -356,12 +356,12 @@ namespace Ruffles.Core
         /// <param name="payload">The payload to send.</param>
         /// <param name="connection">The connection to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public bool SendNow(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
+        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
+        public bool SendNow(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge)
         {
             if (connection != null && !connection.Dead && connection.State == ConnectionState.Connected)
             {
-                PacketHandler.SendMessage(payload, connection, channelId, noDelay, memoryManager);
+                PacketHandler.SendMessage(payload, connection, channelId, noMerge, memoryManager);
 
                 return true;
             }
@@ -378,12 +378,12 @@ namespace Ruffles.Core
         /// <param name="payload">The payload to send.</param>
         /// <param name="connectionId">The connectionId to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public bool SendNow(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
+        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
+        public bool SendNow(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noMerge)
         {
             if (connectionId < (ulong)connections.Length && connectionId >= 0)
             {
-                return SendNow(payload, connections[connectionId], channelId, noDelay);
+                return SendNow(payload, connections[connectionId], channelId, noMerge);
             }
 
             return false;
@@ -398,8 +398,8 @@ namespace Ruffles.Core
         /// <param name="payload">The payload to send.</param>
         /// <param name="connection">The connection to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public bool SendLater(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
+        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
+        public bool SendLater(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge)
         {
             if (!config.EnableQueuedIOEvents)
             {
@@ -419,7 +419,7 @@ namespace Ruffles.Core
                     Type = InternalEvent.InternalEventType.Send,
                     Connection = connection,
                     ChannelId = channelId,
-                    NoDelay = noDelay,
+                    NoMerge = noMerge,
                     Data = memory
                 });
 
@@ -438,12 +438,12 @@ namespace Ruffles.Core
         /// <param name="payload">The payload to send.</param>
         /// <param name="connectionId">The connectionId to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public bool SendLater(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
+        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
+        public bool SendLater(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noMerge)
         {
             if (connectionId < (ulong)connections.Length && connectionId >= 0)
             {
-                return SendLater(payload, connections[connectionId], channelId, noDelay);
+                return SendLater(payload, connections[connectionId], channelId, noMerge);
             }
 
             return false;
@@ -1105,7 +1105,7 @@ namespace Ruffles.Core
                 else if (@event.Type == InternalEvent.InternalEventType.Send)
                 {
                     // Send the data
-                    PacketHandler.SendMessage(new ArraySegment<byte>(@event.Data.Buffer, (int)@event.Data.VirtualOffset, (int)@event.Data.VirtualCount), @event.Connection, @event.ChannelId, @event.NoDelay, memoryManager);
+                    PacketHandler.SendMessage(new ArraySegment<byte>(@event.Data.Buffer, (int)@event.Data.VirtualOffset, (int)@event.Data.VirtualCount), @event.Connection, @event.ChannelId, @event.NoMerge, memoryManager);
 
                     // Dealloc the memory
                     memoryManager.DeAlloc(@event.Data);

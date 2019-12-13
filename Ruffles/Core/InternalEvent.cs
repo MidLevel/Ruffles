@@ -20,7 +20,7 @@ namespace Ruffles.Core
         // Send
         internal HeapMemory Data;
         internal byte ChannelId;
-        internal bool NoDelay;
+        internal bool NoMerge;
 
         internal enum InternalEventType
         {

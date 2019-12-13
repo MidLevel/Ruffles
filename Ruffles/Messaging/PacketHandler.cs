@@ -89,7 +89,7 @@ namespace Ruffles.Messaging
             }
         }
 
-        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay, MemoryManager memoryManager)
+        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge, MemoryManager memoryManager)
         {
             if (channelId < 0 || channelId >= connection.Channels.Length)
             {
@@ -104,7 +104,7 @@ namespace Ruffles.Messaging
             {
                 for (int i = 0; i < memoryPointers.VirtualCount; i++)
                 {
-                    connection.SendRaw(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noDelay, headerSize);
+                    connection.SendRaw(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noMerge, headerSize);
                 }
 
                 if (dealloc)
