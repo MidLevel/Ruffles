@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
@@ -10,7 +11,7 @@ namespace Ruffles.Channeling.Channels
 {
     // TODO: Make single fragment messages faster
     // TODO: Remove array allocs
-    internal class ReliableSequencedFragmentedChannel : IChannel
+    internal class ReliableFragmentedChannel : IChannel
     {
         internal struct PendingOutgoingPacket : IMemoryReleasable
         {
@@ -161,6 +162,7 @@ namespace Ruffles.Channeling.Channels
         }
 
         // Incoming sequencing
+        private readonly HashSet<ushort> _incomingAckedSequences = new HashSet<ushort>();
         private ushort _incomingLowestAckedSequence;
         private readonly HeapableSlidingWindow<PendingIncomingPacket> _receiveSequencer;
 
@@ -177,7 +179,7 @@ namespace Ruffles.Channeling.Channels
         // Lock for the channel, this allows sends and receives being done on different threads.
         private readonly object _lock = new object();
 
-        internal ReliableSequencedFragmentedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
+        internal ReliableFragmentedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
@@ -191,55 +193,7 @@ namespace Ruffles.Channeling.Channels
 
         public HeapMemory HandlePoll()
         {
-            lock (_lock)
-            {
-                // Get the next packet that is not yet given to the user.
-                PendingIncomingPacket nextPacket = _receiveSequencer[_incomingLowestAckedSequence + 1];
-
-                if (nextPacket.Alive && nextPacket.IsComplete)
-                {
-                    ++_incomingLowestAckedSequence;
-
-                    // Get the total size of all fragments
-                    uint totalSize = nextPacket.TotalByteSize;
-
-                    // Alloc memory for that large segment
-                    HeapMemory memory = memoryManager.AllocHeapMemory(totalSize);
-
-                    // Keep track of where we are, fragments COULD have different sizes.
-                    int bufferPosition = 0;
-
-                    if (nextPacket.Fragments != null)
-                    {
-                        // Copy all the parts
-                        for (int i = 0; i < nextPacket.Fragments.VirtualCount; i++)
-                        {
-                            // Copy fragment to final buffer
-                            Buffer.BlockCopy(((HeapMemory)nextPacket.Fragments.Pointers[nextPacket.Fragments.VirtualOffset + i]).Buffer, (int)((HeapMemory)nextPacket.Fragments.Pointers[nextPacket.Fragments.VirtualOffset + i]).VirtualOffset, memory.Buffer, bufferPosition, (int)((HeapMemory)nextPacket.Fragments.Pointers[nextPacket.Fragments.VirtualOffset + i]).VirtualCount);
-
-                            bufferPosition += (int)((HeapMemory)nextPacket.Fragments.Pointers[nextPacket.Fragments.VirtualOffset + i]).VirtualCount;
-                        }
-                    }
-
-                    // Free the memory of all the individual fragments
-                    nextPacket.DeAlloc(memoryManager);
-
-                    // Kill
-                    _receiveSequencer[_incomingLowestAckedSequence] = new PendingIncomingPacket()
-                    {
-                        Alive = false,
-                        Sequence = 0,
-                        Size = null,
-                        Fragments = null
-                    };
-
-
-                    // HandlePoll gives the memory straight to the user, they are responsible for deallocing to prevent leaks
-                    return memory;
-                }
-
-                return null;
-            }
+            return null;
         }
 
         public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
@@ -256,6 +210,9 @@ namespace Ruffles.Channeling.Channels
             // Set the headerBytes
             headerBytes = 4;
 
+            // Reliable fragmented never returns in poll
+            hasMore = false;
+
             if (fragment > config.MaxFragments)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("FragmentId was too large. [FragmentId=" + fragment + "] [Config.MaxFragments=" + config.MaxFragments + "]. The fragment was silently dropped, expect a timeout.");
@@ -265,7 +222,9 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
+                // If the sequence is older than the last one we sent to user OR the packet is already acked OR the sequence is alive and its complete OR (the sequence is alive AND the fragments is alloced AND the alloced fragment count is larger than the fragment (I.E, the fragment is actually alloced) AND the fragment is not null AND the fragment is not dead))
                 if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 ||
+                    (_incomingAckedSequences.Contains(sequence)) ||
                     (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].IsComplete) ||
                     (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].Fragments != null && _receiveSequencer[sequence].Fragments.VirtualCount > fragment && _receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment] != null && !((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment]).isDead))
                 {
@@ -299,8 +258,6 @@ namespace Ruffles.Channeling.Channels
                     else if (!_receiveSequencer[sequence].Alive)
                     {
                         // If this is the first fragment we ever get, index the data.
-
-                        // TODO: Alloc more size and just expand later in the pointer array
 
                         HeapPointers fragmentPointers = memoryManager.AllocHeapPointers((uint)fragment + 1);
 
@@ -355,6 +312,7 @@ namespace Ruffles.Channeling.Channels
                         }
                     }
 
+                    // If the fragment is null OR the fragment is DEAD
                     if (_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment] == null || ((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment]).isDead)
                     {
                         // Alloc some memory for the fragment
@@ -370,8 +328,67 @@ namespace Ruffles.Channeling.Channels
                     // Send ack
                     SendAckEncoded(sequence, encodedFragment);
 
-                    // Sequenced never returns the original memory. Thus we need to return null and tell the caller to Poll instead.
-                    hasMore = _receiveSequencer[_incomingLowestAckedSequence + 1].Alive && _receiveSequencer[_incomingLowestAckedSequence + 1].IsComplete;
+                    // If this sequence just completed. Return the memory
+                    if (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].IsComplete)
+                    {
+                        if (sequence == _incomingLowestAckedSequence + 1)
+                        {
+                            // This is the next packet.
+
+                            do
+                            {
+                                // Remove previous
+                                _incomingAckedSequences.Remove(_incomingLowestAckedSequence);
+
+                                _incomingLowestAckedSequence++;
+                            }
+                            while (_incomingAckedSequences.Contains((ushort)(_incomingLowestAckedSequence + 1)));
+                        }
+                        else
+                        {
+                            // This is a future one
+                            _incomingAckedSequences.Add(sequence);
+                        }
+
+                        // Get the total size of all fragments
+                        uint totalSize = _receiveSequencer[sequence].TotalByteSize;
+
+                        // Alloc memory for that large segment
+                        HeapMemory memory = memoryManager.AllocHeapMemory(totalSize);
+
+                        // Keep track of where we are, fragments COULD have different sizes.
+                        int bufferPosition = 0;
+
+                        if (_receiveSequencer[sequence].Fragments != null)
+                        {
+                            // Copy all the parts
+                            for (int i = 0; i < _receiveSequencer[sequence].Fragments.VirtualCount; i++)
+                            {
+                                // Copy fragment to final buffer
+                                Buffer.BlockCopy(((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + i]).Buffer, (int)((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + i]).VirtualOffset, memory.Buffer, bufferPosition, (int)((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + i]).VirtualCount);
+
+                                bufferPosition += (int)((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + i]).VirtualCount;
+                            }
+                        }
+
+                        // Free the memory of all the individual fragments
+                        _receiveSequencer[sequence].DeAlloc(memoryManager);
+
+                        // Kill
+                        _receiveSequencer[sequence] = new PendingIncomingPacket()
+                        {
+                            Alive = false,
+                            Sequence = 0,
+                            Size = null,
+                            Fragments = null
+                        };
+
+                        // HandlePoll gives the memory straight to the user, they are responsible for deallocing to prevent leaks
+                        return new DirectOrAllocedMemory()
+                        {
+                            AllocedMemory = memory
+                        };
+                    }
 
                     return new DirectOrAllocedMemory();
                 }
@@ -647,4 +664,3 @@ namespace Ruffles.Channeling.Channels
         }
     }
 }
- 

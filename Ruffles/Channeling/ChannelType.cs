@@ -41,6 +41,12 @@
         /// If sending multiple messages, at least one message is guaranteed to be delivered.
         /// Duplicate packets are dropped
         /// </summary>
-        ReliableOrdered
+        ReliableOrdered,
+        /// <summary>
+        /// All messages are guaranteed to be delivered, the order is not guaranteed.
+        /// Messages can be of a size larger than the MTU.
+        /// Duplicate packets are dropped.
+        /// </summary>
+        ReliableFragmented
     }
 }

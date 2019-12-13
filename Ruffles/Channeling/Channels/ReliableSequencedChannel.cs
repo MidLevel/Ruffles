@@ -104,7 +104,7 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
         {
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
@@ -125,7 +125,7 @@ namespace Ruffles.Channeling.Channels
                     SendAck(sequence);
 
                     hasMore = false;
-                    return null;
+                    return new DirectOrAllocedMemory();
                 }
                 else if (sequence == _incomingLowestAckedSequence + 1)
                 {
@@ -139,7 +139,10 @@ namespace Ruffles.Channeling.Channels
                     // Send ack
                     SendAck(sequence);
 
-                    return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
+                    return new DirectOrAllocedMemory()
+                    {
+                        DirectMemory = new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2)
+                    };
                 }
                 else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0)
                 {
@@ -154,7 +157,7 @@ namespace Ruffles.Channeling.Channels
                         connection.Disconnect(false);
 
                         hasMore = false;
-                        return null;
+                        return new DirectOrAllocedMemory();
                     }
                     else if (!_receiveSequencer[sequence].Alive)
                     {
@@ -178,7 +181,7 @@ namespace Ruffles.Channeling.Channels
                 }
 
                 hasMore = false;
-                return null;
+                return new DirectOrAllocedMemory();
             }
         }
 

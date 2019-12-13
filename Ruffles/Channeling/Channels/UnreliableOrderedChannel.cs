@@ -103,7 +103,7 @@ namespace Ruffles.Channeling.Channels
             // Unreliable messages have no acks.
         }
 
-        public ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
         {
             // UnreliableSequenced has one message in equal no more than one out.
             hasMore = false;
@@ -121,10 +121,13 @@ namespace Ruffles.Channeling.Channels
                     // Set the new sequence
                     _incomingLowestAckedSequence = sequence;
 
-                    return new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2);
+                    return new DirectOrAllocedMemory()
+                    {
+                        DirectMemory = new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2)
+                    };
                 }
 
-                return null;
+                return new DirectOrAllocedMemory();
             }
         }
 

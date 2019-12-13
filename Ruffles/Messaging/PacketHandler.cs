@@ -23,18 +23,28 @@ namespace Ruffles.Messaging
                 return;
             }
 
-            ArraySegment<byte>? incomingMessage = connection.Channels[channelId].HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore);
+            DirectOrAllocedMemory incomingMessage = connection.Channels[channelId].HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore);
 
             connection.IncomingUserBytes += (ulong)payload.Count - headerBytes;
 
-            if (incomingMessage != null)
+            HeapMemory memory = null;
+
+            if (incomingMessage.AllocedMemory != null)
+            {
+                // Use the alloced memory
+                memory = incomingMessage.AllocedMemory;
+            }
+            else if (incomingMessage.DirectMemory != null)
             {
                 // Alloc memory that can be borrowed to userspace
-                HeapMemory memory = memoryManager.AllocHeapMemory((uint)incomingMessage.Value.Count);
+                memory = memoryManager.AllocHeapMemory((uint)incomingMessage.DirectMemory.Value.Count);
 
                 // Copy payload to borrowed memory
-                Buffer.BlockCopy(incomingMessage.Value.Array, incomingMessage.Value.Offset, memory.Buffer, 0, incomingMessage.Value.Count);
+                Buffer.BlockCopy(incomingMessage.DirectMemory.Value.Array, incomingMessage.DirectMemory.Value.Offset, memory.Buffer, 0, incomingMessage.DirectMemory.Value.Count);
+            }
 
+            if (memory != null)
+            {
                 // Send to userspace
                 connection.Socket.PublishEvent(new NetworkEvent()
                 {

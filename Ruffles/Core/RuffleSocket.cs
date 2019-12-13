@@ -1673,6 +1673,11 @@ namespace Ruffles.Core
                                             pendingConnection.ChannelTypes[i] = ChannelType.ReliableOrdered;
                                         }
                                         break;
+                                    case (byte)ChannelType.ReliableFragmented:
+                                        {
+                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableFragmented;
+                                        }
+                                        break;
                                     default:
                                         {
                                             // Unknown channel type. Disconnect.
@@ -1736,6 +1741,11 @@ namespace Ruffles.Core
                                     case ChannelType.ReliableOrdered:
                                         {
                                             pendingConnection.Channels[i] = new ReliableOrderedChannel(i, pendingConnection, config, memoryManager);
+                                        }
+                                        break;
+                                    case ChannelType.ReliableFragmented:
+                                        {
+                                            pendingConnection.Channels[i] = new ReliableFragmentedChannel(i, pendingConnection, config, memoryManager);
                                         }
                                         break;
                                     default:
@@ -1832,7 +1842,9 @@ namespace Ruffles.Core
 
                             // Heartbeats are sequenced to not properly handle network congestion
 
-                            if (connection.HeartbeatChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore) != null)
+                            DirectOrAllocedMemory heartbeatMem = connection.HeartbeatChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore);
+
+                            if (heartbeatMem.AllocedMemory != null && heartbeatMem.DirectMemory != null)
                             {
                                 connection.LastMessageIn = DateTime.Now;
                             }
@@ -2263,6 +2275,11 @@ namespace Ruffles.Core
                                 case ChannelType.ReliableOrdered:
                                     {
                                         connection.Channels[x] = new ReliableOrderedChannel(x, connection, config, memoryManager);
+                                    }
+                                    break;
+                                case ChannelType.ReliableFragmented:
+                                    {
+                                        connection.Channels[x] = new ReliableFragmentedChannel(x, connection, config, memoryManager);
                                     }
                                     break;
                                 default:
