@@ -79,7 +79,7 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
-                if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _incomingAckedPackets.Contains(sequence))
+                if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _incomingAckedSequences.Contains(sequence))
                 {
                     // We have already acked this message. Ack again
 
@@ -347,7 +347,7 @@ namespace Ruffles.Channeling.Channels
                     for (int i = 0; i < config.MergedAckBytes * 8; i++)
                     {
                         ushort bitSequence = (ushort)(sequence - (i + 1));
-                        bool bitAcked = SequencingUtils.Distance(bitSequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _incomingAckedPackets.Contains(bitSequence);
+                        bool bitAcked = SequencingUtils.Distance(bitSequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _incomingAckedSequences.Contains(bitSequence);
 
                         if (bitAcked)
                         {
