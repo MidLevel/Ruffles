@@ -349,12 +349,15 @@ namespace Ruffles.Core
 
         /// <summary>
         /// Sends the specified payload to a connection.
+        /// This will send the packet straight away. 
+        /// This can cause the channel to lock up. 
+        /// For higher performance sends, use SendLater.
         /// </summary>
         /// <param name="payload">The payload to send.</param>
         /// <param name="connection">The connection to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
         /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public bool Send(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
+        public bool SendNow(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
         {
             if (connection != null && !connection.Dead && connection.State == ConnectionState.Connected)
             {
@@ -368,16 +371,79 @@ namespace Ruffles.Core
 
         /// <summary>
         /// Sends the specified payload to a connection.
+        /// This will send the packet straight away. 
+        /// This can cause the channel to lock up. 
+        /// For higher performance sends, use SendLater.
         /// </summary>
         /// <param name="payload">The payload to send.</param>
         /// <param name="connectionId">The connectionId to send to.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
         /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
-        public bool Send(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
+        public bool SendNow(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
         {
             if (connectionId < (ulong)connections.Length && connectionId >= 0)
             {
-                return Send(payload, connections[connectionId], channelId, noDelay);
+                return SendNow(payload, connections[connectionId], channelId, noDelay);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Sends the specified payload to a connection.
+        /// This will send the packet on the next network IO tick. 
+        /// This adds additional send delay but prevents the channel from locking. 
+        /// For reduced delay, use SendNow.
+        /// </summary>
+        /// <param name="payload">The payload to send.</param>
+        /// <param name="connection">The connection to send to.</param>
+        /// <param name="channelId">The channel index to send the payload over.</param>
+        /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
+        public bool SendLater(ArraySegment<byte> payload, Connection connection, byte channelId, bool noDelay)
+        {
+            if (!config.EnableQueuedIOEvents)
+            {
+                throw new InvalidOperationException("Cannot call SendLater when EnableQueuedIOEvents is disabled");
+            }
+
+            if (connection != null && !connection.Dead && connection.State == ConnectionState.Connected)
+            {
+                // Alloc memory
+                HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count);
+
+                // Copy the memory
+                Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 0, payload.Count);
+
+                internalEventQueue.Enqueue(new InternalEvent()
+                {
+                    Type = InternalEvent.InternalEventType.Send,
+                    Connection = connection,
+                    ChannelId = channelId,
+                    NoDelay = noDelay,
+                    Data = memory
+                });
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Sends the specified payload to a connection.
+        /// This will send the packet on the next network IO tick. 
+        /// This adds additional send delay but prevents the channel from locking. 
+        /// For reduced delay, use SendNow.
+        /// </summary>
+        /// <param name="payload">The payload to send.</param>
+        /// <param name="connectionId">The connectionId to send to.</param>
+        /// <param name="channelId">The channel index to send the payload over.</param>
+        /// <param name="noDelay">If set to <c>true</c> the message will not be delayed or merged.</param>
+        public bool SendLater(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noDelay)
+        {
+            if (connectionId < (ulong)connections.Length && connectionId >= 0)
+            {
+                return SendLater(payload, connections[connectionId], channelId, noDelay);
             }
 
             return false;
@@ -1035,6 +1101,14 @@ namespace Ruffles.Core
                 {
                     // Disconnect
                     DisconnectInternal(@event.Connection, @event.SendMessage, false);
+                }
+                else if (@event.Type == InternalEvent.InternalEventType.Send)
+                {
+                    // Send the data
+                    PacketHandler.SendMessage(new ArraySegment<byte>(@event.Data.Buffer, (int)@event.Data.VirtualOffset, (int)@event.Data.VirtualCount), @event.Connection, @event.ChannelId, @event.NoDelay, memoryManager);
+
+                    // Dealloc the memory
+                    memoryManager.DeAlloc(@event.Data);
                 }
             }
         }
