@@ -32,7 +32,7 @@ namespace Ruffles.Channeling.Channels
         }
 
         // Incoming sequencing
-        private readonly HashSet<ushort> _incomingAckedPackets = new HashSet<ushort>();
+        private readonly HashSet<ushort> _incomingAckedSequences = new HashSet<ushort>();
         private ushort _incomingLowestAckedSequence;
         private readonly SlidingWindow<DateTime> _lastAckTimes;
 
@@ -98,11 +98,11 @@ namespace Ruffles.Channeling.Channels
                     do
                     {
                         // Remove previous
-                        _incomingAckedPackets.Remove(_incomingLowestAckedSequence);
+                        _incomingAckedSequences.Remove(_incomingLowestAckedSequence);
 
                         _incomingLowestAckedSequence++;
                     }
-                    while (_incomingAckedPackets.Contains((ushort)(_incomingLowestAckedSequence + 1)));
+                    while (_incomingAckedSequences.Contains((ushort)(_incomingLowestAckedSequence + 1)));
 
                     // Ack the new message
                     SendAck(sequence);
@@ -112,12 +112,12 @@ namespace Ruffles.Channeling.Channels
                         DirectMemory = new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2)
                     };
                 }
-                else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0 && !_incomingAckedPackets.Contains(sequence))
+                else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0 && !_incomingAckedSequences.Contains(sequence))
                 {
                     // This is a future packet
 
                     // Add to sequencer
-                    _incomingAckedPackets.Add(sequence);
+                    _incomingAckedSequences.Add(sequence);
 
                     SendAck(sequence);
 
@@ -307,7 +307,7 @@ namespace Ruffles.Channeling.Channels
             lock (_lock)
             {
                 // Clear all incoming states
-                _incomingAckedPackets.Clear();
+                _incomingAckedSequences.Clear();
                 _incomingLowestAckedSequence = 0;
 
                 // Clear all outgoing states
