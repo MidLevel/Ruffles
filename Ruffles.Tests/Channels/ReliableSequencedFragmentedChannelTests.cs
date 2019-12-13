@@ -30,9 +30,10 @@ namespace Ruffles.Tests.Channels
             byte[] message = BufferHelper.GetRandomBuffer(1024, 0);
 
             HeapMemory messageMemory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message, 0, 1024), out _, out bool dealloc).Pointers[0]);
-            ArraySegment<byte>? payload = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset + 2, (int)messageMemory.VirtualCount - 2), out _, out bool hasMore);
+            DirectOrAllocedMemory payload = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset + 2, (int)messageMemory.VirtualCount - 2), out _, out bool hasMore);
 
-            Assert.Null(payload);
+            Assert.Null(payload.AllocedMemory);
+            Assert.Null(payload.DirectMemory);
             Assert.True(hasMore);
 
             HeapMemory payloadMemory = serverChannel.HandlePoll();
@@ -69,15 +70,19 @@ namespace Ruffles.Tests.Channels
             HeapMemory message3Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message3, 0, 1024), out _, out dealloc).Pointers[0]);
 
             // Consume 1st payload
-            ArraySegment<byte>? payload1 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message1Memory.Buffer, (int)message1Memory.VirtualOffset + 2, (int)message1Memory.VirtualCount - 2), out _, out bool hasMore1);
+            DirectOrAllocedMemory payload1 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message1Memory.Buffer, (int)message1Memory.VirtualOffset + 2, (int)message1Memory.VirtualCount - 2), out _, out bool hasMore1);
             // Consume 3rd payload
-            ArraySegment<byte>? payload3 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message3Memory.Buffer, (int)message3Memory.VirtualOffset + 2, (int)message3Memory.VirtualCount - 2), out _, out bool hasMore3);
+            DirectOrAllocedMemory payload3 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message3Memory.Buffer, (int)message3Memory.VirtualOffset + 2, (int)message3Memory.VirtualCount - 2), out _, out bool hasMore3);
             // Consume 2nd payload
-            ArraySegment<byte>? payload2 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message2Memory.Buffer, (int)message2Memory.VirtualOffset + 2, (int)message2Memory.VirtualCount - 2), out _, out bool hasMore2);
+            DirectOrAllocedMemory payload2 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message2Memory.Buffer, (int)message2Memory.VirtualOffset + 2, (int)message2Memory.VirtualCount - 2), out _, out bool hasMore2);
 
-            Assert.Null(payload1);
-            Assert.Null(payload2);
-            Assert.Null(payload3);
+            Assert.Null(payload1.AllocedMemory);
+            Assert.Null(payload2.AllocedMemory);
+            Assert.Null(payload3.AllocedMemory);
+
+            Assert.Null(payload1.DirectMemory);
+            Assert.Null(payload2.DirectMemory);
+            Assert.Null(payload3.DirectMemory);
 
             Assert.True(hasMore1);
             Assert.True(hasMore2);
@@ -136,7 +141,7 @@ namespace Ruffles.Tests.Channels
 
             // Consume 1st payload all except first fragment
             bool[] hasMore1s = new bool[message1MemoryLength];
-            ArraySegment<byte>?[] payload1s = new ArraySegment<byte>?[message1MemoryLength];
+            DirectOrAllocedMemory[] payload1s = new DirectOrAllocedMemory[message1MemoryLength];
             for (int i = 1; i < message1MemoryLength; i++)
             {
                 payload1s[i] = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(((HeapMemory)message1Memory.Pointers[i]).Buffer, (int)((HeapMemory)message1Memory.Pointers[i]).VirtualOffset + 2, (int)((HeapMemory)message1Memory.Pointers[i]).VirtualCount - 2), out _, out bool hasMore1);
@@ -144,7 +149,7 @@ namespace Ruffles.Tests.Channels
             }
             // Consume 3rd payload only last fragment
             bool[] hasMore3s = new bool[message3MemoryLength];
-            ArraySegment<byte>?[] payload3s = new ArraySegment<byte>?[message3MemoryLength];
+            DirectOrAllocedMemory[] payload3s = new DirectOrAllocedMemory[message3MemoryLength];
 
             {
                 payload3s[payload3s.Length - 1] = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(((HeapMemory)message3Memory.Pointers[payload3s.Length - 1]).Buffer, (int)((HeapMemory)message3Memory.Pointers[payload3s.Length - 1]).VirtualOffset + 2, (int)((HeapMemory)message3Memory.Pointers[payload3s.Length - 1]).VirtualCount - 2), out _, out bool hasMore3);
@@ -153,7 +158,7 @@ namespace Ruffles.Tests.Channels
 
             // Consume 2nd payload all fragments
             bool[] hasMore2s = new bool[message2MemoryLength];
-            ArraySegment<byte>?[] payload2s = new ArraySegment<byte>?[message2MemoryLength];
+            DirectOrAllocedMemory[] payload2s = new DirectOrAllocedMemory[message2MemoryLength];
             for (int i = 0; i < message2MemoryLength; i++)
             {
                 payload2s[i] = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(((HeapMemory)message2Memory.Pointers[i]).Buffer, (int)((HeapMemory)message2Memory.Pointers[i]).VirtualOffset + 2, (int)((HeapMemory)message2Memory.Pointers[i]).VirtualCount - 2), out _, out bool hasMore2);
@@ -177,17 +182,20 @@ namespace Ruffles.Tests.Channels
 
             for (int i = 0; i < payload1s.Length; i++)
             {
-                Assert.Null(payload1s[i]);
+                Assert.Null(payload1s[i].AllocedMemory);
+                Assert.Null(payload1s[i].DirectMemory);
             }
 
             for (int i = 0; i < payload3s.Length; i++)
             {
-                Assert.Null(payload3s[i]);
+                Assert.Null(payload3s[i].AllocedMemory);
+                Assert.Null(payload1s[i].DirectMemory);
             }
 
             for (int i = 0; i < payload2s.Length; i++)
             {
-                Assert.Null(payload2s[i]);
+                Assert.Null(payload2s[i].AllocedMemory);
+                Assert.Null(payload2s[i].DirectMemory);
             }
 
             // TODO: Assert HasMore states
@@ -245,7 +253,7 @@ namespace Ruffles.Tests.Channels
 
             // Consume 1st payload
             bool[] hasMore1s = new bool[message1MemoryLength];
-            ArraySegment<byte>?[] payload1s = new ArraySegment<byte>?[message1MemoryLength];
+            DirectOrAllocedMemory[] payload1s = new DirectOrAllocedMemory[message1MemoryLength];
             for (int i = 0; i < message1MemoryLength; i++)
             {
                 payload1s[i] = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(((HeapMemory)message1Memory.Pointers[i]).Buffer, (int)((HeapMemory)message1Memory.Pointers[i]).VirtualOffset + 2, (int)((HeapMemory)message1Memory.Pointers[i]).VirtualCount - 2), out _, out bool hasMore1);
@@ -253,7 +261,7 @@ namespace Ruffles.Tests.Channels
             }
             // Consume 3rd payload
             bool[] hasMore3s = new bool[message3MemoryLength];
-            ArraySegment<byte>?[] payload3s = new ArraySegment<byte>?[message3MemoryLength];
+            DirectOrAllocedMemory[] payload3s = new DirectOrAllocedMemory[message3MemoryLength];
             for (int i = 0; i < message3MemoryLength; i++)
             {
                 payload3s[i] = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(((HeapMemory)message3Memory.Pointers[i]).Buffer, (int)((HeapMemory)message3Memory.Pointers[i]).VirtualOffset + 2, (int)((HeapMemory)message3Memory.Pointers[i]).VirtualCount - 2), out _, out bool hasMore3);
@@ -261,27 +269,29 @@ namespace Ruffles.Tests.Channels
             }
             // Consume 2nd payload
             bool[] hasMore2s = new bool[message2MemoryLength];
-            ArraySegment<byte>?[] payload2s = new ArraySegment<byte>?[message2MemoryLength];
+            DirectOrAllocedMemory[] payload2s = new DirectOrAllocedMemory[message2MemoryLength];
             for (int i = 0; i < message2MemoryLength; i++)
             {
                 payload2s[i] = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(((HeapMemory)message2Memory.Pointers[i]).Buffer, (int)((HeapMemory)message2Memory.Pointers[i]).VirtualOffset + 2, (int)((HeapMemory)message2Memory.Pointers[i]).VirtualCount - 2), out _, out bool hasMore2);
                 hasMore2s[i] = hasMore2;
             }
 
-
             for (int i = 0; i < payload1s.Length; i++)
             {
-                Assert.Null(payload1s[i]);
+                Assert.Null(payload1s[i].AllocedMemory);
+                Assert.Null(payload1s[i].DirectMemory);
             }
 
             for (int i = 0; i < payload3s.Length; i++)
             {
-                Assert.Null(payload3s[i]);
+                Assert.Null(payload3s[i].AllocedMemory);
+                Assert.Null(payload1s[i].DirectMemory);
             }
 
             for (int i = 0; i < payload2s.Length; i++)
             {
-                Assert.Null(payload2s[i]);
+                Assert.Null(payload2s[i].AllocedMemory);
+                Assert.Null(payload2s[i].DirectMemory);
             }
 
             // TODO: Assert HasMore states

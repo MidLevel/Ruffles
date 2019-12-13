@@ -137,7 +137,7 @@ namespace Ruffles.Example
                 if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
-                    server.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
+                    server.SendNow(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
                     Console.WriteLine("Sending packet: " + messageCounter);
 
                     messageCounter++;
