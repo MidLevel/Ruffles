@@ -68,7 +68,7 @@ namespace Ruffles.Channeling.Channels
 
         internal struct PendingOutgoingFragment : IMemoryReleasable
         {
-            public bool IsAlloced => Memory != null && !Memory.isDead;
+            public bool IsAlloced => Memory != null && !Memory.IsDead;
 
             public ushort Sequence;
             public HeapMemory Memory;
@@ -107,7 +107,7 @@ namespace Ruffles.Channeling.Channels
 
                     for (int i = 0; i < Fragments.VirtualCount; i++)
                     {
-                        if (Fragments.Pointers[Fragments.VirtualOffset + i] == null || ((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]).isDead)
+                        if (Fragments.Pointers[Fragments.VirtualOffset + i] == null || ((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]).IsDead)
                         {
                             return false;
                         }
@@ -150,7 +150,7 @@ namespace Ruffles.Channeling.Channels
                 {
                     for (int i = 0; i < Fragments.VirtualCount; i++)
                     {
-                        if (Fragments.Pointers[Fragments.VirtualOffset + i] != null && !((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]).isDead)
+                        if (Fragments.Pointers[Fragments.VirtualOffset + i] != null && !((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]).IsDead)
                         {
                             memoryManager.DeAlloc((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]);
                         }
@@ -191,12 +191,7 @@ namespace Ruffles.Channeling.Channels
             _sendSequencer = new HeapableSlidingWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, true, sizeof(ushort), memoryManager);
         }
 
-        public HeapMemory HandlePoll()
-        {
-            return null;
-        }
-
-        public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
         {
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
@@ -210,14 +205,10 @@ namespace Ruffles.Channeling.Channels
             // Set the headerBytes
             headerBytes = 4;
 
-            // Reliable fragmented never returns in poll
-            hasMore = false;
-
             if (fragment > config.MaxFragments)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("FragmentId was too large. [FragmentId=" + fragment + "] [Config.MaxFragments=" + config.MaxFragments + "]. The fragment was silently dropped, expect a timeout.");
-                hasMore = false;
-                return new DirectOrAllocedMemory();
+                return null;
             }
 
             lock (_lock)
@@ -226,7 +217,7 @@ namespace Ruffles.Channeling.Channels
                 if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 ||
                     (_incomingAckedSequences.Contains(sequence)) ||
                     (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].IsComplete) ||
-                    (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].Fragments != null && _receiveSequencer[sequence].Fragments.VirtualCount > fragment && _receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment] != null && !((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment]).isDead))
+                    (_receiveSequencer[sequence].Alive && _receiveSequencer[sequence].Fragments != null && _receiveSequencer[sequence].Fragments.VirtualCount > fragment && _receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment] != null && !((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment]).IsDead))
                 {
                     // We have already acked this message. Ack again
 
@@ -236,9 +227,7 @@ namespace Ruffles.Channeling.Channels
 
                     SendAckEncoded(sequence, encodedFragment);
 
-                    hasMore = false;
-
-                    return new DirectOrAllocedMemory();
+                    return null;
                 }
                 else
                 {
@@ -252,8 +241,7 @@ namespace Ruffles.Channeling.Channels
 
                         connection.Disconnect(false);
 
-                        hasMore = false;
-                        return new DirectOrAllocedMemory();
+                        return null;
                     }
                     else if (!_receiveSequencer[sequence].Alive)
                     {
@@ -313,7 +301,7 @@ namespace Ruffles.Channeling.Channels
                     }
 
                     // If the fragment is null OR the fragment is DEAD
-                    if (_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment] == null || ((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment]).isDead)
+                    if (_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment] == null || ((HeapMemory)_receiveSequencer[sequence].Fragments.Pointers[_receiveSequencer[sequence].Fragments.VirtualOffset + fragment]).IsDead)
                     {
                         // Alloc some memory for the fragment
                         HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 4);
@@ -383,14 +371,17 @@ namespace Ruffles.Channeling.Channels
                             Fragments = null
                         };
 
-                        // HandlePoll gives the memory straight to the user, they are responsible for deallocing to prevent leaks
-                        return new DirectOrAllocedMemory()
-                        {
-                            AllocedMemory = memory
-                        };
+
+                        // Alloc pointers
+                        HeapPointers pointers = memoryManager.AllocHeapPointers(1);
+
+                        // Alloc a memory wrapper
+                        pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(memory);
+
+                        return pointers;
                     }
 
-                    return new DirectOrAllocedMemory();
+                    return null;
                 }
             }
         }

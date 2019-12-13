@@ -12,7 +12,7 @@ namespace Ruffles.Channeling.Channels
     {
         private struct PendingOutgoingPacket : IMemoryReleasable
         {
-            public bool IsAlloced => Memory != null && !Memory.isDead;
+            public bool IsAlloced => Memory != null && !Memory.IsDead;
 
             public bool Alive;
             public ushort Sequence;
@@ -120,7 +120,7 @@ namespace Ruffles.Channeling.Channels
                 HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
                 // Point the first pointer to the memory
-                pointers.Pointers[pointers.VirtualOffset] = memory;
+                pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(memory);
 
                 return pointers;
             }
@@ -161,11 +161,8 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
         {
-            // ReliableStateUpdate has one message in equal no more than one out.
-            hasMore = false;
-
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
@@ -184,7 +181,7 @@ namespace Ruffles.Channeling.Channels
 
                     SendAck(sequence);
 
-                    return new DirectOrAllocedMemory();
+                    return null;
                 }
                 else
                 {
@@ -195,19 +192,16 @@ namespace Ruffles.Channeling.Channels
 
                     SendAck(sequence);
 
-                    return new DirectOrAllocedMemory()
-                    {
-                        DirectMemory = new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2)
-                    };
+
+                    // Alloc pointers
+                    HeapPointers pointers = memoryManager.AllocHeapPointers(1);
+
+                    // Alloc a memory wrapper
+                    pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2));
+
+                    return pointers;
                 }
             }
-        }
-
-
-
-        public HeapMemory HandlePoll()
-        {
-            return null;
         }
 
         public void InternalUpdate()

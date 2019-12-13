@@ -12,7 +12,7 @@ namespace Ruffles.Channeling.Channels
     {
         internal struct PendingOutgoingPacket : IMemoryReleasable
         {
-            public bool IsAlloced => Memory != null && !Memory.isDead;
+            public bool IsAlloced => Memory != null && !Memory.IsDead;
 
             public ushort Sequence;
             public HeapMemory Memory;
@@ -32,7 +32,7 @@ namespace Ruffles.Channeling.Channels
 
         internal struct PendingIncomingPacket : IMemoryReleasable
         {
-            public bool IsAlloced => Memory != null && !Memory.isDead;
+            public bool IsAlloced => Memory != null && !Memory.IsDead;
 
             public ushort Sequence;
             public HeapMemory Memory;
@@ -78,33 +78,7 @@ namespace Ruffles.Channeling.Channels
             _lastAckTimes = new SlidingWindow<DateTime>(config.ReliableAckFlowWindowSize, true, sizeof(ushort));
         }
 
-        public HeapMemory HandlePoll()
-        {
-            lock (_lock)
-            {
-                if (_receiveSequencer[_incomingLowestAckedSequence + 1].Alive)
-                {
-                    ++_incomingLowestAckedSequence;
-
-                    // HandlePoll gives the memory straight to the user, they are responsible for deallocing to prevent leaks
-                    HeapMemory memory = _receiveSequencer[_incomingLowestAckedSequence].Memory;
-
-                    // Kill
-                    _receiveSequencer[_incomingLowestAckedSequence] = new PendingIncomingPacket()
-                    {
-                        Alive = false,
-                        Sequence = 0
-                    };
-
-
-                    return memory;
-                }
-
-                return null;
-            }
-        }
-
-        public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
         {
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
@@ -124,25 +98,49 @@ namespace Ruffles.Channeling.Channels
 
                     SendAck(sequence);
 
-                    hasMore = false;
-                    return new DirectOrAllocedMemory();
+                    return null;
                 }
                 else if (sequence == _incomingLowestAckedSequence + 1)
                 {
                     // This is the packet right after
-
-                    // If the one after is alive, we give set hasMore to true
-                    hasMore = _receiveSequencer[_incomingLowestAckedSequence + 2].Alive;
 
                     _incomingLowestAckedSequence++;
 
                     // Send ack
                     SendAck(sequence);
 
-                    return new DirectOrAllocedMemory()
+                    uint additionalPackets = 0;
+
+                    // Count all the additional sequential packets that are ready
+                    for (int i = 1; _receiveSequencer[_incomingLowestAckedSequence + i].Alive; i++)
                     {
-                        DirectMemory = new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2)
-                    };
+                        additionalPackets++;
+                    }
+
+                    // Allocate pointers (alloc size 1, we might need more)
+                    HeapPointers pointers = memoryManager.AllocHeapPointers(1 + additionalPackets);
+
+                    // Point the first pointer to the memory that is known.
+                    pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2));
+
+                    for (int i = 0; _receiveSequencer[_incomingLowestAckedSequence + 1].Alive; i++)
+                    {
+                        // Update lowest incoming
+                        ++_incomingLowestAckedSequence;
+
+                        // Set the memory
+                        pointers.Pointers[1 + i] = memoryManager.AllocMemoryWrapper(_receiveSequencer[_incomingLowestAckedSequence].Memory);
+
+                        // Kill
+                        _receiveSequencer[_incomingLowestAckedSequence] = new PendingIncomingPacket()
+                        {
+                            Alive = false,
+                            Sequence = 0
+                        };
+                    }
+
+                    return pointers;
+
                 }
                 else if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0)
                 {
@@ -156,8 +154,7 @@ namespace Ruffles.Channeling.Channels
 
                         connection.Disconnect(false);
 
-                        hasMore = false;
-                        return new DirectOrAllocedMemory();
+                        return null;
                     }
                     else if (!_receiveSequencer[sequence].Alive)
                     {
@@ -180,8 +177,7 @@ namespace Ruffles.Channeling.Channels
                     }
                 }
 
-                hasMore = false;
-                return new DirectOrAllocedMemory();
+                return null;
             }
         }
 

@@ -103,11 +103,8 @@ namespace Ruffles.Channeling.Channels
             // Unreliable messages have no acks.
         }
 
-        public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
         {
-            // UnreliableSequenced has one message in equal no more than one out.
-            hasMore = false;
-
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
@@ -121,19 +118,17 @@ namespace Ruffles.Channeling.Channels
                     // Set the new sequence
                     _incomingLowestAckedSequence = sequence;
 
-                    return new DirectOrAllocedMemory()
-                    {
-                        DirectMemory = new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2)
-                    };
+                    // Alloc pointers
+                    HeapPointers pointers = memoryManager.AllocHeapPointers(1);
+
+                    // Alloc wrapper
+                    pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(new ArraySegment<byte>(payload.Array, payload.Offset + 2, payload.Count - 2));
+
+                    return pointers;
                 }
 
-                return new DirectOrAllocedMemory();
+                return null;
             }
-        }
-
-        public HeapMemory HandlePoll()
-        {
-            return null;
         }
 
         public void InternalUpdate()

@@ -1,16 +1,15 @@
 ﻿using System;
 using Ruffles.Exceptions;
-using Ruffles.Utils;
 
 namespace Ruffles.Memory
 {
-    internal class HeapPointers
+    internal class HeapPointers : ManagedMemory
     {
         public object[] Pointers
         {
             get
             {
-                if (isDead)
+                if (IsDead)
                 {
                     throw new MemoryException("Cannot access dead memory");
                 }
@@ -22,12 +21,10 @@ namespace Ruffles.Memory
         public uint VirtualOffset { get; set; }
         public uint VirtualCount { get; set; }
 
-        private object[] _pointers;
-        internal bool isDead;
+        internal override string LeakedType => nameof(HeapPointers);
+        internal override string LeakedData => "[PointerLength=" + _pointers.Length + "] [VirtualOffset=" + VirtualOffset + "] [VirtualCount=" + VirtualCount + "]";
 
-#if DEBUG
-        internal string allocStacktrace;
-#endif
+        private object[] _pointers;
 
         public HeapPointers(uint size)
         {
@@ -45,38 +42,6 @@ namespace Ruffles.Memory
                 _pointers = new object[size];
 
                 Array.Copy(oldBuffer, 0, _pointers, 0, oldBuffer.Length);
-            }
-        }
-
-        ~HeapPointers()
-        {
-            try
-            {
-                // If shutdown of the CLR has started, or the application domain is being unloaded. We don't want to print leak warnings. As these are legitimate deallocs and not leaks.
-                if (!Environment.HasShutdownStarted)
-                {
-                    if (!isDead)
-                    {
-#if DEBUG
-                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Pointers was just leaked from the MemoryManager [Size=" + Pointers.Length + "] AllocStack: " + allocStacktrace);
-#else
-                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Pointers was just leaked from the MemoryManager [Size=" + Pointers.Length + "]");
-
-#endif
-                    }
-                    else
-                    {
-#if DEBUG
-                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogWarning("Dead pointers was just leaked from the MemoryManager [Size=" + _pointers.Length + "] AllocStack: " + allocStacktrace);
-#else
-                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogWarning("Dead pointers was just leaked from the MemoryManager [Size=" + _pointers.Length + "]");
-#endif
-                    }
-                }
-            }
-            catch
-            {
-                // Supress
             }
         }
     }

@@ -23,52 +23,32 @@ namespace Ruffles.Messaging
                 return;
             }
 
-            DirectOrAllocedMemory incomingMessage = connection.Channels[channelId].HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore);
+            HeapPointers incomingPointers = connection.Channels[channelId].HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes);
 
-            connection.IncomingUserBytes += (ulong)payload.Count - headerBytes;
-
-            HeapMemory memory = null;
-
-            if (incomingMessage.AllocedMemory != null)
+            if (incomingPointers != null)
             {
-                // Use the alloced memory
-                memory = incomingMessage.AllocedMemory;
-            }
-            else if (incomingMessage.DirectMemory != null)
-            {
-                // Alloc memory that can be borrowed to userspace
-                memory = memoryManager.AllocHeapMemory((uint)incomingMessage.DirectMemory.Value.Count);
-
-                // Copy payload to borrowed memory
-                Buffer.BlockCopy(incomingMessage.DirectMemory.Value.Array, incomingMessage.DirectMemory.Value.Offset, memory.Buffer, 0, incomingMessage.DirectMemory.Value.Count);
-            }
-
-            if (memory != null)
-            {
-                // Send to userspace
-                connection.Socket.PublishEvent(new NetworkEvent()
+                // There is new packets
+                for (int i = 0; i < incomingPointers.VirtualCount; i++)
                 {
-                    Connection = connection,
-                    Socket = connection.Socket,
-                    Type = NetworkEventType.Data,
-                    AllowUserRecycle = true,
-                    Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
-                    InternalMemory = memory,
-                    SocketReceiveTime = DateTime.Now,
-                    ChannelId = channelId,
-                    MemoryManager = memoryManager
-                });
-            }
+                    MemoryWrapper wrapper = (MemoryWrapper)incomingPointers.Pointers[i];
 
-            if (hasMore)
-            {
-                HeapMemory messageMemory = null;
+                    HeapMemory memory = null;
 
-                do
-                {
-                    messageMemory = connection.Channels[channelId].HandlePoll();
+                    if (wrapper.AllocatedMemory != null)
+                    {
+                        memory = wrapper.AllocatedMemory;
+                    }
 
-                    if (messageMemory != null)
+                    if (wrapper.DirectMemory != null)
+                    {
+                        // Alloc memory
+                        memory = memoryManager.AllocHeapMemory((uint)wrapper.DirectMemory.Value.Count);
+
+                        // Copy payload to borrowed memory
+                        Buffer.BlockCopy(wrapper.DirectMemory.Value.Array, wrapper.DirectMemory.Value.Offset, memory.Buffer, 0, wrapper.DirectMemory.Value.Count);
+                    }
+
+                    if (memory != null)
                     {
                         // Send to userspace
                         connection.Socket.PublishEvent(new NetworkEvent()
@@ -77,15 +57,20 @@ namespace Ruffles.Messaging
                             Socket = connection.Socket,
                             Type = NetworkEventType.Data,
                             AllowUserRecycle = true,
-                            Data = new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset, (int)messageMemory.VirtualCount),
-                            InternalMemory = messageMemory,
+                            Data = new ArraySegment<byte>(wrapper.AllocatedMemory.Buffer, (int)wrapper.AllocatedMemory.VirtualOffset, (int)wrapper.AllocatedMemory.VirtualCount),
+                            InternalMemory = wrapper.AllocatedMemory,
                             SocketReceiveTime = DateTime.Now,
                             ChannelId = channelId,
                             MemoryManager = memoryManager
                         });
                     }
+
+                    // Dealloc the wrapper
+                    memoryManager.DeAlloc(wrapper);
                 }
-                while (messageMemory != null);
+
+                // Dealloc the pointers
+                memoryManager.DeAlloc(incomingPointers);
             }
         }
 

@@ -1920,11 +1920,33 @@ namespace Ruffles.Core
 
                             // Heartbeats are sequenced to not properly handle network congestion
 
-                            DirectOrAllocedMemory heartbeatMem = connection.HeartbeatChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes, out bool hasMore);
+                            HeapPointers pointers = connection.HeartbeatChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes);
 
-                            if (heartbeatMem.AllocedMemory != null && heartbeatMem.DirectMemory != null)
+                            if (pointers != null)
                             {
-                                connection.LastMessageIn = DateTime.Now;
+                                MemoryWrapper wrapper = (MemoryWrapper)pointers.Pointers[0];
+
+                                if (wrapper != null)
+                                {
+                                    if (wrapper.AllocatedMemory != null)
+                                    {
+                                        connection.LastMessageIn = DateTime.Now;
+
+                                        // Dealloc the memory
+                                        memoryManager.DeAlloc(wrapper.AllocatedMemory);
+                                    }
+
+                                    if (wrapper.DirectMemory != null)
+                                    {
+                                        connection.LastMessageIn = DateTime.Now;
+                                    }
+
+                                    // Dealloc the wrapper
+                                    memoryManager.DeAlloc(wrapper);
+                                }
+
+                                // Dealloc the pointers
+                                memoryManager.DeAlloc(pointers);
                             }
                         }
                         else

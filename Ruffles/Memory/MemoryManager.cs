@@ -23,6 +23,10 @@ namespace Ruffles.Memory
         private const uint minPointerArraySize = 64;
         private const uint pointerArraySizeMultiple = 64;
 
+        private int _createdMemoryWrappers = 0;
+        private bool _hasWarnedAboutMemoryWrapperLeaks = false;
+        private readonly ConcurrentCircularQueue<MemoryWrapper> _pooledMemoryWrappers;
+
         private readonly SocketConfig _configuration;
 
         internal static uint CalculateMultiple(uint minSize, uint multiple)
@@ -69,7 +73,8 @@ namespace Ruffles.Memory
 
             pointers.EnsureSize(allocSize);
 
-            pointers.isDead = false;
+            pointers.IsDead = false;
+
             pointers.VirtualCount = size;
             pointers.VirtualOffset = 0;
 
@@ -108,7 +113,8 @@ namespace Ruffles.Memory
 
             memory.EnsureSize(allocSize);
 
-            memory.isDead = false;
+            memory.IsDead = false;
+
             memory.VirtualCount = size;
             memory.VirtualOffset = 0;
 
@@ -126,16 +132,57 @@ namespace Ruffles.Memory
             return memory;
         }
 
+        internal MemoryWrapper AllocMemoryWrapper(HeapMemory allocatedMemory)
+        {
+            return AllocMemoryWrapper(allocatedMemory, null);
+        }
+
+        internal MemoryWrapper AllocMemoryWrapper(ArraySegment<byte>? directMemory)
+        {
+            return AllocMemoryWrapper(null, directMemory);
+        }
+
+        private MemoryWrapper AllocMemoryWrapper(HeapMemory allocatedMemory, ArraySegment<byte>? directMemory)
+        {
+            bool pooled;
+
+            if (!(pooled = _pooledMemoryWrappers.TryDequeue(out MemoryWrapper wrapper)))
+            {
+                int createdMemoryWrappers = Interlocked.Increment(ref _createdMemoryWrappers);
+
+                if (createdMemoryWrappers >= 1024 && !_hasWarnedAboutMemoryWrapperLeaks)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [MEMORY WRAPPER]");
+                    _hasWarnedAboutMemoryWrapperLeaks = true;
+                }
+
+                wrapper = new MemoryWrapper();
+            }
+
+            wrapper.IsDead = false;
+
+            wrapper.AllocatedMemory = allocatedMemory;
+            wrapper.DirectMemory = directMemory;
+
+#if DEBUG
+            // The allocation stacktrace allows us to see where the alloc occured that caused the leak
+            wrapper.allocStacktrace = Environment.StackTrace;
+#endif
+
+            return wrapper;
+        }
+
         internal void DeAlloc(HeapMemory memory)
         {
-            if (memory.isDead)
+            if (memory.IsDead)
             {
                 throw new MemoryException("Cannot deallocate already dead memory");
             }
 
-            memory.isDead = true;
             memory.VirtualOffset = 0;
             memory.VirtualCount = 0;
+
+            memory.IsDead = true;
 
             if (!_pooledHeapMemory.TryEnqueue(memory))
             {
@@ -146,19 +193,39 @@ namespace Ruffles.Memory
 
         internal void DeAlloc(HeapPointers pointers)
         {
-            if (pointers.isDead)
+            if (pointers.IsDead)
             {
                 throw new MemoryException("Cannot deallocate already dead memory");
             }
 
-            pointers.isDead = true;
             pointers.VirtualOffset = 0;
             pointers.VirtualCount = 0;
+
+            pointers.IsDead = true;
 
             if (!_pooledPointerArrays.TryEnqueue(pointers))
             {
                 // Failed to enqueue pointers. Queue is full
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return heap pointers. The queue is full. The memory will be given to the garbage collector. [HEAP POINTERS]");
+            }
+        }
+
+        internal void DeAlloc(MemoryWrapper wrapper)
+        {
+            if (wrapper.IsDead)
+            {
+                throw new MemoryException("Cannot deallocate already dead memory");
+            }
+
+            wrapper.AllocatedMemory = null;
+            wrapper.DirectMemory = null;
+
+            wrapper.IsDead = true;
+
+            if (!_pooledMemoryWrappers.TryEnqueue(wrapper))
+            {
+                // Failed to enqueue pointers. Queue is full
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return memory wrapper. The queue is full. The memory will be given to the garbage collector. [MEMORY WRAPPER]");
             }
         }
     }

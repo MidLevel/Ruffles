@@ -63,23 +63,18 @@ namespace Ruffles.Channeling.Channels
             // Unreliable messages have no acks.
         }
 
-        public DirectOrAllocedMemory HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
         {
-            // Unreliable has one message in equal no more than one out.
-            hasMore = false;
-
             // Set the headerBytes
             headerBytes = 0;
 
-            return new DirectOrAllocedMemory()
-            {
-                DirectMemory = new ArraySegment<byte>(payload.Array, payload.Offset, payload.Count)
-            };
-        }
+            // Alloc pointers
+            HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
-        public HeapMemory HandlePoll()
-        {
-            return null;
+            // Alloc wrapper
+            pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(new ArraySegment<byte>(payload.Array, payload.Offset, payload.Count));
+
+            return pointers;
         }
 
         public void InternalUpdate()
