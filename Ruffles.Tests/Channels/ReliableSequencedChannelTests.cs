@@ -29,12 +29,21 @@ namespace Ruffles.Tests.Channels
             byte[] message = BufferHelper.GetRandomBuffer(1024, 0);
 
             HeapMemory messageMemory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message, 0, 1024), out _, out bool dealloc).Pointers[0]);
-            DirectOrAllocedMemory payload = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset + 2, (int)messageMemory.VirtualCount - 2), out _, out bool hasMore);
+            HeapPointers pointers = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset + 2, (int)messageMemory.VirtualCount - 2), out _);
 
-            Assert.NotNull(payload.DirectMemory);
-            Assert.False(hasMore);
+            Assert.NotNull(pointers);
 
-            Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(payload.DirectMemory.Value, 0, 1024));
+            Assert.NotNull(pointers.Pointers[0]);
+
+            MemoryWrapper wrapper = (MemoryWrapper)pointers.Pointers[0];
+
+            Assert.NotNull(wrapper);
+
+            Assert.Null(wrapper.AllocatedMemory);
+
+            Assert.NotNull(wrapper.DirectMemory);
+
+            Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(wrapper.DirectMemory.Value, 0, 1024));
         }
 
         [Test()]
@@ -64,35 +73,49 @@ namespace Ruffles.Tests.Channels
             HeapMemory message3Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message3, 0, 1024), out _, out dealloc).Pointers[0]);
 
             // Consume 1st payload
-            DirectOrAllocedMemory payload1 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message1Memory.Buffer, (int)message1Memory.VirtualOffset + 2, (int)message1Memory.VirtualCount - 2), out _, out bool hasMore1);
+            HeapPointers payload1 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message1Memory.Buffer, (int)message1Memory.VirtualOffset + 2, (int)message1Memory.VirtualCount - 2), out _);
             // Consume 3rd payload
-            DirectOrAllocedMemory payload3 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message3Memory.Buffer, (int)message3Memory.VirtualOffset + 2, (int)message3Memory.VirtualCount - 2), out _, out bool hasMore3);
+            HeapPointers payload3 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message3Memory.Buffer, (int)message3Memory.VirtualOffset + 2, (int)message3Memory.VirtualCount - 2), out _);
             // Consume 2nd payload
-            DirectOrAllocedMemory payload2 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message2Memory.Buffer, (int)message2Memory.VirtualOffset + 2, (int)message2Memory.VirtualCount - 2), out _, out bool hasMore2);
-
-            HeapMemory pollMemory = serverChannel.HandlePoll();
+            HeapPointers payload2 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message2Memory.Buffer, (int)message2Memory.VirtualOffset + 2, (int)message2Memory.VirtualCount - 2), out _);
 
             {
-                Assert.NotNull(payload1.DirectMemory);
-                Assert.False(hasMore1);
-                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(payload1.DirectMemory.Value, 0, 1024));
+                Assert.NotNull(payload1);
+                Assert.NotNull(payload1.Pointers);
+                Assert.AreEqual(1, payload1.VirtualCount);
+                Assert.NotNull(payload1.Pointers[0]);
+                MemoryWrapper wrapper = (MemoryWrapper)payload1.Pointers[0];
+                Assert.NotNull(wrapper);
+                Assert.NotNull(wrapper.DirectMemory);
+                Assert.Null(wrapper.AllocatedMemory);
+                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(wrapper.DirectMemory.Value, 0, 1024));
             }
 
             {
-                Assert.Null(payload3.DirectMemory);
-                Assert.False(hasMore3);
+                Assert.Null(payload3);
             }
 
             {
-                Assert.NotNull(payload2.DirectMemory);
-                Assert.True(hasMore2);
-                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(payload2.DirectMemory.Value, 1, 1024));
-            }
+                Assert.NotNull(payload2);
+                Assert.NotNull(payload2.Pointers);
+                Assert.AreEqual(2, payload2.VirtualCount);
 
-            {
-                // Check for the third packet
-                Assert.NotNull(pollMemory);
-                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(pollMemory, 2, 1024));
+                Assert.NotNull(payload2.Pointers[0]);
+                Assert.NotNull(payload2.Pointers[1]);
+
+                MemoryWrapper wrapper1 = (MemoryWrapper)payload2.Pointers[0];
+                MemoryWrapper wrapper2 = (MemoryWrapper)payload2.Pointers[1];
+
+                Assert.NotNull(wrapper1);
+                Assert.NotNull(wrapper2);
+
+                Assert.NotNull(wrapper1.DirectMemory);
+                Assert.NotNull(wrapper2.AllocatedMemory);
+                Assert.Null(wrapper1.AllocatedMemory);
+                Assert.Null(wrapper2.DirectMemory);           
+
+                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(wrapper1.DirectMemory.Value, 1, 1024));
+                Assert.That(BufferHelper.ValidateBufferSizeAndIdentity(wrapper2.AllocatedMemory, 2, 1024));
             }
         }
     }
