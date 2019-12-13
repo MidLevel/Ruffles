@@ -563,6 +563,7 @@ namespace Ruffles.Channeling.Channels
             lock (_lock)
             {
                 // Clear all incoming states
+                _incomingAckedSequences.Clear();
                 _receiveSequencer.Release();
                 _incomingLowestAckedSequence = 0;
 
