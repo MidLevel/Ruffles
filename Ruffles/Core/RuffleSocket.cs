@@ -303,6 +303,10 @@ namespace Ruffles.Core
                 }
             }
 
+            // Set the .NET buffer sizes. Defaults to 1 megabyte each
+            socket.ReceiveBufferSize = Constants.RECEIVE_SOCKET_BUFFER_SIZE;
+            socket.SendBufferSize = Constants.SEND_SOCKET_BUFFER_SIZE;
+
             try
             {
                 // Bind the socket to the OS
