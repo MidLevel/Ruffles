@@ -165,6 +165,11 @@ namespace Ruffles.Core
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
             memoryManager = new MemoryManager(config);
+
+            if (!NetTime.HighResolution)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("NetTime does not support high resolution. This might impact Ruffles performance");
+            }
         }
 
         /// <summary>
