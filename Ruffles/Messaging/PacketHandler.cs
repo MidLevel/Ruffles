@@ -57,8 +57,8 @@ namespace Ruffles.Messaging
                             Socket = connection.Socket,
                             Type = NetworkEventType.Data,
                             AllowUserRecycle = true,
-                            Data = new ArraySegment<byte>(wrapper.AllocatedMemory.Buffer, (int)wrapper.AllocatedMemory.VirtualOffset, (int)wrapper.AllocatedMemory.VirtualCount),
-                            InternalMemory = wrapper.AllocatedMemory,
+                            Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
+                            InternalMemory = memory,
                             SocketReceiveTime = DateTime.Now,
                             ChannelId = channelId,
                             MemoryManager = memoryManager
