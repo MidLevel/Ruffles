@@ -2317,7 +2317,6 @@ namespace Ruffles.Core
                             {
                                 // Unknown channel type. Disconnect.
                                 // TODO: Fix
-                                Logging.LogInfo(config.ChannelTypes[x] + "");
                                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
                                 DisconnectInternal(connection, false, false);
                             }
