@@ -2,6 +2,7 @@
 using Ruffles.Connections;
 using Ruffles.Exceptions;
 using Ruffles.Memory;
+using Ruffles.Time;
 
 namespace Ruffles.Core
 {
@@ -36,7 +37,7 @@ namespace Ruffles.Core
         /// Useful for calculating exact receive times.
         /// </summary>
         /// <value>The socket receive time.</value>
-        public DateTime SocketReceiveTime { get; internal set; }
+        public NetTime SocketReceiveTime { get; internal set; }
         /// <summary>
         /// Gets the channelId the message was sent over.
         /// </summary>

@@ -1,4 +1,4 @@
-﻿using System;
+﻿using Ruffles.Time;
 
 namespace Ruffles.Messaging
 {
@@ -6,7 +6,7 @@ namespace Ruffles.Messaging
     {
         public bool HasAcked;
         public byte Attempts;
-        public DateTime LastAttempt;
+        public NetTime LastAttempt;
 
         public bool Completed => HasAcked;
     }

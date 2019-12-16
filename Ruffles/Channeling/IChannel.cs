@@ -1,15 +1,17 @@
 ﻿using System;
+using Ruffles.Configuration;
+using Ruffles.Connections;
 using Ruffles.Memory;
 
 namespace Ruffles.Channeling
 {
     internal interface IChannel
     {
-        HeapMemory HandlePoll();
-        ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore);
+        HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes);
         HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc);
         void HandleAck(ArraySegment<byte> payload);
-        void Reset();
+        void Release();
+        void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager);
         void InternalUpdate();
     }
 }

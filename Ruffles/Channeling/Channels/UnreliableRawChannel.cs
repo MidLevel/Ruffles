@@ -10,10 +10,10 @@ namespace Ruffles.Channeling.Channels
     internal class UnreliableRawChannel : IChannel
     {
         // Channel info
-        private readonly byte channelId;
-        private readonly Connection connection;
-        private readonly SocketConfig config;
-        private readonly MemoryManager memoryManager;
+        private byte channelId;
+        private Connection connection;
+        private SocketConfig config;
+        private MemoryManager memoryManager;
 
         internal UnreliableRawChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
@@ -63,20 +63,18 @@ namespace Ruffles.Channeling.Channels
             // Unreliable messages have no acks.
         }
 
-        public ArraySegment<byte>? HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes, out bool hasMore)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
         {
-            // Unreliable has one message in equal no more than one out.
-            hasMore = false;
-
             // Set the headerBytes
             headerBytes = 0;
 
-            return new ArraySegment<byte>(payload.Array, payload.Offset, payload.Count);
-        }
+            // Alloc pointers
+            HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
-        public HeapMemory HandlePoll()
-        {
-            return null;
+            // Alloc wrapper
+            pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(new ArraySegment<byte>(payload.Array, payload.Offset, payload.Count));
+
+            return pointers;
         }
 
         public void InternalUpdate()
@@ -84,9 +82,17 @@ namespace Ruffles.Channeling.Channels
             // Unreliable doesnt need to resend, thus no internal loop is required
         }
 
-        public void Reset()
+        public void Release()
         {
             // UnreliableRaw has nothing to clean up
+        }
+
+        public void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
+        {
+            this.channelId = channelId;
+            this.connection = connection;
+            this.config = config;
+            this.memoryManager = memoryManager;
         }
     }
 }

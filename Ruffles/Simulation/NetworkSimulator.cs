@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Ruffles.Connections;
+using Ruffles.Time;
 
 namespace Ruffles.Simulation
 {
@@ -16,7 +17,7 @@ namespace Ruffles.Simulation
 
         private readonly System.Random random = new System.Random();
         private readonly object _lock = new object();
-        private readonly SortedList<DateTime, OutgoingPacket> _packets = new SortedList<DateTime, OutgoingPacket>();
+        private readonly SortedList<NetTime, OutgoingPacket> _packets = new SortedList<NetTime, OutgoingPacket>();
         private readonly SimulatorConfig config;
         private readonly SendDelegate sendDelegate;
 
@@ -39,10 +40,10 @@ namespace Ruffles.Simulation
 
             lock (_lock)
             {
-                DateTime scheduledTime;
+                NetTime scheduledTime;
                 do
                 {
-                    scheduledTime = DateTime.Now.AddMilliseconds(random.Next(config.MinLatency, config.MaxLatency));
+                    scheduledTime = NetTime.Now.AddMilliseconds(random.Next(config.MinLatency, config.MaxLatency));
                 }
                 while (_packets.ContainsKey(scheduledTime));
 
@@ -58,7 +59,7 @@ namespace Ruffles.Simulation
         {
             lock (_lock)
             {
-                while (_packets.Keys.Count > 0 && DateTime.Now >= _packets.Keys[0])
+                while (_packets.Keys.Count > 0 && NetTime.Now >= _packets.Keys[0])
                 {
                     sendDelegate(_packets[_packets.Keys[0]].Connection, new ArraySegment<byte>(_packets[_packets.Keys[0]].Data, 0, _packets[_packets.Keys[0]].Data.Length));
                     _packets.RemoveAt(0);

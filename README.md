@@ -67,6 +67,8 @@ Delivery is not guaranteed nor is the order. Duplicates are not dropped.
 Raw UDP packets that does not require a connection.
 #### ReliableOrdered
 All messages are not guaranteed to be delivered. If you send multiple messages, at least one is guranteed to arrive. If you send a single message, it is guaranteed to arrive. Messages will always been in order. Duplicates are dropped.
+#### ReliableFragmented
+All messages are guaranteed to be delivered, the order is not guaranteed, duplicates are dropped. Uses a fixed sliding window. Allows large messages to be fragmented.
 
 ### Threading
 Ruffles is nativley multi threaded and uses a background worker thread by default to handle network I/O.
@@ -84,7 +86,7 @@ Ruffles supports IPv6 dual socket mode. It does this by using two sockets bound 
 Small packets will be delayed for sending, this allows them to be merged into one larger packet. This can be disabled and enabled on a per packet basis. The delay and max merge size can also be configured.
 
 ### Fragmentation
-Packets can be sent as ReliableSequencedFragmented which allows for a single packet to be of a size of up to 2^15*1450 bytes = 47513600 bytes = 47.5 megabyte.
+Packets can be sent as ReliableSequencedFragmented or ReliableFragmented which allows for a single packet to be of a size of up to 2^15*1450 bytes = 47513600 bytes = 47.5 megabyte.
 
 ### Ack Merging
 Ack packets are merged into bitfields to make them much more compact.
@@ -116,8 +118,8 @@ Ruffles is designed to be mostly lockless. There are however a few situations wh
 
 * If the user sends a packet on a channel and Ruffles is receiving or resending packets on that channel. This cannot be avoided.
 * If the user sends two packets on one channel. This cannot be avoided.
-* If the user sends a packet that is due for merging and Ruffles is trying to flush the merged packets. This can be avoided by sending with ``noDelay = true``.
-* If the user sends two packets that is due for merging at the same time. This can be avoided by sending with ``noDelay = true``.
+* If the user sends a packet that is due for merging and Ruffles is trying to flush the merged packets. This can be avoided by sending with ``noMerge = true``.
+* If the user sends two packets that is due for merging at the same time. This can be avoided by sending with ``noMerge = true``.
 * If the user calls ConnectNow and Ruffles is modifying connections (Disconnecting, Connecting or Timing out). This can be avoided by using ``ConnectLater``.
 * If the user calls DisconnectNow and Ruffles is modifying connections (Disconnecting, Connecting or Timing out). This can be avoided by using ``DisconnectLater``.
 
