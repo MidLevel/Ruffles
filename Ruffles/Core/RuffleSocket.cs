@@ -1141,24 +1141,32 @@ namespace Ruffles.Core
                     _selectSockets.Add(ipv6Socket);
                 }
 
+                int sleepTime = (ms - (int)_selectWatch.ElapsedMilliseconds) * 1000;
+
                 // Check what sockets have data
-                Socket.Select(_selectSockets, null, null, (ms - (int)_selectWatch.ElapsedMilliseconds) * 1000);
-
-                // Iterate the sockets with data
-                for (int i = 0; i < _selectSockets.Count; i++)
+                if (sleepTime > 0)
                 {
-                    try
-                    {
-                        // Get a endpoint reference
-                        EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
+                    Socket.Select(_selectSockets, null, null, sleepTime);
 
-                        int size = _selectSockets[i].ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _endpoint);
-
-                        HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint, true);
-                    }
-                    catch (Exception e)
+                    // Iterate the sockets with data
+                    for (int i = 0; i < _selectSockets.Count; i++)
                     {
-                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                        try
+                        {
+                            do
+                            {
+                                // Get a endpoint reference
+                                EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
+
+                                int size = _selectSockets[i].ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _endpoint);
+
+                                HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint, true);
+                            } while (_selectSockets[i].Available > 0);
+                        }
+                        catch (Exception e)
+                        {
+                            if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                        }
                     }
                 }
             } while (_selectWatch.ElapsedMilliseconds < ms);
