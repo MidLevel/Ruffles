@@ -1,8 +1,11 @@
-﻿namespace Ruffles.Channeling
+﻿using System;
+
+namespace Ruffles.Channeling
 {
     /// <summary>
     /// Enum representing different delivery methods.
     /// </summary>
+    [Flags]
     public enum ChannelType : byte
     {
         /// <summary>

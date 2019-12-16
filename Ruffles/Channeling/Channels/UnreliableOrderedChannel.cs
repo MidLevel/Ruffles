@@ -7,7 +7,7 @@ using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
 {
-    internal class UnreliableSequencedChannel : IChannel
+    internal class UnreliableOrderedChannel : IChannel
     {
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
@@ -16,15 +16,15 @@ namespace Ruffles.Channeling.Channels
         private ushort _lastOutboundSequenceNumber;
 
         // Channel info
-        private readonly byte channelId;
-        private readonly Connection connection;
-        private readonly MemoryManager memoryManager;
-        private readonly SocketConfig config;
+        private byte channelId;
+        private Connection connection;
+        private MemoryManager memoryManager;
+        private SocketConfig config;
 
         // Lock for the channel, this allows sends and receives being done on different threads.
         private readonly object _lock = new object();
 
-        internal UnreliableSequencedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
+        internal UnreliableOrderedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             this.channelId = channelId;
             this.connection = connection;
@@ -136,7 +136,7 @@ namespace Ruffles.Channeling.Channels
             // UnreliableSequenced doesnt need to resend, thus no internal loop is required
         }
 
-        public void Reset()
+        public void Release()
         {
             lock (_lock)
             {
@@ -145,6 +145,17 @@ namespace Ruffles.Channeling.Channels
 
                 // Clear all outgoing states
                 _lastOutboundSequenceNumber = 0;
+            }
+        }
+
+        public void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
+        {
+            lock (_lock)
+            {
+                this.channelId = channelId;
+                this.connection = connection;
+                this.config = config;
+                this.memoryManager = memoryManager;
             }
         }
     }

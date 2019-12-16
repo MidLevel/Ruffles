@@ -48,9 +48,9 @@ namespace Ruffles.Memory
         internal MemoryManager(SocketConfig config)
         {
             _configuration = config;
-            _pooledHeapMemory = new ConcurrentCircularQueue<HeapMemory>(_configuration.MemoryManagerMaxHeapMemory);
-            _pooledPointerArrays = new ConcurrentCircularQueue<HeapPointers>(_configuration.MemoryManagerMaxHeapPointers);
-            _pooledMemoryWrappers = new ConcurrentCircularQueue<MemoryWrapper>(_configuration.MemoryManagerMaxMemoryWrappers);
+            _pooledHeapMemory = new ConcurrentCircularQueue<HeapMemory>(_configuration.HeapMemoryPoolSize);
+            _pooledPointerArrays = new ConcurrentCircularQueue<HeapPointers>(_configuration.HeapPointersPoolSize);
+            _pooledMemoryWrappers = new ConcurrentCircularQueue<MemoryWrapper>(_configuration.MemoryWrapperPoolSize);
         }
 
         internal HeapPointers AllocHeapPointers(uint size)

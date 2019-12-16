@@ -206,7 +206,7 @@ namespace Ruffles.Connections
         /// </summary>
         public delegate void MTUChangedDelegate(ushort MTU);
 
-        internal readonly UnreliableSequencedChannel HeartbeatChannel;
+        internal readonly UnreliableOrderedChannel HeartbeatChannel;
         internal MessageMerger Merger;
         internal IChannel[] Channels;
         internal ChannelType[] ChannelTypes;
@@ -233,7 +233,7 @@ namespace Ruffles.Connections
 #endif
             if (config.EnableHeartbeats)
             {
-                HeartbeatChannel = new UnreliableSequencedChannel(0, this, config, memoryManager);
+                HeartbeatChannel = new UnreliableOrderedChannel(0, this, config, memoryManager);
             }
         }
 
@@ -334,7 +334,7 @@ namespace Ruffles.Connections
             HandshakeLastSendTime = NetTime.MinValue;
             HandshakeResendAttempts = 0;
 
-            HeartbeatChannel.Reset();
+            HeartbeatChannel.Release();
 
             if (Merger != null)
             {

@@ -79,6 +79,7 @@ namespace Ruffles.Core
         private readonly SlidingSet<ulong> challengeInitializationVectors;
 
         private readonly MemoryManager memoryManager;
+        private readonly ChannelPool channelPool;
 
         private Thread _networkThread;
 
@@ -165,6 +166,9 @@ namespace Ruffles.Core
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
             memoryManager = new MemoryManager(config);
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating channel pool");
+            channelPool = new ChannelPool(config);
 
             if (!NetTime.HighResolution)
             {
@@ -1780,74 +1784,23 @@ namespace Ruffles.Core
                                 }
                             }
 
-                            if (pendingConnection.Channels != null)
-                            {
-                                for (int i = 0; i < pendingConnection.Channels.Length; i++)
-                                {
-                                    if (pendingConnection.Channels[i] != null)
-                                    {
-                                        // Free up resources and reset states.
-                                        pendingConnection.Channels[i].Reset();
-                                    }
-                                }
-                            }
-
                             // Alloc the channels array
                             pendingConnection.Channels = new IChannel[channelCount];
 
                             // Alloc the channels
                             for (byte i = 0; i < pendingConnection.ChannelTypes.Length; i++)
                             {
-                                switch (pendingConnection.ChannelTypes[i])
+                                IChannel channel = channelPool.GetChannel(pendingConnection.ChannelTypes[i], i, pendingConnection, config, memoryManager);
+
+                                if (channel == null)
                                 {
-                                    case ChannelType.Reliable:
-                                        {
-                                            pendingConnection.Channels[i] = new ReliableChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    case ChannelType.Unreliable:
-                                        {
-                                            pendingConnection.Channels[i] = new UnreliableChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    case ChannelType.UnreliableOrdered:
-                                        {
-                                            pendingConnection.Channels[i] = new UnreliableSequencedChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    case ChannelType.ReliableSequenced:
-                                        {
-                                            pendingConnection.Channels[i] = new ReliableSequencedChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    case ChannelType.UnreliableRaw:
-                                        {
-                                            pendingConnection.Channels[i] = new UnreliableRawChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    case ChannelType.ReliableSequencedFragmented:
-                                        {
-                                            pendingConnection.Channels[i] = new ReliableSequencedFragmentedChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    case ChannelType.ReliableOrdered:
-                                        {
-                                            pendingConnection.Channels[i] = new ReliableOrderedChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    case ChannelType.ReliableFragmented:
-                                        {
-                                            pendingConnection.Channels[i] = new ReliableFragmentedChannel(i, pendingConnection, config, memoryManager);
-                                        }
-                                        break;
-                                    default:
-                                        {
-                                            // Unknown channel type. Disconnect.
-                                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                            DisconnectInternal(pendingConnection, false, false);
-                                            return;
-                                        }
+                                    // Unknown channel type. Disconnect.
+                                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
+                                    DisconnectInternal(pendingConnection, false, false);
+                                    return;
                                 }
+
+                                pendingConnection.Channels[i] = channel;
                             }
 
                             // Set state to connected
@@ -2239,13 +2192,17 @@ namespace Ruffles.Core
                     // Reset all channels, releasing memory etc
                     for (int i = 0; i < connection.Channels.Length; i++)
                     {
-                        connection.Channels[i].Reset();
+                        if (connection.Channels[i] != null)
+                        {
+                            channelPool.Return(connection.Channels[i]);
+                            connection.Channels[i] = null;
+                        }
                     }
 
                     if (config.EnableHeartbeats)
                     {
                         // Release all memory from the heartbeat channel
-                        connection.HeartbeatChannel.Reset();
+                        connection.HeartbeatChannel.Release();
                     }
 
                     if (config.EnablePacketMerging)
@@ -2354,57 +2311,18 @@ namespace Ruffles.Core
                         // Alloc the channels
                         for (byte x = 0; x < config.ChannelTypes.Length; x++)
                         {
-                            switch (config.ChannelTypes[x])
+                            IChannel channel = channelPool.GetChannel(config.ChannelTypes[x], x, connection, config, memoryManager);
+
+                            if (channel == null)
                             {
-                                case ChannelType.Reliable:
-                                    {
-                                        connection.Channels[x] = new ReliableChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                case ChannelType.Unreliable:
-                                    {
-                                        connection.Channels[x] = new UnreliableChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                case ChannelType.UnreliableOrdered:
-                                    {
-                                        connection.Channels[x] = new UnreliableSequencedChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                case ChannelType.ReliableSequenced:
-                                    {
-                                        connection.Channels[x] = new ReliableSequencedChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                case ChannelType.UnreliableRaw:
-                                    {
-                                        connection.Channels[x] = new UnreliableRawChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                case ChannelType.ReliableSequencedFragmented:
-                                    {
-                                        connection.Channels[x] = new ReliableSequencedFragmentedChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                case ChannelType.ReliableOrdered:
-                                    {
-                                        connection.Channels[x] = new ReliableOrderedChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                case ChannelType.ReliableFragmented:
-                                    {
-                                        connection.Channels[x] = new ReliableFragmentedChannel(x, connection, config, memoryManager);
-                                    }
-                                    break;
-                                default:
-                                    {
-                                        // Unknown channel type. Disconnect.
-                                        // TODO: Fix
-                                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                        DisconnectInternal(connection, false, false);
-                                    }
-                                    break;
+                                // Unknown channel type. Disconnect.
+                                // TODO: Fix
+                                Logging.LogInfo(config.ChannelTypes[x] + "");
+                                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
+                                DisconnectInternal(connection, false, false);
                             }
+
+                            connection.Channels[x] = channel;
                         }
 
                         connections[i] = connection;

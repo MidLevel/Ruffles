@@ -26,17 +26,25 @@ namespace Ruffles.Configuration
         /// </summary>
         public ushort InternalEventQueueSize = 1024;
         /// <summary>
-        /// The maximum amount of heap pointers that will be kept as strong references by the memory manager.
+        /// The pool size of the HeapPointers pool.
         /// </summary>
-        public ushort MemoryManagerMaxHeapPointers = 1024;
+        public ushort HeapPointersPoolSize = 1024;
         /// <summary>
-        /// The maximum amount of heap memory that will be kept as strong references by the memory manager.
+        /// The pool size of the HeapMemory pool.
         /// </summary>
-        public ushort MemoryManagerMaxHeapMemory = 1024;
+        public ushort HeapMemoryPoolSize = 1024;
         /// <summary>
-        /// The maximum amount of memory wrappers that will be kept as strong references by the memory manager.
+        /// The pool size of the MemoryWrapper pool.
         /// </summary>
-        public ushort MemoryManagerMaxMemoryWrappers = 1024;
+        public ushort MemoryWrapperPoolSize = 1024;
+        /// <summary>
+        /// The pool size of every channel pool.
+        /// </summary>
+        public ushort ChannelPoolSize = 1024;
+        /// <summary>
+        /// The channels to pool.
+        /// </summary>
+        public ChannelType PooledChannels = ChannelType.Reliable | ChannelType.ReliableFragmented | ChannelType.ReliableOrdered | ChannelType.ReliableSequenced | ChannelType.ReliableSequencedFragmented | ChannelType.Unreliable | ChannelType.UnreliableOrdered | ChannelType.UnreliableRaw;
 
         // Connection
         /// <summary>

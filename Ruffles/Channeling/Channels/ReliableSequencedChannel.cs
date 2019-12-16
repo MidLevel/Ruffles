@@ -58,10 +58,10 @@ namespace Ruffles.Channeling.Channels
         private readonly HeapableSlidingWindow<PendingOutgoingPacket> _sendSequencer;
 
         // Channel info
-        private readonly byte channelId;
-        private readonly Connection connection;
-        private readonly SocketConfig config;
-        private readonly MemoryManager memoryManager;
+        private byte channelId;
+        private Connection connection;
+        private SocketConfig config;
+        private MemoryManager memoryManager;
 
         // Lock for the channel, this allows sends and receives being done on different threads.
         private readonly object _lock = new object();
@@ -316,20 +316,6 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public void Reset()
-        {
-            lock (_lock)
-            {
-                // Clear all incoming states
-                _receiveSequencer.Release();
-                _incomingLowestAckedSequence = 0;
-
-                // Clear all outgoing states
-                _sendSequencer.Release();
-                _lastOutboundSequenceNumber = 0;
-            }
-        }
-
         private void SendAck(ushort sequence)
         {
             // Check the last ack time
@@ -416,6 +402,31 @@ namespace Ruffles.Channeling.Channels
                         }
                     }
                 }
+            }
+        }
+
+        public void Release()
+        {
+            lock (_lock)
+            {
+                // Clear all incoming states
+                _receiveSequencer.Release();
+                _incomingLowestAckedSequence = 0;
+
+                // Clear all outgoing states
+                _sendSequencer.Release();
+                _lastOutboundSequenceNumber = 0;
+            }
+        }
+
+        public void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
+        {
+            lock (_lock)
+            {
+                this.channelId = channelId;
+                this.connection = connection;
+                this.config = config;
+                this.memoryManager = memoryManager;
             }
         }
     }
