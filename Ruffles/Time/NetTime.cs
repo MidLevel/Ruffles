@@ -6,7 +6,7 @@ namespace Ruffles.Time
     /// <summary>
     /// Represents a time in the highest possible accuracy.
     /// </summary>
-    public struct NetTime
+    public struct NetTime : IComparable, IComparable<NetTime>, IEquatable<NetTime>
     {
         /// <summary>
         /// Gets whether or not the time supports high resolution.
@@ -81,6 +81,39 @@ namespace Ruffles.Time
             }
 
             return false;
+        }
+
+        public int CompareTo(object obj)
+        {
+            if (obj == null) return 1;
+
+            if (!(obj is NetTime))
+            {
+                throw new ArgumentException("Comparator has to be a NetTime", nameof(obj));
+            }
+
+            return Compare(this, (NetTime)obj);
+        }
+
+        private static int Compare(NetTime t1, NetTime t2)
+        {
+            long ticks1 = t1.InternalTicks;
+            long ticks2 = t2.InternalTicks;
+
+            if (ticks1 > ticks2) return 1;
+            if (ticks1 < ticks2) return -1;
+
+            return 0;
+        }
+
+        public int CompareTo(NetTime other)
+        {
+            return Compare(this, other);
+        }
+
+        public bool Equals(NetTime other)
+        {
+            return InternalTicks == other.InternalTicks;
         }
     }
 }
