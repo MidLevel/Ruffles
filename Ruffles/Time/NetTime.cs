@@ -3,19 +3,45 @@ using System.Diagnostics;
 
 namespace Ruffles.Time
 {
+    /// <summary>
+    /// Represents a time in the highest possible accuracy.
+    /// </summary>
     public struct NetTime
     {
-        private static readonly bool HighResolution = Stopwatch.IsHighResolution;
-        private static readonly long StartTime = Stopwatch.GetTimestamp();
-        private static readonly DateTime StartDate = DateTime.Now;
-        private static readonly double MillisecondsPerTick = 1000d / Stopwatch.Frequency;
+        /// <summary>
+        /// Gets whether or not the time supports high resolution.
+        /// </summary>
+        public static readonly bool HighResolution = Stopwatch.IsHighResolution;
+        /// <summary>
+        /// Gets the start date.
+        /// </summary>
+        public static readonly DateTime StartDate = DateTime.Now;
 
-        internal static NetTime Now => new NetTime(Stopwatch.GetTimestamp() - StartTime);
-        internal static NetTime MinValue => new NetTime(StartTime);
+        private static readonly double MillisecondsPerTick = 1000d / Stopwatch.Frequency;
+        private static readonly long StartTime = Stopwatch.GetTimestamp();
+
+        /// <summary>
+        /// Gets a new NetTime that represents the current time.
+        /// </summary>
+        /// <value>The now.</value>
+        public static NetTime Now => new NetTime(Stopwatch.GetTimestamp() - StartTime);
+        /// <summary>
+        /// Gets a new NetTime that represents the start time.
+        /// </summary>
+        /// <value>The startTime.</value>
+        public static NetTime MinValue => new NetTime(StartTime);
 
         private readonly long InternalTicks;
 
+        /// <summary>
+        /// Gets the number of milliseconds since start.
+        /// </summary>
+        /// <value>The amount of milliseconds since start.</value>
         public long Milliseconds => (long)(InternalTicks * MillisecondsPerTick);
+        /// <summary>
+        /// Gets the time in DateTime format.
+        /// </summary>
+        /// <value>The time in DateTime format.</value>
         public DateTime Date => StartDate.AddMilliseconds(Milliseconds);
 
         private NetTime(long ticks)
@@ -23,6 +49,11 @@ namespace Ruffles.Time
             InternalTicks = ticks;
         }
 
+        /// <summary>
+        /// Gets a new NetTime with the amount of milliseconds added.
+        /// </summary>
+        /// <returns>The new NetTime with added milliseconds.</returns>
+        /// <param name="milliseconds">The amount of milliseconds to add.</param>
         public NetTime AddMilliseconds(double milliseconds)
         {
             return new NetTime(InternalTicks + (long)(milliseconds * MillisecondsPerTick));
