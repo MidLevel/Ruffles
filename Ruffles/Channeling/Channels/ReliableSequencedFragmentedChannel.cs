@@ -4,6 +4,7 @@ using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Time;
 using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
@@ -71,8 +72,8 @@ namespace Ruffles.Channeling.Channels
 
             public ushort Sequence;
             public HeapMemory Memory;
-            public DateTime LastSent;
-            public DateTime FirstSent;
+            public NetTime LastSent;
+            public NetTime FirstSent;
             public ushort Attempts;
             public bool Alive;
 
@@ -456,8 +457,8 @@ namespace Ruffles.Channeling.Channels
                     {
                         Alive = true,
                         Attempts = 1,
-                        LastSent = DateTime.Now,
-                        FirstSent = DateTime.Now,
+                        LastSent = NetTime.Now,
+                        FirstSent = NetTime.Now,
                         Sequence = _lastOutboundSequenceNumber,
                         Memory = ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i])
                     };
@@ -498,7 +499,7 @@ namespace Ruffles.Channeling.Channels
                     // TODO: Remove roundtripping from channeled packets and make specific ping-pong packets
 
                     // Get the roundtrp
-                    ulong roundtrip = (ulong)Math.Round((DateTime.Now - ((PendingOutgoingFragment)_sendSequencer[sequence].Fragments.Pointers[fragment]).FirstSent).TotalMilliseconds);
+                    ulong roundtrip = (ulong)Math.Round((NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[sequence].Fragments.Pointers[fragment]).FirstSent).TotalMilliseconds);
 
                     // Report to the connection
                     connection.AddRoundtripSample(roundtrip);
@@ -622,13 +623,13 @@ namespace Ruffles.Channeling.Channels
                                     connection.Disconnect(false);
                                     return;
                                 }
-                                else if ((DateTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (DateTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
+                                else if ((NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                                 {
                                     _sendSequencer[i].Fragments.Pointers[j] = new PendingOutgoingFragment()
                                     {
                                         Alive = true,
                                         Attempts = (ushort)(((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Attempts + 1),
-                                        LastSent = DateTime.Now,
+                                        LastSent = NetTime.Now,
                                         FirstSent = ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).FirstSent,
                                         Memory = ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Memory,
                                         Sequence = i

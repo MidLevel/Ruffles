@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Ruffles.Time;
 
 namespace Ruffles.Messaging
 {
@@ -7,7 +8,7 @@ namespace Ruffles.Messaging
     {
         private readonly byte[] _buffer;
         private int _position;
-        private DateTime _lastFlushTime;
+        private NetTime _lastFlushTime;
         private ulong _flushDelay;
         private ushort _headerBytes;
         private ushort _packets;
@@ -21,7 +22,7 @@ namespace Ruffles.Messaging
             _position = 1;
             _headerBytes = 1;
             _packets = 0;
-            _lastFlushTime = DateTime.Now;
+            _lastFlushTime = NetTime.Now;
             _flushDelay = flushDelay;
         }
 
@@ -29,7 +30,7 @@ namespace Ruffles.Messaging
         {
             lock (_lock)
             {
-                _lastFlushTime = DateTime.Now;
+                _lastFlushTime = NetTime.Now;
                 _position = 1;
                 _headerBytes = 1;
                 _packets = 0;
@@ -73,7 +74,7 @@ namespace Ruffles.Messaging
         {
             lock (_lock)
             {
-                if (_position > 1 && (DateTime.Now - _lastFlushTime).TotalMilliseconds > _flushDelay)
+                if (_position > 1 && (NetTime.Now - _lastFlushTime).TotalMilliseconds > _flushDelay)
                 {
                     // Its time to flush
 
@@ -84,7 +85,7 @@ namespace Ruffles.Messaging
 
                     // Reset values
                     _position = 1;
-                    _lastFlushTime = DateTime.Now;
+                    _lastFlushTime = NetTime.Now;
                     _headerBytes = 1;
                     _packets = 0;
 

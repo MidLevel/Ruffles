@@ -4,6 +4,7 @@ using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Core;
 using Ruffles.Memory;
+using Ruffles.Time;
 using Ruffles.Utils;
 
 namespace Ruffles.Messaging
@@ -59,7 +60,7 @@ namespace Ruffles.Messaging
                             AllowUserRecycle = true,
                             Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
                             InternalMemory = memory,
-                            SocketReceiveTime = DateTime.Now,
+                            SocketReceiveTime = NetTime.Now,
                             ChannelId = channelId,
                             MemoryManager = memoryManager
                         });

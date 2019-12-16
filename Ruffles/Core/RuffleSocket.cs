@@ -14,6 +14,7 @@ using Ruffles.Memory;
 using Ruffles.Messaging;
 using Ruffles.Random;
 using Ruffles.Simulation;
+using Ruffles.Time;
 using Ruffles.Utils;
 
 // TODO: Make sure only connection receiver send hails to prevent a hacked client sending messed up channel configs and the receiver applying them.
@@ -600,7 +601,7 @@ namespace Ruffles.Core
             {
                 // Set resend values
                 connection.HandshakeResendAttempts = 1;
-                connection.HandshakeLastSendTime = DateTime.Now;
+                connection.HandshakeLastSendTime = NetTime.Now;
 
                 // Calculate the minimum size we could use for a packet
                 int minSize = 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
@@ -812,7 +813,7 @@ namespace Ruffles.Core
             for (int i = 0; i < connections.Length; i++)
             {
                 if (connections[i] != null && !connections[i].Dead && connections[i].State == ConnectionState.Connected && 
-                    connections[i].MTU < config.MaximumMTU && connections[i].MTUStatus.Attempts < config.MaxMTUAttempts && (DateTime.Now - connections[i].MTUStatus.LastAttempt).TotalMilliseconds > config.MTUAttemptDelay)
+                    connections[i].MTU < config.MaximumMTU && connections[i].MTUStatus.Attempts < config.MaxMTUAttempts && (NetTime.Now - connections[i].MTUStatus.LastAttempt).TotalMilliseconds > config.MTUAttemptDelay)
                 {
                     uint attemptedMtu = (uint)(connections[i].MTU * config.MTUGrowthFactor);
 
@@ -827,7 +828,7 @@ namespace Ruffles.Core
                     }
 
                     connections[i].MTUStatus.Attempts++;
-                    connections[i].MTUStatus.LastAttempt = DateTime.Now;
+                    connections[i].MTUStatus.LastAttempt = NetTime.Now;
 
                     // Allocate memory
                     HeapMemory memory = memoryManager.AllocHeapMemory((uint)attemptedMtu);
@@ -869,10 +870,10 @@ namespace Ruffles.Core
                 {
                     if (connections[i].State == ConnectionState.RequestingConnection)
                     {
-                        if ((!config.TimeBasedConnectionChallenge || connections[i].PreConnectionChallengeSolved) && (DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.ConnectionRequestMinResendDelay && connections[i].HandshakeResendAttempts < config.MaxConnectionRequestResends)
+                        if ((!config.TimeBasedConnectionChallenge || connections[i].PreConnectionChallengeSolved) && (NetTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.ConnectionRequestMinResendDelay && connections[i].HandshakeResendAttempts < config.MaxConnectionRequestResends)
                         {
                             connections[i].HandshakeResendAttempts++;
-                            connections[i].HandshakeLastSendTime = DateTime.Now;
+                            connections[i].HandshakeLastSendTime = NetTime.Now;
 
                             // Calculate the minimum size we can fit the packet in
                             int minSize = 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
@@ -917,10 +918,10 @@ namespace Ruffles.Core
                     }
                     else if (connections[i].State == ConnectionState.RequestingChallenge)
                     {
-                        if ((DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
+                        if ((NetTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
                         {
                             connections[i].HandshakeResendAttempts++;
-                            connections[i].HandshakeLastSendTime = DateTime.Now;
+                            connections[i].HandshakeLastSendTime = NetTime.Now;
 
                             // Packet size
                             uint size = 1 + sizeof(ulong) + 1;
@@ -949,10 +950,10 @@ namespace Ruffles.Core
                     }
                     else if (connections[i].State == ConnectionState.SolvingChallenge)
                     {
-                        if ((DateTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
+                        if ((NetTime.Now - connections[i].HandshakeLastSendTime).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HandshakeResendAttempts < config.MaxHandshakeResends)
                         {
                             connections[i].HandshakeResendAttempts++;
-                            connections[i].HandshakeLastSendTime = DateTime.Now;
+                            connections[i].HandshakeLastSendTime = NetTime.Now;
 
                             // Calculate the minimum size we can fit the packet in
                             int minSize = 1 + sizeof(ulong);
@@ -981,10 +982,10 @@ namespace Ruffles.Core
                     }
                     else if (connections[i].State == ConnectionState.Connected)
                     {
-                        if (!connections[i].HailStatus.Completed && (DateTime.Now - connections[i].HailStatus.LastAttempt).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HailStatus.Attempts < config.MaxHandshakeResends)
+                        if (!connections[i].HailStatus.Completed && (NetTime.Now - connections[i].HailStatus.LastAttempt).TotalMilliseconds > config.HandshakeResendDelay && connections[i].HailStatus.Attempts < config.MaxHandshakeResends)
                         {
                             connections[i].HailStatus.Attempts++;
-                            connections[i].HailStatus.LastAttempt = DateTime.Now;
+                            connections[i].HailStatus.LastAttempt = NetTime.Now;
 
                             // Packet size
                             int size = 2 + (byte)config.ChannelTypes.Length;
@@ -1025,7 +1026,7 @@ namespace Ruffles.Core
                 {
                     if (connections[i].State == ConnectionState.RequestingConnection)
                     {
-                        if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionRequestTimeout)
+                        if ((NetTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionRequestTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
                             DisconnectInternal(connections[i], false, true);
@@ -1034,7 +1035,7 @@ namespace Ruffles.Core
                     else if (connections[i].State != ConnectionState.Connected)
                     {
                         // They are not requesting connection. But they are not connected. This means they are doing a handshake
-                        if ((DateTime.Now - connections[i].HandshakeStarted).TotalMilliseconds > config.HandshakeTimeout)
+                        if ((NetTime.Now - connections[i].HandshakeStarted).TotalMilliseconds > config.HandshakeTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
                             DisconnectInternal(connections[i], false, true);
@@ -1042,12 +1043,12 @@ namespace Ruffles.Core
                     }
                     else
                     {
-                        if ((DateTime.Now - connections[i].LastMessageIn).TotalMilliseconds > config.ConnectionTimeout)
+                        if ((NetTime.Now - connections[i].LastMessageIn).TotalMilliseconds > config.ConnectionTimeout)
                         {
                             // This client has not answered us in way too long. Let it go
                             DisconnectInternal(connections[i], false, true);
                         }
-                        else if ((DateTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionQualityGracePeriod)
+                        else if ((NetTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionQualityGracePeriod)
                         {
                             // They are no longer covered by connection quality grace. Check their ping and packet loss
 
@@ -1075,7 +1076,7 @@ namespace Ruffles.Core
             {
                 if (connections[i] != null && !connections[i].Dead && connections[i].State == ConnectionState.Connected)
                 {
-                    if ((DateTime.Now - connections[i].LastMessageOut).TotalMilliseconds > config.HeartbeatDelay)
+                    if ((NetTime.Now - connections[i].LastMessageOut).TotalMilliseconds > config.HeartbeatDelay)
                     {
                         // This client has not been talked to in a long time. Send a heartbeat.
 
@@ -1194,14 +1195,14 @@ namespace Ruffles.Core
                 InternalMemory = null,
                 Type = NetworkEventType.Nothing,
                 ChannelId = 0,
-                SocketReceiveTime = DateTime.Now,
+                SocketReceiveTime = NetTime.Now,
                 MemoryManager = memoryManager
             };
         }
 
         internal void SendRaw(Connection connection, ArraySegment<byte> payload, bool noMerge, ushort headerBytes)
         {
-            connection.LastMessageOut = DateTime.Now;
+            connection.LastMessageOut = NetTime.Now;
 
             bool merged = false;
 
@@ -1427,7 +1428,7 @@ namespace Ruffles.Core
 
                             // Set resend values
                             connection.HandshakeResendAttempts = 1;
-                            connection.HandshakeLastSendTime = DateTime.Now;
+                            connection.HandshakeLastSendTime = NetTime.Now;
 
                             // Packet size
                             uint size = 1 + sizeof(ulong) + 1;
@@ -1480,8 +1481,8 @@ namespace Ruffles.Core
                                 return;
                             }
 
-                            connection.HandshakeStarted = DateTime.Now;
-                            connection.LastMessageIn = DateTime.Now;
+                            connection.HandshakeStarted = NetTime.Now;
+                            connection.LastMessageIn = NetTime.Now;
 
                             connection.ConnectionChallenge = (((ulong)payload.Array[payload.Offset + 1 + 0]) |
                                                                 ((ulong)payload.Array[payload.Offset + 1 + 1] << 8) |
@@ -1508,7 +1509,7 @@ namespace Ruffles.Core
 
                             // Set resend values
                             connection.HandshakeResendAttempts = 1;
-                            connection.HandshakeLastSendTime = DateTime.Now;
+                            connection.HandshakeLastSendTime = NetTime.Now;
                             connection.State = ConnectionState.SolvingChallenge;
 
                             // Calculate the minimum size we can fit the packet in
@@ -1564,7 +1565,7 @@ namespace Ruffles.Core
                                 return;
                             }
 
-                            connection.LastMessageIn = DateTime.Now;
+                            connection.LastMessageIn = NetTime.Now;
 
                             ulong challengeResponse = (((ulong)payload.Array[payload.Offset + 1 + 0]) |
                                                         ((ulong)payload.Array[payload.Offset + 1 + 1] << 8) |
@@ -1591,7 +1592,7 @@ namespace Ruffles.Core
 
                                 connection.HailStatus.Attempts = 1;
                                 connection.HailStatus.HasAcked = false;
-                                connection.HailStatus.LastAttempt = DateTime.Now;
+                                connection.HailStatus.LastAttempt = NetTime.Now;
 
                                 // Packet size
                                 int size = 2 + (byte)config.ChannelTypes.Length;
@@ -1629,7 +1630,7 @@ namespace Ruffles.Core
                                     ChannelId = 0,
                                     Data = new ArraySegment<byte>(),
                                     InternalMemory = null,
-                                    SocketReceiveTime = DateTime.Now,
+                                    SocketReceiveTime = NetTime.Now,
                                     MemoryManager = memoryManager
                                 });
                             }
@@ -1701,7 +1702,7 @@ namespace Ruffles.Core
                                 return;
                             }
 
-                            pendingConnection.LastMessageIn = DateTime.Now;
+                            pendingConnection.LastMessageIn = NetTime.Now;
 
                             // Read the amount of channels
                             byte channelCount = payload.Array[payload.Offset + 1];
@@ -1859,7 +1860,7 @@ namespace Ruffles.Core
                                 ChannelId = 0,
                                 Data = new ArraySegment<byte>(),
                                 InternalMemory = null,
-                                SocketReceiveTime = DateTime.Now,
+                                SocketReceiveTime = NetTime.Now,
                                 MemoryManager = memoryManager
                             });
 
@@ -1938,7 +1939,7 @@ namespace Ruffles.Core
                                 {
                                     if (wrapper.AllocatedMemory != null)
                                     {
-                                        connection.LastMessageIn = DateTime.Now;
+                                        connection.LastMessageIn = NetTime.Now;
 
                                         // Dealloc the memory
                                         memoryManager.DeAlloc(wrapper.AllocatedMemory);
@@ -1946,7 +1947,7 @@ namespace Ruffles.Core
 
                                     if (wrapper.DirectMemory != null)
                                     {
-                                        connection.LastMessageIn = DateTime.Now;
+                                        connection.LastMessageIn = NetTime.Now;
                                     }
 
                                     // Dealloc the wrapper
@@ -1977,7 +1978,7 @@ namespace Ruffles.Core
                                 connection.IncomingTotalBytes += (ulong)payload.Count;
                             }
 
-                            connection.LastMessageIn = DateTime.Now;
+                            connection.LastMessageIn = NetTime.Now;
 
                             PacketHandler.HandleIncomingMessage(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), connection, config, memoryManager);
                         }
@@ -2001,7 +2002,7 @@ namespace Ruffles.Core
                                 connection.IncomingTotalBytes += (ulong)payload.Count;
                             }
 
-                            connection.LastMessageIn = DateTime.Now;
+                            connection.LastMessageIn = NetTime.Now;
 
                             byte channelId = payload.Array[payload.Offset + 1];
 
@@ -2063,7 +2064,7 @@ namespace Ruffles.Core
                                 AllowUserRecycle = true,
                                 Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
                                 InternalMemory = memory,
-                                SocketReceiveTime = DateTime.Now,
+                                SocketReceiveTime = NetTime.Now,
                                 ChannelId = 0,
                                 MemoryManager = memoryManager
                             });
@@ -2142,7 +2143,7 @@ namespace Ruffles.Core
                                     {
                                         Attempts = 0,
                                         HasAcked = false,
-                                        LastAttempt = DateTime.MinValue
+                                        LastAttempt = NetTime.MinValue
                                     };
 
                                     if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " MTU was increased to " + connection.MTU);
@@ -2167,7 +2168,7 @@ namespace Ruffles.Core
                 addressPendingConnectionLookup.Remove(connection.EndPoint);
                 addressConnectionLookup.Add(connection.EndPoint, connection);
 
-                connection.ConnectionCompleted = DateTime.Now;
+                connection.ConnectionCompleted = NetTime.Now;
                 connection.State = ConnectionState.Connected;
 
                 pendingConnections++;
@@ -2282,7 +2283,7 @@ namespace Ruffles.Core
                     ChannelId = 0,
                     Data = new ArraySegment<byte>(),
                     InternalMemory = null,
-                    SocketReceiveTime = DateTime.Now,
+                    SocketReceiveTime = NetTime.Now,
                     MemoryManager = memoryManager
                 });
             }
@@ -2317,16 +2318,16 @@ namespace Ruffles.Core
                             EndPoint = endpoint,
                             ConnectionChallenge = RandomProvider.GetRandomULong(),
                             ChallengeDifficulty = config.ChallengeDifficulty,
-                            LastMessageIn = DateTime.Now,
-                            LastMessageOut = DateTime.Now,
-                            ConnectionStarted = DateTime.Now,
-                            HandshakeStarted = DateTime.Now,
-                            ConnectionCompleted = DateTime.Now,
+                            LastMessageIn = NetTime.Now,
+                            LastMessageOut = NetTime.Now,
+                            ConnectionStarted = NetTime.Now,
+                            HandshakeStarted = NetTime.Now,
+                            ConnectionCompleted = NetTime.Now,
                             HandshakeResendAttempts = 0,
                             ChallengeAnswer = 0,
                             Channels = new IChannel[0],
                             ChannelTypes = new ChannelType[0],
-                            HandshakeLastSendTime = DateTime.Now,
+                            HandshakeLastSendTime = NetTime.Now,
                             Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
                             MTU = config.MinimumMTU,
                             SmoothRoundtrip = 0,
@@ -2438,12 +2439,12 @@ namespace Ruffles.Core
                         connection.MTU = config.MinimumMTU;
 
                         // Set all the times to now (to prevent instant timeout)
-                        connection.LastMessageOut = DateTime.Now;
-                        connection.LastMessageIn = DateTime.Now;
-                        connection.ConnectionStarted = DateTime.Now;
-                        connection.HandshakeStarted = DateTime.Now;
-                        connection.HandshakeLastSendTime = DateTime.Now;
-                        connection.ConnectionCompleted = DateTime.Now;
+                        connection.LastMessageOut = NetTime.Now;
+                        connection.LastMessageIn = NetTime.Now;
+                        connection.ConnectionStarted = NetTime.Now;
+                        connection.HandshakeStarted = NetTime.Now;
+                        connection.HandshakeLastSendTime = NetTime.Now;
+                        connection.ConnectionCompleted = NetTime.Now;
 
                         addressPendingConnectionLookup.Add(endpoint, connection);
 

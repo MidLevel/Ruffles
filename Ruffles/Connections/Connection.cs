@@ -8,6 +8,7 @@ using Ruffles.Configuration;
 using Ruffles.Core;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Time;
 
 namespace Ruffles.Connections
 {
@@ -54,27 +55,27 @@ namespace Ruffles.Connections
         /// Gets the time of the last outbound message.
         /// </summary>
         /// <value>The time of the last outbound message.</value>
-        public DateTime LastMessageOut { get; internal set; }
+        public NetTime LastMessageOut { get; internal set; }
         /// <summary>
         /// Gets the time of the last incoming message.
         /// </summary>
         /// <value>The time of the last incoming message.</value>
-        public DateTime LastMessageIn { get; internal set; }
+        public NetTime LastMessageIn { get; internal set; }
         /// <summary>
         /// Gets the time the connection was started.
         /// </summary>
         /// <value>The time the connection started.</value>
-        public DateTime ConnectionStarted { get; internal set; }
+        public NetTime ConnectionStarted { get; internal set; }
         /// <summary>
         /// Gets the time the handshake process started.
         /// </summary>
         /// <value>The time the handshake started.</value>
-        public DateTime HandshakeStarted { get; internal set; }
+        public NetTime HandshakeStarted { get; internal set; }
         /// <summary>
         /// Gets the time the connection was completed.
         /// </summary>
         /// <value>The time the connection was completed.</value>
-        public DateTime ConnectionCompleted { get; internal set; }
+        public NetTime ConnectionCompleted { get; internal set; }
         /// <summary>
         /// Gets the estimated smoothed roundtrip.
         /// </summary>
@@ -219,7 +220,7 @@ namespace Ruffles.Connections
 
         // Handshake resend values
         internal byte HandshakeResendAttempts;
-        internal DateTime HandshakeLastSendTime;
+        internal NetTime HandshakeLastSendTime;
 
         internal Connection(SocketConfig config, MemoryManager memoryManager)
         {
@@ -316,11 +317,11 @@ namespace Ruffles.Connections
             ChallengeDifficulty = 0;
             ChallengeAnswer = 0;
 
-            LastMessageOut = DateTime.MinValue;
-            LastMessageIn = DateTime.MinValue;
-            ConnectionStarted = DateTime.MinValue;
-            HandshakeStarted = DateTime.MinValue;
-            ConnectionCompleted = DateTime.MinValue;
+            LastMessageOut = NetTime.MinValue;
+            LastMessageIn = NetTime.MinValue;
+            ConnectionStarted = NetTime.MinValue;
+            HandshakeStarted = NetTime.MinValue;
+            ConnectionCompleted = NetTime.MinValue;
 
             SmoothRoundtrip = 0;
             Roundtrip = 500;
@@ -330,7 +331,7 @@ namespace Ruffles.Connections
 
             MTU = 0;
 
-            HandshakeLastSendTime = DateTime.MinValue;
+            HandshakeLastSendTime = NetTime.MinValue;
             HandshakeResendAttempts = 0;
 
             HeartbeatChannel.Reset();

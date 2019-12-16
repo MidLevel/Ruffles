@@ -4,6 +4,7 @@ using Ruffles.Configuration;
 using Ruffles.Connections;
 using Ruffles.Memory;
 using Ruffles.Messaging;
+using Ruffles.Time;
 using Ruffles.Utils;
 
 namespace Ruffles.Channeling.Channels
@@ -17,8 +18,8 @@ namespace Ruffles.Channeling.Channels
             public bool Alive;
             public ushort Sequence;
             public HeapMemory Memory;
-            public DateTime LastSent;
-            public DateTime FirstSent;
+            public NetTime LastSent;
+            public NetTime FirstSent;
             public ushort Attempts;
 
             public void DeAlloc(MemoryManager memoryManager)
@@ -32,7 +33,7 @@ namespace Ruffles.Channeling.Channels
 
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
-        private readonly SlidingWindow<DateTime> _lastAckTimes;
+        private readonly SlidingWindow<NetTime> _lastAckTimes;
 
         // Outgoing sequencing
         private ushort _lastOutboundSequenceNumber;
@@ -58,13 +59,13 @@ namespace Ruffles.Channeling.Channels
             {
                 Alive = false,
                 Attempts = 0,
-                FirstSent = DateTime.MinValue,
-                LastSent = DateTime.MinValue,
+                FirstSent = NetTime.MinValue,
+                LastSent = NetTime.MinValue,
                 Memory = null,
                 Sequence = 0
             };
 
-            _lastAckTimes = new SlidingWindow<DateTime>(config.ReliableAckFlowWindowSize, true, sizeof(ushort));
+            _lastAckTimes = new SlidingWindow<NetTime>(config.ReliableAckFlowWindowSize, true, sizeof(ushort));
         }
 
         public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
@@ -108,8 +109,8 @@ namespace Ruffles.Channeling.Channels
                     Alive = true,
                     Sequence = _lastOutboundSequenceNumber,
                     Attempts = 1,
-                    LastSent = DateTime.Now,
-                    FirstSent = DateTime.Now,
+                    LastSent = NetTime.Now,
+                    FirstSent = NetTime.Now,
                     Memory = memory
                 };
 
@@ -144,7 +145,7 @@ namespace Ruffles.Channeling.Channels
                     // TODO: Remove roundtripping from channeled packets and make specific ping-pong packets
 
                     // Get the roundtrp
-                    ulong roundtrip = (ulong)Math.Round((DateTime.Now - _lastOutgoingPacket.FirstSent).TotalMilliseconds);
+                    ulong roundtrip = (ulong)Math.Round((NetTime.Now - _lastOutgoingPacket.FirstSent).TotalMilliseconds);
 
                     // Report to the connection
                     connection.AddRoundtripSample(roundtrip);
@@ -216,13 +217,13 @@ namespace Ruffles.Channeling.Channels
                         connection.Disconnect(false);
                         return;
                     }
-                    else if ((DateTime.Now - _lastOutgoingPacket.LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (DateTime.Now - _lastOutgoingPacket.LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
+                    else if ((NetTime.Now - _lastOutgoingPacket.LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - _lastOutgoingPacket.LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                     {
                         _lastOutgoingPacket = new PendingOutgoingPacket()
                         {
                             Alive = true,
                             Attempts = (ushort)(_lastOutgoingPacket.Attempts + 1),
-                            LastSent = DateTime.Now,
+                            LastSent = NetTime.Now,
                             FirstSent = _lastOutgoingPacket.FirstSent,
                             Memory = _lastOutgoingPacket.Memory,
                             Sequence = _lastOutgoingPacket.Sequence
@@ -251,8 +252,8 @@ namespace Ruffles.Channeling.Channels
                 {
                     Alive = false,
                     Attempts = 0,
-                    FirstSent = DateTime.MinValue,
-                    LastSent = DateTime.MinValue,
+                    FirstSent = NetTime.MinValue,
+                    LastSent = NetTime.MinValue,
                     Memory = null,
                     Sequence = 0
                 };
@@ -262,10 +263,10 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence)
         {
             // Check the last ack time
-            if ((DateTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (DateTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > config.ReliabilityMinAckResendDelay)
+            if ((NetTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > config.ReliabilityMinAckResendDelay)
             {
                 // Set the last ack time
-                _lastAckTimes[sequence] = DateTime.Now;
+                _lastAckTimes[sequence] = NetTime.Now;
 
                 // Alloc ack memory
                 HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
