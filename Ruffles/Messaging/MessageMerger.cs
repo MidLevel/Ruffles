@@ -56,7 +56,7 @@ namespace Ruffles.Messaging
 
                 if (size > _maxSize)
                 {
-                    throw new ArgumentOutOfRangeException(nameof(size), "Size is larger than max size");
+                    size = _maxSize;
                 }
 
                 if (size < _size)
