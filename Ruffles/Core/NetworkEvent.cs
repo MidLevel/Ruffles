@@ -61,7 +61,7 @@ namespace Ruffles.Core
                 }
             }
 
-            if (Connection != null && Connection.Dead && !Connection.Recycled)
+            if (Connection != null && Connection.Dead && !Connection.Recycled && (Type == NetworkEventType.Disconnect || Type == NetworkEventType.Timeout))
             {
                 Connection.Recycled = true;
             }
