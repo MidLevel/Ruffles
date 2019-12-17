@@ -124,7 +124,7 @@ namespace Ruffles.Core
 
         public RuffleSocket(SocketConfig config)
         {
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Checking SokcetConfig validity...");
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Checking SocketConfig validity...");
 
             List<string> configurationErrors = config.GetInvalidConfiguration();
 
