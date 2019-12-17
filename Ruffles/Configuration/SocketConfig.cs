@@ -311,9 +311,9 @@ namespace Ruffles.Configuration
         {
             List<string> messages = new List<string>();
 
-            if (MaxFragments > 32768)
+            if (MaxFragments > Constants.MAX_FRAGMENTS)
             {
-                messages.Add("MaxFragments cannot be greater than 2^15=32768");
+                messages.Add("MaxFragments cannot be greater than " + Constants.MAX_FRAGMENTS);
             }
 
             if (MaxMergeMessageSize > MaximumMTU)

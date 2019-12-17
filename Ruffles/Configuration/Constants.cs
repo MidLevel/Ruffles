@@ -7,5 +7,6 @@
         internal static readonly int RECEIVE_SOCKET_BUFFER_SIZE = 1024 * 1024;
         internal static readonly int SEND_SOCKET_BUFFER_SIZE = 1024 * 1024;
         internal static readonly int MAX_CHANNELS = byte.MaxValue;
+        internal static readonly int MAX_FRAGMENTS = 32768;
     }
 }
