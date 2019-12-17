@@ -2274,9 +2274,6 @@ namespace Ruffles.Core
                             config.ChannelTypes = new ChannelType[0];
                         }
 
-                        // Alloc the channel array
-                        connection.Channels = new IChannel[config.ChannelTypes.Length];
-
                         // Alloc the channels
                         for (byte x = 0; x < config.ChannelTypes.Length; x++)
                         {
