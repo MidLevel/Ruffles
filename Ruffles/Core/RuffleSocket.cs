@@ -1154,7 +1154,11 @@ namespace Ruffles.Core
                     _selectSockets.Add(ipv6Socket);
                 }
 
+#if MILLISECONDS_SELECT
+                int sleepTime = (ms - (int)_selectWatch.ElapsedMilliseconds);
+#else
                 int sleepTime = (ms - (int)_selectWatch.ElapsedMilliseconds) * 1000;
+#endif
 
                 // Check what sockets have data
                 if (sleepTime > 0)

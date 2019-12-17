@@ -125,3 +125,6 @@ Ruffles is designed to be mostly lockless. There are however a few situations wh
 
 ## Fragmented
 The fragmented channel currently does not have any flow rate for ack resends.
+
+## Unity Support
+Due to a Unity bug, Ruffles does not work properly in IL2CPP by default. The bug has been reported to Unity. If you need to run Ruffles with IL2CPP, compile it with the ``MILLISECONDS_SELECT`` define. This will make the Socket.Select method use a millisecond based timeout instead of microseconds.
