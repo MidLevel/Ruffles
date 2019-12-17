@@ -19,44 +19,47 @@ namespace Ruffles.Channeling
 
         internal ChannelPool(SocketConfig config)
         {
-            if ((config.PooledChannels & ChannelType.Reliable) == ChannelType.Reliable)
+            if (config.ReuseChannels)
             {
-                _reliableChannels = new ConcurrentCircularQueue<ReliableChannel>(config.ChannelPoolSize);
-            }
+                if ((config.PooledChannels & ChannelType.Reliable) == ChannelType.Reliable)
+                {
+                    _reliableChannels = new ConcurrentCircularQueue<ReliableChannel>(config.ChannelPoolSize);
+                }
 
-            if ((config.PooledChannels & ChannelType.ReliableFragmented) == ChannelType.ReliableFragmented)
-            {
-                _reliableFragmentedChannels = new ConcurrentCircularQueue<ReliableFragmentedChannel>(config.ChannelPoolSize);
-            }
+                if ((config.PooledChannels & ChannelType.ReliableFragmented) == ChannelType.ReliableFragmented)
+                {
+                    _reliableFragmentedChannels = new ConcurrentCircularQueue<ReliableFragmentedChannel>(config.ChannelPoolSize);
+                }
 
-            if ((config.PooledChannels & ChannelType.ReliableOrdered) == ChannelType.ReliableOrdered)
-            {
-                _reliableOrderedChannels = new ConcurrentCircularQueue<ReliableOrderedChannel>(config.ChannelPoolSize);
-            }
+                if ((config.PooledChannels & ChannelType.ReliableOrdered) == ChannelType.ReliableOrdered)
+                {
+                    _reliableOrderedChannels = new ConcurrentCircularQueue<ReliableOrderedChannel>(config.ChannelPoolSize);
+                }
 
-            if ((config.PooledChannels & ChannelType.ReliableSequenced) == ChannelType.ReliableSequenced)
-            {
-                _reliableSequnecedChannels = new ConcurrentCircularQueue<ReliableSequencedChannel>(config.ChannelPoolSize);
-            }
+                if ((config.PooledChannels & ChannelType.ReliableSequenced) == ChannelType.ReliableSequenced)
+                {
+                    _reliableSequnecedChannels = new ConcurrentCircularQueue<ReliableSequencedChannel>(config.ChannelPoolSize);
+                }
 
-            if ((config.PooledChannels & ChannelType.ReliableSequencedFragmented) == ChannelType.ReliableSequencedFragmented)
-            {
-                _reliableSequencedFragmentedChannels = new ConcurrentCircularQueue<ReliableSequencedFragmentedChannel>(config.ChannelPoolSize);
-            }
+                if ((config.PooledChannels & ChannelType.ReliableSequencedFragmented) == ChannelType.ReliableSequencedFragmented)
+                {
+                    _reliableSequencedFragmentedChannels = new ConcurrentCircularQueue<ReliableSequencedFragmentedChannel>(config.ChannelPoolSize);
+                }
 
-            if ((config.PooledChannels & ChannelType.Unreliable) == ChannelType.Unreliable)
-            {
-                _unreliableChannels = new ConcurrentCircularQueue<UnreliableChannel>(config.ChannelPoolSize);
-            }
+                if ((config.PooledChannels & ChannelType.Unreliable) == ChannelType.Unreliable)
+                {
+                    _unreliableChannels = new ConcurrentCircularQueue<UnreliableChannel>(config.ChannelPoolSize);
+                }
 
-            if ((config.PooledChannels & ChannelType.UnreliableOrdered) == ChannelType.UnreliableOrdered)
-            {
-                _unreliableOrderedChannels = new ConcurrentCircularQueue<UnreliableOrderedChannel>(config.ChannelPoolSize);
-            }
+                if ((config.PooledChannels & ChannelType.UnreliableOrdered) == ChannelType.UnreliableOrdered)
+                {
+                    _unreliableOrderedChannels = new ConcurrentCircularQueue<UnreliableOrderedChannel>(config.ChannelPoolSize);
+                }
 
-            if ((config.PooledChannels & ChannelType.UnreliableRaw) == ChannelType.UnreliableRaw)
-            {
-                _unreliableRawChannels = new ConcurrentCircularQueue<UnreliableRawChannel>(config.ChannelPoolSize);
+                if ((config.PooledChannels & ChannelType.UnreliableRaw) == ChannelType.UnreliableRaw)
+                {
+                    _unreliableRawChannels = new ConcurrentCircularQueue<UnreliableRawChannel>(config.ChannelPoolSize);
+                }
             }
         }
 
