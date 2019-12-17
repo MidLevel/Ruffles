@@ -1038,6 +1038,7 @@ namespace Ruffles.Core
                         if ((NetTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionRequestTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
+                            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because handshake was not started");
                             DisconnectInternal(connections[i], false, true);
                         }
                     }
@@ -1047,6 +1048,7 @@ namespace Ruffles.Core
                         if ((NetTime.Now - connections[i].HandshakeStarted).TotalMilliseconds > config.HandshakeTimeout)
                         {
                             // This client has taken too long to connect. Let it go.
+                            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because it took too long to complete the handshake");
                             DisconnectInternal(connections[i], false, true);
                         }
                     }
@@ -1055,6 +1057,7 @@ namespace Ruffles.Core
                         if ((NetTime.Now - connections[i].LastMessageIn).TotalMilliseconds > config.ConnectionTimeout)
                         {
                             // This client has not answered us in way too long. Let it go
+                            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because no incoming message has been received");
                             DisconnectInternal(connections[i], false, true);
                         }
                         else if ((NetTime.Now - connections[i].ConnectionStarted).TotalMilliseconds > config.ConnectionQualityGracePeriod)
@@ -1595,6 +1598,12 @@ namespace Ruffles.Core
 
                                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " successfully completed challenge of difficulty " + connection.ChallengeDifficulty);
 
+                                // Assign the channels
+                                for (byte i = 0; i < config.ChannelTypes.Length; i++)
+                                {
+                                    connection.Channels[i] = channelPool.GetChannel(config.ChannelTypes[i], i, connection, config, memoryManager);
+                                }
+
                                 ConnectPendingConnection(connection);
 
                                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + endpoint + " state changed to connected");
@@ -1724,10 +1733,7 @@ namespace Ruffles.Core
                                 return;
                             }
 
-                            // Alloc the types
-                            pendingConnection.ChannelTypes = new ChannelType[channelCount];
-
-                            // Read the types
+                            // Read the types and validate them (before alloc)
                             for (byte i = 0; i < channelCount; i++)
                             {
                                 byte channelType = payload.Array[payload.Offset + 2 + i];
@@ -1739,14 +1745,14 @@ namespace Ruffles.Core
                                     DisconnectInternal(pendingConnection, false, false);
                                     return;
                                 }
-
-                                pendingConnection.ChannelTypes[i] = (ChannelType)channelType;
                             }
 
                             // Alloc the channels
-                            for (byte i = 0; i < pendingConnection.ChannelTypes.Length; i++)
+                            for (byte i = 0; i < channelCount; i++)
                             {
-                                IChannel channel = channelPool.GetChannel(pendingConnection.ChannelTypes[i], i, pendingConnection, config, memoryManager);
+                                byte channelType = payload.Array[payload.Offset + 2 + i];
+
+                                IChannel channel = channelPool.GetChannel((ChannelType)channelType, i, pendingConnection, config, memoryManager);
 
                                 if (channel == null)
                                 {
@@ -2257,7 +2263,6 @@ namespace Ruffles.Core
                             HandshakeResendAttempts = 0,
                             ChallengeAnswer = 0,
                             Channels = new IChannel[Constants.MAX_CHANNELS],
-                            ChannelTypes = new ChannelType[0],
                             HandshakeLastSendTime = NetTime.Now,
                             Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
                             MTU = config.MinimumMTU,
@@ -2267,28 +2272,6 @@ namespace Ruffles.Core
                             Roundtrip = 500,
                             LowestRoundtrip = 500
                         };
-
-                        // Make sure the array is not null
-                        if (config.ChannelTypes == null)
-                        {
-                            config.ChannelTypes = new ChannelType[0];
-                        }
-
-                        // Alloc the channels
-                        for (byte x = 0; x < config.ChannelTypes.Length; x++)
-                        {
-                            IChannel channel = channelPool.GetChannel(config.ChannelTypes[x], x, connection, config, memoryManager);
-
-                            if (channel == null)
-                            {
-                                // Unknown channel type. Disconnect.
-                                // TODO: Fix
-                                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                DisconnectInternal(connection, false, false);
-                            }
-
-                            connection.Channels[x] = channel;
-                        }
 
                         connections[i] = connection;
                         addressPendingConnectionLookup.Add(endpoint, connection);
