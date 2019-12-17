@@ -2256,7 +2256,7 @@ namespace Ruffles.Core
                             ConnectionCompleted = NetTime.Now,
                             HandshakeResendAttempts = 0,
                             ChallengeAnswer = 0,
-                            Channels = new IChannel[0],
+                            Channels = new IChannel[Constants.MAX_CHANNELS],
                             ChannelTypes = new ChannelType[0],
                             HandshakeLastSendTime = NetTime.Now,
                             Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
