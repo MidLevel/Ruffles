@@ -238,9 +238,7 @@ namespace Ruffles.Channeling.Channels
 
                     if (unsafeIncoming.Alive && !isSafe)
                     {
-                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Incoming packet window is exhausted. Disconnecting");
-
-                        connection.Disconnect(false);
+                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Incoming packet window is exhausted. Expect delays");
 
                         return null;
                     }
