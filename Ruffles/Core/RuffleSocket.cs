@@ -2189,29 +2189,7 @@ namespace Ruffles.Core
             {
                 if (config.ReuseConnections)
                 {
-                    // Reset all channels, releasing memory etc
-                    for (int i = 0; i < connection.Channels.Length; i++)
-                    {
-                        if (connection.Channels[i] != null)
-                        {
-                            channelPool.Return(connection.Channels[i]);
-                            connection.Channels[i] = null;
-                        }
-                    }
-
-                    if (config.EnableHeartbeats)
-                    {
-                        // Release all memory from the heartbeat channel
-                        connection.HeartbeatChannel.Release();
-                    }
-
-                    if (config.EnablePacketMerging)
-                    {
-                        // Clean the merger
-                        connection.Merger.Clear();
-                    }
-
-                    // Mark as dead, this will allow it to be reclaimed. (Note: do this last to prevent it being grabbed before its cleaned up)
+                    // Mark as dead, this will allow it to be reclaimed. (Note: do this first to prevent it being grabbed before its cleaned up)
                     connection.Dead = true;
                 }
                 else
@@ -2234,6 +2212,32 @@ namespace Ruffles.Core
 
                 // Set the state to disconnected
                 connection.State = ConnectionState.Disconnected;
+
+                if (config.EnableHeartbeats)
+                {
+                    // Release all memory from the heartbeat channel
+                    connection.HeartbeatChannel.Release();
+                }
+
+                if (config.EnablePacketMerging)
+                {
+                    // Clean the merger
+                    connection.Merger.Clear();
+                }
+
+                // Reset all channels, releasing memory etc
+                for (int i = 0; i < connection.Channels.Length; i++)
+                {
+                    if (connection.Channels[i] != null)
+                    {
+                        // Grab a ref to the channel
+                        IChannel channel = connection.Channels[i];
+                        // Set the channel to null. Preventing further polls
+                        connection.Channels[i] = null;
+                        // Return old channel to pool
+                        channelPool.Return(channel);
+                    }
+                }
 
                 // Send disconnect to userspace
                 PublishEvent(new NetworkEvent()
