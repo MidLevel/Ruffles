@@ -78,6 +78,11 @@ namespace Ruffles.Configuration
         /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.
         /// </summary>
         public bool ReuseConnections = true;
+        /// <summary>
+        /// Whether or not to reuse channels. Disabling this has an impact on memory and CPU.
+        /// If this is enabled, all channels are automatically recycled when an connection dies.
+        /// </summary>
+        public bool ReuseChannels = true;
 
         // Bandwidth
         /// <summary>
@@ -319,6 +324,11 @@ namespace Ruffles.Configuration
             if (AmplificationPreventionHandshakePadding > MaximumMTU)
             {
                 messages.Add("AmplificationPreventionHandshakePadding cannot be greater than MaxMessageSize");
+            }
+
+            if (ChannelTypes.Length > Constants.MAX_CHANNELS)
+            {
+                messages.Add("Cannot have more than " + Constants.MAX_CHANNELS + " channels");
             }
 
             return messages;

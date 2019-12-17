@@ -208,7 +208,7 @@ namespace Ruffles.Connections
 
         internal readonly UnreliableOrderedChannel HeartbeatChannel;
         internal MessageMerger Merger;
-        internal IChannel[] Channels;
+        internal IChannel[] Channels = new IChannel[Constants.MAX_CHANNELS];
         internal ChannelType[] ChannelTypes;
 
         // Pre connection challenge values

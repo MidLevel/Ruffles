@@ -1743,9 +1743,6 @@ namespace Ruffles.Core
                                 pendingConnection.ChannelTypes[i] = (ChannelType)channelType;
                             }
 
-                            // Alloc the channels array
-                            pendingConnection.Channels = new IChannel[channelCount];
-
                             // Alloc the channels
                             for (byte i = 0; i < pendingConnection.ChannelTypes.Length; i++)
                             {
@@ -2193,8 +2190,17 @@ namespace Ruffles.Core
                         IChannel channel = connection.Channels[i];
                         // Set the channel to null. Preventing further polls
                         connection.Channels[i] = null;
-                        // Return old channel to pool
-                        channelPool.Return(channel);
+
+                        if (config.ReuseChannels)
+                        {
+                            // Return old channel to pool
+                            channelPool.Return(channel);
+                        }
+                        else
+                        {
+                            // Simply release the memory
+                            channel.Release();
+                        }
                     }
                 }
 
