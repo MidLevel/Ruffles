@@ -1732,56 +1732,15 @@ namespace Ruffles.Core
                             {
                                 byte channelType = payload.Array[payload.Offset + 2 + i];
 
-                                switch (channelType)
+                                if (!Enum.IsDefined(typeof(ChannelType), channelType))
                                 {
-                                    case (byte)ChannelType.Reliable:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.Reliable;
-                                        }
-                                        break;
-                                    case (byte)ChannelType.Unreliable:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.Unreliable;
-                                        }
-                                        break;
-                                    case (byte)ChannelType.UnreliableOrdered:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.UnreliableOrdered;
-                                        }
-                                        break;
-                                    case (byte)ChannelType.ReliableSequenced:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableSequenced;
-                                        }
-                                        break;
-                                    case (byte)ChannelType.UnreliableRaw:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.UnreliableRaw;
-                                        }
-                                        break;
-                                    case (byte)ChannelType.ReliableSequencedFragmented:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableSequencedFragmented;
-                                        }
-                                        break;
-                                    case (byte)ChannelType.ReliableOrdered:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableOrdered;
-                                        }
-                                        break;
-                                    case (byte)ChannelType.ReliableFragmented:
-                                        {
-                                            pendingConnection.ChannelTypes[i] = ChannelType.ReliableFragmented;
-                                        }
-                                        break;
-                                    default:
-                                        {
-                                            // Unknown channel type. Disconnect.
-                                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
-                                            DisconnectInternal(pendingConnection, false, false);
-                                            return;
-                                        }
+                                    // Unknown channel type. Disconnect.
+                                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent an invalid ChannelType. Disconnecting");
+                                    DisconnectInternal(pendingConnection, false, false);
+                                    return;
                                 }
+
+                                pendingConnection.ChannelTypes[i] = (ChannelType)channelType;
                             }
 
                             // Alloc the channels array
