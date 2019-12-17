@@ -2055,6 +2055,11 @@ namespace Ruffles.Core
                                 {
                                     // This is a valid response
 
+                                    if (connection.Merger != null)
+                                    {
+                                        connection.Merger.ExpandToSize((int)attemptedMtu);
+                                    }
+
                                     // Set new MTU
                                     connection.MTU = (ushort)attemptedMtu;
 
@@ -2264,7 +2269,7 @@ namespace Ruffles.Core
                             ChallengeAnswer = 0,
                             Channels = new IChannel[Constants.MAX_CHANNELS],
                             HandshakeLastSendTime = NetTime.Now,
-                            Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MaxMergeDelay) : null,
+                            Merger = config.EnablePacketMerging ? new MessageMerger(config.MaxMergeMessageSize, config.MinimumMTU, config.MaxMergeDelay) : null,
                             MTU = config.MinimumMTU,
                             SmoothRoundtrip = 0,
                             RoundtripVarience = 0,

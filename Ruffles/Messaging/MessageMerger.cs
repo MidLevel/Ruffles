@@ -12,10 +12,14 @@ namespace Ruffles.Messaging
         private ulong _flushDelay;
         private ushort _headerBytes;
         private ushort _packets;
+        private int _size;
+
+        private readonly int _maxSize;
+        private readonly int _startSize;
 
         private readonly object _lock = new object();
 
-        internal MessageMerger(int maxSize, ulong flushDelay)
+        internal MessageMerger(int maxSize, int startSize, ulong flushDelay)
         {
             _buffer = new byte[maxSize];
             _buffer[0] = HeaderPacker.Pack((byte)MessageType.Merge, false);
@@ -24,6 +28,9 @@ namespace Ruffles.Messaging
             _packets = 0;
             _lastFlushTime = NetTime.Now;
             _flushDelay = flushDelay;
+            _size = startSize;
+            _startSize = startSize;
+            _maxSize = maxSize;
         }
 
         internal void Clear()
@@ -34,6 +41,30 @@ namespace Ruffles.Messaging
                 _position = 1;
                 _headerBytes = 1;
                 _packets = 0;
+                _size = _startSize;
+            }
+        }
+
+        internal void ExpandToSize(int size)
+        {
+            lock (_lock)
+            {
+                if (size == _size)
+                {
+                    return;
+                }
+
+                if (size > _maxSize)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(size), "Size is larger than max size");
+                }
+
+                if (size < _size)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(size), "Cannot shrink merger");
+                }
+
+                _size = size;
             }
         }
 
@@ -41,7 +72,7 @@ namespace Ruffles.Messaging
         {
             lock (_lock)
             {
-                if (payload.Count + _position + 2 > _buffer.Length)
+                if (payload.Count + _position + 2 > _size)
                 {
                     // Wont fit
                     return false;
