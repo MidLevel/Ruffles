@@ -166,7 +166,8 @@ namespace Ruffles.Channeling.Channels
         private readonly HeapableSlidingWindow<PendingIncomingPacket> _receiveSequencer;
 
         // Outgoing sequencing
-        private ushort _lastOutboundSequenceNumber;
+        private ushort _lastOutgoingSequence;
+        private ushort _outgoingLowestAckedSequence;
         private readonly HeapableSlidingWindow<PendingOutgoingPacket> _sendSequencer;
 
         // Channel info
@@ -315,7 +316,7 @@ namespace Ruffles.Channeling.Channels
                     uint completedSequentialPackets = 0;
 
                     // Calculate the amount of sequential, ready to be delivered, packets
-                    for (int i = 1; _receiveSequencer[_incomingLowestAckedSequence + i].Alive && _receiveSequencer[_incomingLowestAckedSequence + i].IsComplete; i++)
+                    for (int i = 1; _receiveSequencer[(ushort)(_incomingLowestAckedSequence + i)].Alive && _receiveSequencer[(ushort)(_incomingLowestAckedSequence + i)].IsComplete; i++)
                     {
                         completedSequentialPackets++;
                     }
@@ -325,10 +326,10 @@ namespace Ruffles.Channeling.Channels
                         // Alloc pointers
                         HeapPointers pointers = memoryManager.AllocHeapPointers(completedSequentialPackets);
 
-                        for (int i = 0; _receiveSequencer[_incomingLowestAckedSequence + 1].Alive && _receiveSequencer[_incomingLowestAckedSequence + 1].IsComplete; i++)
+                        for (int i = 0; _receiveSequencer[(ushort)(_incomingLowestAckedSequence + 1)].Alive && _receiveSequencer[(ushort)(_incomingLowestAckedSequence + 1)].IsComplete; i++)
                         {
                             // Get the next packet that is not yet given to the user.
-                            PendingIncomingPacket nextPacket = _receiveSequencer[_incomingLowestAckedSequence + 1];
+                            PendingIncomingPacket nextPacket = _receiveSequencer[(ushort)(_incomingLowestAckedSequence + 1)];
 
                             ++_incomingLowestAckedSequence;
 
@@ -360,7 +361,7 @@ namespace Ruffles.Channeling.Channels
                             _receiveSequencer[_incomingLowestAckedSequence] = new PendingIncomingPacket()
                             {
                                 Alive = false,
-                                Sequence = 0,
+                                Sequence = _incomingLowestAckedSequence,
                                 Size = null,
                                 Fragments = null
                             };
@@ -391,7 +392,7 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
-                PendingOutgoingPacket unsafeOutgoing = _sendSequencer.GetUnsafe(_lastOutboundSequenceNumber + 1, out bool isSafe);
+                PendingOutgoingPacket unsafeOutgoing = _sendSequencer.GetUnsafe((ushort)(_lastOutgoingSequence + 1), out bool isSafe);
 
                 if (unsafeOutgoing.Alive && !isSafe)
                 {
@@ -405,7 +406,7 @@ namespace Ruffles.Channeling.Channels
                 }
 
                 // Increment the sequence number
-                _lastOutboundSequenceNumber++;
+                _lastOutgoingSequence++;
 
                 // Set header size
                 headerSize = 6;
@@ -428,8 +429,8 @@ namespace Ruffles.Channeling.Channels
                     ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i]).Buffer[1] = channelId;
 
                     // Write the sequence
-                    ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i]).Buffer[2] = (byte)_lastOutboundSequenceNumber;
-                    ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i]).Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
+                    ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i]).Buffer[2] = (byte)_lastOutgoingSequence;
+                    ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i]).Buffer[3] = (byte)(_lastOutgoingSequence >> 8);
 
                     // Write the fragment
                     ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i]).Buffer[4] = (byte)(i & 32767);
@@ -457,13 +458,13 @@ namespace Ruffles.Channeling.Channels
                         Attempts = 1,
                         LastSent = NetTime.Now,
                         FirstSent = NetTime.Now,
-                        Sequence = _lastOutboundSequenceNumber,
+                        Sequence = _lastOutgoingSequence,
                         Memory = ((HeapMemory)memoryParts.Pointers[memoryParts.VirtualOffset + i])
                     };
                 }
 
                 // Add the memory to the outgoing sequencer
-                _sendSequencer[_lastOutboundSequenceNumber] = new PendingOutgoingPacket()
+                _sendSequencer[_lastOutgoingSequence] = new PendingOutgoingPacket()
                 {
                     Alive = true,
                     Fragments = outgoingFragments
@@ -529,12 +530,19 @@ namespace Ruffles.Channeling.Channels
                         {
                             Alive = false
                         };
+
+                        if (sequence == (ushort)(_outgoingLowestAckedSequence + 1))
+                        {
+                            // This was the next one.
+                            _outgoingLowestAckedSequence++;
+                        }
                     }
                 }
 
-                for (ushort i = sequence; _sendSequencer[i].Alive && _sendSequencer[i].AllFragmentsAlive; i++)
+                // Loop from the lowest ack we got
+                for (ushort i = _outgoingLowestAckedSequence; !_sendSequencer[i].Alive && !_sendSequencer[i].AllFragmentsAlive && SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) <= 0; i++)
                 {
-                    _incomingLowestAckedSequence = i;
+                    _outgoingLowestAckedSequence = i;
                 }
             }
         }
@@ -591,9 +599,7 @@ namespace Ruffles.Channeling.Channels
         {
             lock (_lock)
             {
-                long distance = SequencingUtils.Distance(_lastOutboundSequenceNumber, _incomingLowestAckedSequence, sizeof(ushort));
-
-                for (ushort i = _incomingLowestAckedSequence; i < _incomingLowestAckedSequence + distance; i++)
+                for (ushort i = (ushort)(_outgoingLowestAckedSequence + 1); SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) < 0; i++)
                 {
                     if (_sendSequencer[i].Alive)
                     {
@@ -601,14 +607,15 @@ namespace Ruffles.Channeling.Channels
                         {
                             if (_sendSequencer[i].Fragments.Pointers[j] != null && ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Alive)
                             {
-                                if (((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Attempts > config.ReliabilityMaxResendAttempts)
+                                if ((NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                                 {
-                                    // If they don't ack the message, disconnect them
-                                    connection.Disconnect(false);
-                                    return;
-                                }
-                                else if ((NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
-                                {
+                                    if (((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Attempts > config.ReliabilityMaxResendAttempts)
+                                    {
+                                        // If they don't ack the message, disconnect them
+                                        connection.Disconnect(false);
+                                        return;
+                                    }
+
                                     _sendSequencer[i].Fragments.Pointers[j] = new PendingOutgoingFragment()
                                     {
                                         Alive = true,
@@ -640,7 +647,8 @@ namespace Ruffles.Channeling.Channels
 
                 // Clear all outgoing states
                 _sendSequencer.Release();
-                _lastOutboundSequenceNumber = 0;
+                _lastOutgoingSequence = 0;
+                _outgoingLowestAckedSequence = 0;
             }
         }
 
