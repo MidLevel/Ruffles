@@ -309,17 +309,14 @@ namespace Ruffles.Channeling.Channels
                         Sequence = sequence
                     };
 
-                    ushort lowestAck = _outgoingLowestAckedSequence;
-                    lowestAck++;
-
-                    if (lowestAck == sequence)
+                    if (sequence == (ushort)(_outgoingLowestAckedSequence + 1))
                     {
                         // This was the next one.
-                        _outgoingLowestAckedSequence = lowestAck;
+                        _outgoingLowestAckedSequence++;
                     }
                 }
 
-                // Loop from the lowest ack we gotmto
+                // Loop from the lowest ack we got
                 for (ushort i = _outgoingLowestAckedSequence; !_sendSequencer[i].Alive && SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) <= 0; i++)
                 {
                     _outgoingLowestAckedSequence = i;
