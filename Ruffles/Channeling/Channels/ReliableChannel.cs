@@ -283,14 +283,15 @@ namespace Ruffles.Channeling.Channels
                 {
                     if (_sendSequencer[i].Alive)
                     {
-                        if (_sendSequencer[i].Attempts > config.ReliabilityMaxResendAttempts)
+                        if ((NetTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                         {
-                            // If they don't ack the message, disconnect them
-                            connection.Disconnect(false);
-                            return;
-                        }
-                        else if ((NetTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - _sendSequencer[i].LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
-                        {
+                            if (_sendSequencer[i].Attempts > config.ReliabilityMaxResendAttempts)
+                            {
+                                // If they don't ack the message, disconnect them
+                                connection.Disconnect(false);
+                                return;
+                            }
+
                             _sendSequencer[i] = new PendingOutgoingPacket()
                             {
                                 Alive = true,
