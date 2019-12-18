@@ -36,7 +36,7 @@ namespace Ruffles.Channeling.Channels
         private readonly SlidingWindow<NetTime> _lastAckTimes;
 
         // Outgoing sequencing
-        private ushort _lastOutboundSequenceNumber;
+        private ushort _lastOutgoingSequence;
         private PendingOutgoingPacket _lastOutgoingPacket;
 
         // Channel info
@@ -81,7 +81,7 @@ namespace Ruffles.Channeling.Channels
             lock (_lock)
             {
                 // Increment the sequence number
-                _lastOutboundSequenceNumber++;
+                _lastOutgoingSequence++;
 
                 // Set header size
                 headerSize = 4;
@@ -94,8 +94,8 @@ namespace Ruffles.Channeling.Channels
                 memory.Buffer[1] = channelId;
 
                 // Write the sequence
-                memory.Buffer[2] = (byte)_lastOutboundSequenceNumber;
-                memory.Buffer[3] = (byte)(_lastOutboundSequenceNumber >> 8);
+                memory.Buffer[2] = (byte)_lastOutgoingSequence;
+                memory.Buffer[3] = (byte)(_lastOutgoingSequence >> 8);
 
                 // Copy the payload
                 Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 4, payload.Count);
@@ -107,7 +107,7 @@ namespace Ruffles.Channeling.Channels
                 _lastOutgoingPacket = new PendingOutgoingPacket()
                 {
                     Alive = true,
-                    Sequence = _lastOutboundSequenceNumber,
+                    Sequence = _lastOutgoingSequence,
                     Attempts = 1,
                     LastSent = NetTime.Now,
                     FirstSent = NetTime.Now,
@@ -156,8 +156,6 @@ namespace Ruffles.Channeling.Channels
                         Alive = false,
                         Sequence = sequence
                     };
-
-                    _incomingLowestAckedSequence = sequence;
                 }
             }
         }
@@ -272,7 +270,7 @@ namespace Ruffles.Channeling.Channels
                 _incomingLowestAckedSequence = 0;
 
                 // Clear all outgoing states
-                _lastOutboundSequenceNumber = 0;
+                _lastOutgoingSequence = 0;
 
                 // Reset the outgoing packet
                 _lastOutgoingPacket = new PendingOutgoingPacket()
