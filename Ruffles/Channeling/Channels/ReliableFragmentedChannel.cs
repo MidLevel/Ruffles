@@ -403,7 +403,7 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
-                PendingOutgoingPacket unsafeOutgoing = _sendSequencer.GetUnsafe(_lastOutgoingSequence + 1, out bool isSafe);
+                PendingOutgoingPacket unsafeOutgoing = _sendSequencer.GetUnsafe((ushort)(_lastOutgoingSequence + 1), out bool isSafe);
 
                 if (unsafeOutgoing.Alive && !isSafe)
                 {
