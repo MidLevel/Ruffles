@@ -618,14 +618,15 @@ namespace Ruffles.Channeling.Channels
                         {
                             if (_sendSequencer[i].Fragments.Pointers[j] != null && ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Alive)
                             {
-                                if (((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Attempts > config.ReliabilityMaxResendAttempts)
+                                if ((NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                                 {
-                                    // If they don't ack the message, disconnect them
-                                    connection.Disconnect(false);
-                                    return;
-                                }
-                                else if ((NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
-                                {
+                                    if (((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Attempts > config.ReliabilityMaxResendAttempts)
+                                    {
+                                        // If they don't ack the message, disconnect them
+                                        connection.Disconnect(false);
+                                        return;
+                                    }
+
                                     _sendSequencer[i].Fragments.Pointers[j] = new PendingOutgoingFragment()
                                     {
                                         Alive = true,
