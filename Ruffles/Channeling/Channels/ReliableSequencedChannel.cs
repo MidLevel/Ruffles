@@ -80,23 +80,16 @@ namespace Ruffles.Channeling.Channels
             _lastAckTimes = new SlidingWindow<NetTime>(config.ReliableAckFlowWindowSize, true, sizeof(ushort));
         }
 
-        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload)
         {
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
-
-            // Set the headerBytes
-            headerBytes = 2;
 
             lock (_lock)
             {
                 if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _receiveSequencer[sequence].Alive)
                 {
                     // We have already acked this message. Ack again
-
-                    connection.IncomingDuplicatePackets++;
-                    connection.IncomingDuplicateUserBytes += (ulong)payload.Count - 2;
-                    connection.IncomingDuplicateTotalBytes += (ulong)payload.Count + 2;
 
                     SendAck(sequence);
 
@@ -181,13 +174,12 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
+        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
             if (payload.Count > connection.MTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
                 dealloc = false;
-                headerSize = 0;
                 return null;
             }
 
@@ -199,24 +191,20 @@ namespace Ruffles.Channeling.Channels
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Outgoing packet window is exhausted. Disconnecting");
 
-                    connection.Disconnect(false);
+                    connection.Disconnect(false, true);
 
                     dealloc = false;
-                    headerSize = 0;
                     return null;
                 }
 
                 // Increment the sequence number
                 _lastOutgoingSequence++;
 
-                // Set header size
-                headerSize = 4;
-
                 // Allocate the memory
                 HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
 
                 // Write headers
-                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
+                memory.Buffer[0] = HeaderPacker.Pack(MessageType.Data);
                 memory.Buffer[1] = channelId;
 
                 // Write the sequence
@@ -286,9 +274,6 @@ namespace Ruffles.Channeling.Channels
             {
                 if (_sendSequencer[sequence].Alive)
                 {
-                    // Add statistics
-                    connection.OutgoingConfirmedPackets++;
-
                     // Dealloc the memory held by the sequencer for the packet
                     _sendSequencer[sequence].DeAlloc(memoryManager);
 
@@ -334,7 +319,7 @@ namespace Ruffles.Channeling.Channels
                 HeapMemory ackMemory = memoryManager.AllocHeapMemory(4 + (uint)(config.EnableMergedAcks ? config.MergedAckBytes : 0));
 
                 // Write header
-                ackMemory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Ack, false);
+                ackMemory.Buffer[0] = HeaderPacker.Pack(MessageType.Ack);
                 ackMemory.Buffer[1] = (byte)channelId;
 
                 // Write sequence
@@ -367,7 +352,7 @@ namespace Ruffles.Channeling.Channels
                 }
 
                 // Send ack
-                connection.SendRaw(new ArraySegment<byte>(ackMemory.Buffer, 0, 4 + (config.EnableMergedAcks ? config.MergedAckBytes : 0)), false, (byte)(4 + (config.EnableMergedAcks ? config.MergedAckBytes : 0)));
+                connection.Send(new ArraySegment<byte>(ackMemory.Buffer, 0, 4 + (config.EnableMergedAcks ? config.MergedAckBytes : 0)), false);
 
                 // Return memory
                 memoryManager.DeAlloc(ackMemory);
@@ -387,7 +372,7 @@ namespace Ruffles.Channeling.Channels
                             if (_sendSequencer[i].Attempts > config.ReliabilityMaxResendAttempts)
                             {
                                 // If they don't ack the message, disconnect them
-                                connection.Disconnect(false);
+                                connection.Disconnect(false, true);
                                 return;
                             }
 
@@ -401,9 +386,7 @@ namespace Ruffles.Channeling.Channels
                                 Sequence = i
                             };
 
-                            connection.SendRaw(new ArraySegment<byte>(_sendSequencer[i].Memory.Buffer, (int)_sendSequencer[i].Memory.VirtualOffset, (int)_sendSequencer[i].Memory.VirtualCount), false, 4);
-
-                            connection.OutgoingResentPackets++;
+                            connection.Send(new ArraySegment<byte>(_sendSequencer[i].Memory.Buffer, (int)_sendSequencer[i].Memory.VirtualOffset, (int)_sendSequencer[i].Memory.VirtualCount), false);
                         }
                     }
                 }

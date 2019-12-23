@@ -1,23 +1,35 @@
-﻿namespace Ruffles.Messaging
+﻿using System;
+
+namespace Ruffles.Messaging
 {
     internal static class HeaderPacker
     {
-        internal static byte Pack(byte type, bool fragment)
+        internal static byte Pack(MessageType messageType)
         {
-            byte header = (byte)(type & 15);
-
-            if (fragment)
+            if (!Enum.IsDefined(typeof(MessageType), messageType) || messageType == MessageType.Unknown)
             {
-                header |= 16;
+                throw new ArgumentException("Has to be a valid MessageType", nameof(messageType));
             }
+
+            // First 4 bits is type
+            byte header = (byte)(((byte)messageType) & 15);
 
             return header;
         }
 
-        internal static void Unpack(byte header, out byte type, out bool fragment)
+        internal static void Unpack(byte header, out MessageType messageType)
         {
-            type = (byte)(header & 15);
-            fragment = ((header & 16) >> 4) == 1;
+            // Get first 4 bits
+            byte type = (byte)(header & 15);
+
+            if (!Enum.IsDefined(typeof(MessageType), type))
+            {
+                messageType = MessageType.Unknown;   
+            }
+            else
+            {
+                messageType = (MessageType)type;
+            }
         }
     }
 }

@@ -35,13 +35,12 @@ namespace Ruffles.Channeling.Channels
             _incomingAckedPackets = new SlidingWindow<bool>(config.ReliabilityWindowSize, true, sizeof(ushort));
         }
 
-        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
+        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
             if (payload.Count > connection.MTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
                 dealloc = false;
-                headerSize = 0;
                 return null;
             }
 
@@ -50,14 +49,11 @@ namespace Ruffles.Channeling.Channels
                 // Increment the sequence number
                 _lastOutboundSequenceNumber++;
 
-                // Set header size
-                headerSize = 4;
-
                 // Allocate the memory
                 HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 4);
 
                 // Write headers
-                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
+                memory.Buffer[0] = HeaderPacker.Pack(MessageType.Data);
                 memory.Buffer[1] = channelId;
 
                 // Write the sequence
@@ -85,13 +81,10 @@ namespace Ruffles.Channeling.Channels
             // Unreliable messages have no acks.
         }
 
-        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload)
         {
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
-
-            // Set the headerBytes
-            headerBytes = 2;
 
             lock (_lock)
             {

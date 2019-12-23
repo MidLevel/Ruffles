@@ -23,24 +23,20 @@ namespace Ruffles.Channeling.Channels
             this.memoryManager = memoryManager;
         }
 
-        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out byte headerSize, out bool dealloc)
+        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
         {
             if (payload.Count > connection.MTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
                 dealloc = false;
-                headerSize = 0;
                 return null;
             }
-
-            // Set header size
-            headerSize = 2;
 
             // Allocate the memory
             HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count + 2);
 
             // Write headers
-            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.Data, false);
+            memory.Buffer[0] = HeaderPacker.Pack(MessageType.Data);
             memory.Buffer[1] = channelId;
 
             // Copy the payload
@@ -63,11 +59,8 @@ namespace Ruffles.Channeling.Channels
             // Unreliable messages have no acks.
         }
 
-        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload, out byte headerBytes)
+        public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload)
         {
-            // Set the headerBytes
-            headerBytes = 0;
-
             // Alloc pointers
             HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 

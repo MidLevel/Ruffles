@@ -7,7 +7,5 @@ namespace Ruffles.Messaging
         public bool HasAcked;
         public byte Attempts;
         public NetTime LastAttempt;
-
-        public bool Completed => HasAcked;
     }
 }

@@ -74,11 +74,6 @@ namespace Ruffles.Configuration
         /// </summary>
         public ushort SocketPollTime = 50;
         /// <summary>
-        /// Whether or not to reuse connections. Disabling this has a impact on memory and CPU.
-        /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.
-        /// </summary>
-        public bool ReuseConnections = true;
-        /// <summary>
         /// Whether or not to reuse channels. Disabling this has an impact on memory and CPU.
         /// If this is enabled, all channels are automatically recycled when an connection dies.
         /// </summary>
@@ -149,27 +144,15 @@ namespace Ruffles.Configuration
         /// The amount of milliseconds from the connection request that the connection has to solve the challenge and complete the connection handshake.
         /// Note that this timeout only starts counting after the connection request has been approved.
         /// </summary>
-        public ulong HandshakeTimeout = 30_000;
+        public ulong HandshakeTimeout = 20_000;
         /// <summary>
         /// The amount of milliseconds of packet silence before a already connected connection will be disconnected.
         /// </summary>
-        public ulong ConnectionTimeout = 30_000;
+        public ulong ConnectionTimeout = 20_000;
         /// <summary>
         /// The amount milliseconds between heartbeat keep-alive packets are sent.
         /// </summary>
-        public ulong HeartbeatDelay = 20_000;
-        /// <summary>
-        /// The maximum percentage of reliable packets that are allowed to be dropped before a connection times out.
-        /// </summary>
-        public double MaxPacketLossPercentage = 0.8;
-        /// <summary>
-        /// The maximum roundtrip time before a connection times out.
-        /// </summary>
-        public uint MaxRoundtripTime = 1500;
-        /// <summary>
-        /// The grace period for a connection where PacketLoss and Roundtrip timeouts are not checked.
-        /// </summary>
-        public ulong ConnectionQualityGracePeriod = 5000;
+        public ulong HeartbeatDelay = 5000;
 
         // Handshake resends
         /// <summary>
@@ -217,11 +200,6 @@ namespace Ruffles.Configuration
         public bool TimeBasedConnectionChallenge = true;
 
         // Denial Of Service
-        /// <summary>
-        /// The maximum connection slots that can be used for pending connections. 
-        /// This is to limit slot filling attacks that has solved the connection request challenge.
-        /// </summary>
-        public ushort MaxPendingConnections = ushort.MaxValue;
         /// <summary>
         /// The amplification prevention padding of handshake requests. 
         /// All handshake packets sent by the connector will be of this size.

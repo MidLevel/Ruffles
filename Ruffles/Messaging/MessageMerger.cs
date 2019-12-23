@@ -10,8 +10,6 @@ namespace Ruffles.Messaging
         private int _position;
         private NetTime _lastFlushTime;
         private ulong _flushDelay;
-        private ushort _headerBytes;
-        private ushort _packets;
         private int _size;
 
         private readonly int _maxSize;
@@ -22,10 +20,8 @@ namespace Ruffles.Messaging
         internal MessageMerger(int maxSize, int startSize, ulong flushDelay)
         {
             _buffer = new byte[maxSize];
-            _buffer[0] = HeaderPacker.Pack((byte)MessageType.Merge, false);
+            _buffer[0] = HeaderPacker.Pack(MessageType.Merge);
             _position = 1;
-            _headerBytes = 1;
-            _packets = 0;
             _lastFlushTime = NetTime.Now;
             _flushDelay = flushDelay;
             _size = startSize;
@@ -39,8 +35,6 @@ namespace Ruffles.Messaging
             {
                 _lastFlushTime = NetTime.Now;
                 _position = 1;
-                _headerBytes = 1;
-                _packets = 0;
                 _size = _startSize;
             }
         }
@@ -68,7 +62,7 @@ namespace Ruffles.Messaging
             }
         }
 
-        internal bool TryWrite(ArraySegment<byte> payload, ushort headerBytes)
+        internal bool TryWrite(ArraySegment<byte> payload)
         {
             lock (_lock)
             {
@@ -90,18 +84,12 @@ namespace Ruffles.Messaging
                     // Update the position
                     _position += 2 + payload.Count;
 
-                    // Update the amount of header bytes
-                    _headerBytes += headerBytes;
-
-                    // Update the amount of packets
-                    _packets++;
-
                     return true;
                 }
             }
         }
 
-        internal ArraySegment<byte>? TryFlush(out ushort headerBytes)
+        internal ArraySegment<byte>? TryFlush()
         {
             lock (_lock)
             {
@@ -112,18 +100,12 @@ namespace Ruffles.Messaging
                     // Save the size
                     int flushSize = _position;
 
-                    headerBytes = _headerBytes;
-
                     // Reset values
                     _position = 1;
                     _lastFlushTime = NetTime.Now;
-                    _headerBytes = 1;
-                    _packets = 0;
 
                     return new ArraySegment<byte>(_buffer, 0, flushSize);
                 }
-
-                headerBytes = 0;
 
                 return null;
             }
@@ -178,10 +160,10 @@ namespace Ruffles.Messaging
                 }
 
                 // Read the header
-                HeaderPacker.Unpack(payload.Array[payload.Offset + packetOffset + 2], out byte type, out bool fragment);
+                HeaderPacker.Unpack(payload.Array[payload.Offset + packetOffset + 2], out MessageType type);
 
                 // Prevent merging a merge
-                if (type != (byte)MessageType.Merge)
+                if (type != MessageType.Merge)
                 {
                     // Add the new segment
                     list.Add(new ArraySegment<byte>(payload.Array, payload.Offset + packetOffset + 2, size));
