@@ -390,12 +390,12 @@ namespace Ruffles.Connections
             }
         }
 
-        internal void HandleMTURequest()
+        internal void HandleMTURequest(uint size)
         {
             if (State == ConnectionState.Connected)
             {
                 // Alloc memory for response
-                HeapMemory memory = MemoryManager.AllocHeapMemory(1);
+                HeapMemory memory = MemoryManager.AllocHeapMemory(size);
 
                 // Write the header
                 memory.Buffer[0] = HeaderPacker.Pack(MessageType.MTUResponse);

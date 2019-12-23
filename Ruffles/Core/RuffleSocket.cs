@@ -1268,7 +1268,7 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
-                            connection.HandleMTURequest();
+                            connection.HandleMTURequest((uint)payload.Count);
                         }
                     }
                     break;
