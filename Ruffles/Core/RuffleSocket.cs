@@ -54,11 +54,11 @@ namespace Ruffles.Core
         }
 
         // Separate connections and pending to prevent something like a slorris attack
-        private readonly Connection[] connections;
         private readonly Dictionary<EndPoint, Connection> addressConnectionLookup = new Dictionary<EndPoint, Connection>();
+        private Connection HeadConnection;
 
         // Lock for adding or removing connections. This is done to allow for a quick ref to be gained on the user thread when connecting.
-        private readonly object connectionAddRemoveLock = new object();
+        private readonly ReaderWriterLockSlim connectionsLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
 
         // TODO: Removed hardcoded size
         private readonly ConcurrentCircularQueue<NetworkEvent> userEventQueue;
@@ -153,9 +153,6 @@ namespace Ruffles.Core
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.MaxBufferSize + " bytes of incomingBuffer");
             incomingBuffer = new byte[config.MaxBufferSize];
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.MaxConnections + " connection slots");
-            connections = new Connection[config.MaxConnections];
-
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.ConnectionChallengeHistory + " challenge IV slots");
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
 
@@ -227,12 +224,9 @@ namespace Ruffles.Core
             }
 
             // Disconnect all clients
-            for (int i = 0; i < connections.Length; i++)
+            for (Connection connection = HeadConnection; connection != null; connection = connection.NextConnection)
             {
-                if (connections[i] != null && connections[i].State != ConnectionState.Disconnected)
-                {
-                    connections[i].Disconnect(true, false);
-                }
+                connection.Disconnect(true, false);
             }
 
             IsRunning = false;
@@ -380,26 +374,6 @@ namespace Ruffles.Core
 
         /// <summary>
         /// Sends the specified payload to a connection.
-        /// This will send the packet straight away. 
-        /// This can cause the channel to lock up. 
-        /// For higher performance sends, use SendLater.
-        /// </summary>
-        /// <param name="payload">The payload to send.</param>
-        /// <param name="connectionId">The connectionId to send to.</param>
-        /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
-        public bool SendNow(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noMerge)
-        {
-            if (connectionId < (ulong)connections.Length && connectionId >= 0)
-            {
-                return SendNow(payload, connections[connectionId], channelId, noMerge);
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Sends the specified payload to a connection.
         /// This will send the packet on the next network IO tick. 
         /// This adds additional send delay but prevents the channel from locking. 
         /// For reduced delay, use SendNow.
@@ -433,26 +407,6 @@ namespace Ruffles.Core
                 });
 
                 return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Sends the specified payload to a connection.
-        /// This will send the packet on the next network IO tick. 
-        /// This adds additional send delay but prevents the channel from locking. 
-        /// For reduced delay, use SendNow.
-        /// </summary>
-        /// <param name="payload">The payload to send.</param>
-        /// <param name="connectionId">The connectionId to send to.</param>
-        /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
-        public bool SendLater(ArraySegment<byte> payload, ulong connectionId, byte channelId, bool noMerge)
-        {
-            if (connectionId < (ulong)connections.Length && connectionId >= 0)
-            {
-                return SendLater(payload, connections[connectionId], channelId, noMerge);
             }
 
             return false;
@@ -695,22 +649,6 @@ namespace Ruffles.Core
 
         /// <summary>
         /// Disconnect the specified connection.
-        /// This call will NOT block the network thread and is faster than DisconnectNow.
-        /// </summary>
-        /// <param name="connectionId">The connectionId to disconnect.</param>
-        /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public bool DisconnectLater(ulong connectionId, bool sendMessage)
-        {
-            if (connectionId < (ulong)connections.Length && connectionId >= 0)
-            {
-                return DisconnectLater(connections[connectionId], sendMessage);
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Disconnect the specified connection.
         /// </summary>
         /// <param name="connection">The connection to disconnect.</param>
         /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
@@ -721,21 +659,6 @@ namespace Ruffles.Core
                 connection.Disconnect(sendMessage, false);
 
                 return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Disconnect the specified connection.
-        /// </summary>
-        /// <param name="connectionId">The connectionId to disconnect.</param>
-        /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public bool DisconnectNow(ulong connectionId, bool sendMessage)
-        {
-            if (connectionId < (ulong)connections.Length && connectionId >= 0)
-            {
-                return DisconnectNow(connections[connectionId], sendMessage);
             }
 
             return false;
@@ -759,12 +682,9 @@ namespace Ruffles.Core
                         PollInternalIOQueue();
                     }
 
-                    for (int i = 0; i < connections.Length; i++)
+                    for (Connection connection = HeadConnection; connection != null; connection = connection.NextConnection)
                     {
-                        if (connections[i] != null)
-                        {
-                            connections[i].Update();
-                        }
+                        connection.Update();
                     }
                 }
                 catch (Exception e)
@@ -1294,7 +1214,9 @@ namespace Ruffles.Core
         internal Connection GetConnection(EndPoint endpoint)
         {
             // Lock to prevent grabbing a half dead connection
-            lock (connectionAddRemoveLock)
+            connectionsLock.EnterReadLock();
+
+            try
             {
                 if (addressConnectionLookup.ContainsKey(endpoint))
                 {
@@ -1305,25 +1227,52 @@ namespace Ruffles.Core
                     return null;
                 }
             }
+            finally
+            {
+                connectionsLock.ExitReadLock();
+            }
         }
 
         internal void RemoveConnection(Connection connection)
         {
             // Lock when removing the connection to prevent another thread grabbing it before its fully dead.
-            lock (connectionAddRemoveLock)
-            {
-                // Release to GC unless user has a hold of it
-                connections[connection.Id] = null;
+            connectionsLock.EnterWriteLock();
 
+            try
+            {
                 // Remove lookup
-                addressConnectionLookup.Remove(connection.EndPoint);
+                if (addressConnectionLookup.Remove(connection.EndPoint))
+                {
+                    if (connection == HeadConnection)
+                    {
+                        HeadConnection = HeadConnection.NextConnection;
+                    }
+
+                    if (connection.PreviousConnection != null)
+                    {
+                        connection.PreviousConnection.NextConnection = connection.NextConnection;
+                    }
+
+                    if (connection.NextConnection != null)
+                    {
+                        connection.NextConnection.PreviousConnection = connection.PreviousConnection;
+                    }
+
+                    connection.PreviousConnection = null;
+                }
+            }
+            finally
+            {
+                connectionsLock.ExitWriteLock();
             }
         }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
         {
             // Lock when adding connection to prevent grabbing a half alive connection.
-            lock (connectionAddRemoveLock)
+            connectionsLock.EnterWriteLock();
+
+            try
             {
                 // Make sure they are not already connected to prevent an attack where a single person can fill all the slots.
                 if (addressConnectionLookup.ContainsKey(endpoint))
@@ -1331,23 +1280,26 @@ namespace Ruffles.Core
                     return null;
                 }
 
-                for (ushort i = 0; i < connections.Length; i++)
+                // Alloc on the heap
+                Connection connection = new Connection(state, endpoint, this);
+
+                // Add lookup
+                addressConnectionLookup.Add(endpoint, connection);
+
+                if (HeadConnection != null)
                 {
-                    if (connections[i] == null)
-                    {
-                        // Alloc on the heap
-                        Connection connection = new Connection(i, state, endpoint, this);
-
-                        // Add lookup
-                        addressConnectionLookup.Add(endpoint, connection);
-
-                        connections[i] = connection;
-
-                        return connection;
-                    }
+                    // We have a connection as head.
+                    connection.NextConnection = HeadConnection;
+                    HeadConnection.PreviousConnection = connection;
                 }
 
-                return null;
+                HeadConnection = connection;
+
+                return connection;
+            }
+            finally
+            {
+                connectionsLock.ExitWriteLock();
             }
         }
     }

@@ -134,10 +134,6 @@ namespace Ruffles.Configuration
         /// The maxmimum packet size. Should be larger than the MTU.
         /// </summary>
         public ushort MaxBufferSize = 1024 * 5;
-        /// <summary>
-        /// The maximum amount of connections. Increasing this increases the memory impact.
-        /// </summary>
-        public ushort MaxConnections = ushort.MaxValue;
 
         // Timeouts
         /// <summary>

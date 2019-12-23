@@ -21,15 +21,13 @@ namespace Ruffles.Connections
     public class Connection
     {
         /// <summary>
-        /// Gets the id of the connection. This is reused for connections by the RuffleSocket.
-        /// </summary>
-        /// <value>The connectionId.</value>
-        public ulong Id { get; internal set; }
-        /// <summary>
         /// Gets the connection state.
         /// </summary>
         /// <value>The connection state.</value>
         public ConnectionState State { get; internal set; }
+
+        internal Connection NextConnection;
+        internal Connection PreviousConnection;
 
         // States
         private MessageStatus HailStatus;
@@ -153,7 +151,7 @@ namespace Ruffles.Connections
         private MemoryManager MemoryManager => Socket.MemoryManager;
         private SocketConfig Config => Socket.Config;
 
-        internal Connection(ulong id, ConnectionState state, EndPoint endpoint, RuffleSocket socket)
+        internal Connection(ConnectionState state, EndPoint endpoint, RuffleSocket socket)
         {
 #if ALLOW_CONNECTION_STUB
             if (IsStub)
@@ -963,7 +961,7 @@ namespace Ruffles.Connections
         // Used by Test project
         internal static Connection Stub(SocketConfig config)
         {
-            return new Connection(0, ConnectionState.Connected, new IPEndPoint(IPAddress.Any, 0), new RuffleSocket(config))
+            return new Connection(ConnectionState.Connected, new IPEndPoint(IPAddress.Any, 0), new RuffleSocket(config))
             {
                 IsStub = true,
                 MTU = config.MinimumMTU
