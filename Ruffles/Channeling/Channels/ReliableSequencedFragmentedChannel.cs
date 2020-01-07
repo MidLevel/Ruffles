@@ -388,9 +388,7 @@ namespace Ruffles.Channeling.Channels
 
                 if (unsafeOutgoing.Alive && !isSafe)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Outgoing packet window is exhausted. Disconnecting");
-
-                    connection.Disconnect(false, true);
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Outgoing packet window is exhausted. Packet lost");
 
                     dealloc = false;
                     return null;
