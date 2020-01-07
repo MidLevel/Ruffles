@@ -12,6 +12,6 @@ namespace Ruffles.Channeling
         void HandleAck(ArraySegment<byte> payload);
         void Release();
         void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager);
-        void InternalUpdate();
+        void InternalUpdate(out bool timeout);
     }
 }

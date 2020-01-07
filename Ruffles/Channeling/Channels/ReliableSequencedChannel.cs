@@ -359,7 +359,7 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public void InternalUpdate()
+        public void InternalUpdate(out bool timeout)
         {
             lock (_lock)
             {
@@ -372,7 +372,7 @@ namespace Ruffles.Channeling.Channels
                             if (_sendSequencer[i].Attempts > config.ReliabilityMaxResendAttempts)
                             {
                                 // If they don't ack the message, disconnect them
-                                connection.Disconnect(false, true);
+                                timeout = true;
                                 return;
                             }
 
@@ -391,6 +391,8 @@ namespace Ruffles.Channeling.Channels
                     }
                 }
             }
+
+            timeout = false;
         }
 
         public void Release()

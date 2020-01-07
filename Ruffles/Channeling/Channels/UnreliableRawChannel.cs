@@ -70,9 +70,10 @@ namespace Ruffles.Channeling.Channels
             return pointers;
         }
 
-        public void InternalUpdate()
+        public void InternalUpdate(out bool timeout)
         {
             // Unreliable doesnt need to resend, thus no internal loop is required
+            timeout = false;
         }
 
         public void Release()

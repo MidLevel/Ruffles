@@ -589,7 +589,7 @@ namespace Ruffles.Channeling.Channels
             memoryManager.DeAlloc(ackMemory);
         }
 
-        public void InternalUpdate()
+        public void InternalUpdate(out bool timeout)
         {
             lock (_lock)
             {
@@ -606,7 +606,7 @@ namespace Ruffles.Channeling.Channels
                                     if (((PendingOutgoingFragment)_sendSequencer[i].Fragments.Pointers[j]).Attempts > config.ReliabilityMaxResendAttempts)
                                     {
                                         // If they don't ack the message, disconnect them
-                                        connection.Disconnect(false, true);
+                                        timeout = true;
                                         return;
                                     }
 
@@ -627,6 +627,8 @@ namespace Ruffles.Channeling.Channels
                     }
                 }
             }
+
+            timeout = false;
         }
 
         public void Release()

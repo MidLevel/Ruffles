@@ -124,9 +124,10 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public void InternalUpdate()
+        public void InternalUpdate(out bool timeout)
         {
             // UnreliableSequenced doesnt need to resend, thus no internal loop is required
+            timeout = false;
         }
 
         public void Release()

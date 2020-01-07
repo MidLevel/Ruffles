@@ -72,7 +72,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The max socket block time in milliseconds. This will affect how long the internal loop will block.
         /// </summary>
-        public ushort SocketPollTime = 50;
+        public ushort LogicDelay = 50;
         /// <summary>
         /// Whether or not to reuse channels. Disabling this has an impact on memory and CPU.
         /// If this is enabled, all channels are automatically recycled when an connection dies.

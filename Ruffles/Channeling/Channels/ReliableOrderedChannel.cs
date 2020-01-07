@@ -189,7 +189,7 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public void InternalUpdate()
+        public void InternalUpdate(out bool timeout)
         {
             lock (_lock)
             {
@@ -200,7 +200,7 @@ namespace Ruffles.Channeling.Channels
                         if (_lastOutgoingPacket.Attempts > config.ReliabilityMaxResendAttempts)
                         {
                             // If they don't ack the message, disconnect them
-                            connection.Disconnect(false, true);
+                            timeout = true;
                             return;
                         }
 
@@ -218,6 +218,8 @@ namespace Ruffles.Channeling.Channels
                     }
                 }
             }
+
+            timeout = false;
         }
 
         private void SendAck(ushort sequence)

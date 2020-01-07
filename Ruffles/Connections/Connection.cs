@@ -2,6 +2,7 @@
 
 using System;
 using System.Net;
+using System.Threading;
 using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
 using Ruffles.Configuration;
@@ -42,7 +43,7 @@ namespace Ruffles.Connections
         /// Gets the RuffleSocket the connection belongs to.
         /// </summary>
         /// <value>The RuffleSocket the connection belongs to.</value>
-        public RuffleSocket Socket { get; }
+        public readonly RuffleSocket Socket;
 
         private ulong ConnectionChallenge { get; set; }
         private byte ChallengeDifficulty { get; set; }
@@ -151,6 +152,8 @@ namespace Ruffles.Connections
         private MemoryManager MemoryManager => Socket.MemoryManager;
         private SocketConfig Config => Socket.Config;
 
+        private readonly ReaderWriterLockSlim _stateLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+
         internal Connection(ConnectionState state, EndPoint endpoint, RuffleSocket socket)
         {
 #if ALLOW_CONNECTION_STUB
@@ -220,6 +223,24 @@ namespace Ruffles.Connections
             }
         }
 
+        internal void HandleDelayedChannelSend(HeapMemory data, byte channelId, bool noMerge)
+        {
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.Connected)
+                {
+                    // Send the data
+                    ChannelRouter.SendMessage(new ArraySegment<byte>(data.Buffer, (int)data.VirtualOffset, (int)data.VirtualCount), this, channelId, noMerge, MemoryManager);
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
         internal void Disconnect(bool sendMessage, bool timeout)
         {
 #if ALLOW_CONNECTION_STUB
@@ -230,46 +251,67 @@ namespace Ruffles.Connections
             }
 #endif
 
-            if (State == ConnectionState.Connected && sendMessage && !timeout)
+            // TODO: Could be just a normal write lock. The chance of it not being a write in the end is small.
+            _stateLock.EnterUpgradeableReadLock();
+
+            try
             {
-                // Send disconnect message
+                if (State == ConnectionState.Connected && sendMessage && !timeout)
+                {
+                    // Send disconnect message
 
-                // Allocate memory
-                HeapMemory memory = MemoryManager.AllocHeapMemory(1);
+                    // Allocate memory
+                    HeapMemory memory = MemoryManager.AllocHeapMemory(1);
 
-                // Write disconnect header
-                memory.Buffer[0] = HeaderPacker.Pack(MessageType.Disconnect);
+                    // Write disconnect header
+                    memory.Buffer[0] = HeaderPacker.Pack(MessageType.Disconnect);
 
-                // Send disconnect message
-                Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+                    // Send disconnect message
+                    Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
-                // Release memory
-                MemoryManager.DeAlloc(memory);
+                    // Release memory
+                    MemoryManager.DeAlloc(memory);
+                }
+
+                if (State != ConnectionState.Disconnected)
+                {
+                    _stateLock.EnterWriteLock();
+
+                    try
+                    {
+                        // Set the state to disconnected
+                        State = ConnectionState.Disconnected;
+
+                        // Release all memory
+                        Release();
+                    }
+                    finally
+                    {
+                        _stateLock.ExitWriteLock();
+                    }
+
+                    // Remove from global lookup
+                    Socket.RemoveConnection(this);
+
+                    // Send disconnect to userspace
+                    Socket.PublishEvent(new NetworkEvent()
+                    {
+                        Connection = this,
+                        Socket = Socket,
+                        Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect,
+                        AllowUserRecycle = false,
+                        ChannelId = 0,
+                        Data = new ArraySegment<byte>(),
+                        InternalMemory = null,
+                        SocketReceiveTime = NetTime.Now,
+                        MemoryManager = MemoryManager
+                    });
+                }
             }
-
-
-            // Set the state to disconnected
-            State = ConnectionState.Disconnected;
-
-            // Release all memory
-            Release();
-
-            // Remove from global lookup
-            Socket.RemoveConnection(this);
-
-            // Send disconnect to userspace
-            Socket.PublishEvent(new NetworkEvent()
+            finally
             {
-                Connection = this,
-                Socket = Socket,
-                Type = timeout ? NetworkEventType.Timeout : NetworkEventType.Disconnect,
-                AllowUserRecycle = false,
-                ChannelId = 0,
-                Data = new ArraySegment<byte>(),
-                InternalMemory = null,
-                SocketReceiveTime = NetTime.Now,
-                MemoryManager = MemoryManager
-            });
+                _stateLock.ExitUpgradeableReadLock();
+            }
         }
 
         internal void AddRoundtripSample(ulong sample)
@@ -314,241 +356,41 @@ namespace Ruffles.Connections
 
         internal void HandleHail(ArraySegment<byte> channelTypes)
         {
-            if (State == ConnectionState.Connected)
-            {
-                // TODO: Add time check
-                // We already got this hail. Send new confirmation.
+            _stateLock.EnterUpgradeableReadLock();
 
-                SendHailConfirmed();
-            }
-            else if (State == ConnectionState.SolvingChallenge)
+            try
             {
-                for (byte i = 0; i < channelTypes.Count; i++)
+                if (State == ConnectionState.Connected)
                 {
-                    // Assign the channel
-                    Channels[i] = Socket.ChannelPool.GetChannel((ChannelType)channelTypes.Array[channelTypes.Offset + i], i, this, Config, MemoryManager);
+                    // TODO: Add time check
+                    // We already got this hail. Send new confirmation.
+
+                    SendHailConfirmed();
                 }
-
-                // Change state to connected
-                State = ConnectionState.Connected;
-
-                // Print connected
-                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Client " + EndPoint + " successfully connected");
-
-                SendHailConfirmed();
-
-                // Send to userspace
-                Socket.PublishEvent(new NetworkEvent()
+                else if (State == ConnectionState.SolvingChallenge)
                 {
-                    Connection = this,
-                    Socket = Socket,
-                    Type = NetworkEventType.Connect,
-                    AllowUserRecycle = false,
-                    ChannelId = 0,
-                    Data = new ArraySegment<byte>(),
-                    InternalMemory = null,
-                    SocketReceiveTime = NetTime.Now,
-                    MemoryManager = MemoryManager
-                });
-            }
-        }
+                    _stateLock.EnterWriteLock();
 
-        internal void HandleHeartbeat(ArraySegment<byte> payload)
-        {
-            if (State == ConnectionState.Connected)
-            {
-                HeapPointers pointers = HeartbeatChannel.HandleIncomingMessagePoll(payload);
-
-                if (pointers != null)
-                {
-                    MemoryWrapper wrapper = (MemoryWrapper)pointers.Pointers[0];
-
-                    if (wrapper != null)
+                    try
                     {
-                        if (wrapper.AllocatedMemory != null)
+                        for (byte i = 0; i < channelTypes.Count; i++)
                         {
-                            LastMessageIn = NetTime.Now;
-
-                            // Dealloc the memory
-                            MemoryManager.DeAlloc(wrapper.AllocatedMemory);
+                            // Assign the channel
+                            Channels[i] = Socket.ChannelPool.GetChannel((ChannelType)channelTypes.Array[channelTypes.Offset + i], i, this, Config, MemoryManager);
                         }
 
-                        if (wrapper.DirectMemory != null)
-                        {
-                            LastMessageIn = NetTime.Now;
-                        }
-
-                        // Dealloc the wrapper
-                        MemoryManager.DeAlloc(wrapper);
+                        // Change state to connected
+                        State = ConnectionState.Connected;
                     }
-
-                    // Dealloc the pointers
-                    MemoryManager.DeAlloc(pointers);
-                }
-            }
-        }
-
-        internal void HandleMTURequest(uint size)
-        {
-            if (State == ConnectionState.Connected)
-            {
-                // Alloc memory for response
-                HeapMemory memory = MemoryManager.AllocHeapMemory(size);
-
-                // Write the header
-                memory.Buffer[0] = HeaderPacker.Pack(MessageType.MTUResponse);
-
-                // Send the response
-                Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
-
-                // Dealloc the memory
-                MemoryManager.DeAlloc(memory);
-            }
-        }
-
-        internal void HandleMTUResponse(uint size)
-        {
-            if (State == ConnectionState.Connected)
-            {
-                // Calculate the new MTU
-                uint attemptedMtu = (uint)(MTU * Config.MTUGrowthFactor);
-
-                if (attemptedMtu > Config.MaximumMTU)
-                {
-                    attemptedMtu = Config.MaximumMTU;
-                }
-
-                if (attemptedMtu < Config.MinimumMTU)
-                {
-                    attemptedMtu = Config.MinimumMTU;
-                }
-
-                if (attemptedMtu == size)
-                {
-                    // This is a valid response
-
-                    if (Merger != null)
+                    finally
                     {
-                        Merger.ExpandToSize((int)attemptedMtu);
+                        _stateLock.ExitWriteLock();
                     }
-
-                    // Set new MTU
-                    MTU = (ushort)attemptedMtu;
-
-                    // Set new status
-                    MTUStatus = new MessageStatus()
-                    {
-                        Attempts = 0,
-                        HasAcked = false,
-                        LastAttempt = NetTime.MinValue
-                    };
-
-                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + EndPoint + " MTU was increased to " + MTU);
-                }
-            }
-        }
-
-        internal void HandleChannelData(ArraySegment<byte> payload)
-        {
-            if (State == ConnectionState.Connected)
-            {
-                LastMessageIn = NetTime.Now;
-
-                ChannelRouter.HandleIncomingMessage(payload, this, Config, MemoryManager);
-            }
-        }
-
-        internal void HandleChannelAck(ArraySegment<byte> payload)
-        {
-            if (State == ConnectionState.Connected)
-            {
-                LastMessageIn = NetTime.Now;
-
-                ChannelRouter.HandleIncomingAck(payload, this, Config, MemoryManager);
-            }
-        }
-
-        internal void HandleHailConfirmed()
-        {
-            if (State == ConnectionState.Connected && !HailStatus.HasAcked)
-            {
-                LastMessageIn = NetTime.Now;
-                HailStatus.HasAcked = true;
-            }
-        }
-
-        internal void HandleChallengeRequest(ulong challenge, byte difficulty)
-        {
-            if (State == ConnectionState.RequestingConnection)
-            {
-                LastMessageIn = NetTime.Now;
-
-                ulong additionsRequired = 0;
-                ulong workingValue = challenge;
-
-                // Solve the hashcash
-                // TODO: Solve thread
-                while (ChallengeDifficulty > 0 && ((workingValue << ((sizeof(ulong) * 8) - difficulty)) >> ((sizeof(ulong) * 8) - difficulty)) != 0)
-                {
-                    additionsRequired++;
-                    workingValue = HashProvider.GetStableHash64(challenge + additionsRequired);
-                }
-
-                ConnectionChallenge = challenge;
-                ChallengeDifficulty = difficulty;
-                ChallengeAnswer = additionsRequired;
-
-                // Set resend values
-                HandshakeResendAttempts = 0;
-                HandshakeStarted = NetTime.Now;
-                HandshakeLastSendTime = NetTime.Now;
-                State = ConnectionState.SolvingChallenge;
-
-                // Send the response
-                SendChallengeResponse();
-            }
-        }
-
-        internal void HandleChallengeResponse(ulong proposedSolution)
-        {
-            if (State == ConnectionState.RequestingChallenge)
-            {
-                ulong claimedCollision = ConnectionChallenge + proposedSolution;
-
-                // Check if it is solved
-                bool isCollided = ChallengeDifficulty == 0 || ((HashProvider.GetStableHash64(claimedCollision) << ((sizeof(ulong) * 8) - ChallengeDifficulty)) >> ((sizeof(ulong) * 8) - ChallengeDifficulty)) == 0;
-
-                if (isCollided)
-                {
-                    // Success, they completed the hashcash challenge
-
-                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + EndPoint + " successfully completed challenge of difficulty " + ChallengeDifficulty);
-
-                    // Assign the channels
-                    for (byte i = 0; i < Config.ChannelTypes.Length; i++)
-                    {
-                        Channels[i] = Socket.ChannelPool.GetChannel(Config.ChannelTypes[i], i, this, Config, MemoryManager);
-                    }
-
-                    // Reset hail status
-                    HailStatus = new MessageStatus()
-                    {
-                        Attempts = 0,
-                        HasAcked = false,
-                        LastAttempt = NetTime.MinValue
-                    };
-
-                    // Change state to connected
-                    State = ConnectionState.Connected;
-
-                    // Save time
-                    ConnectionCompleted = NetTime.Now;
 
                     // Print connected
                     if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Client " + EndPoint + " successfully connected");
 
-                    // Send hail
-                    SendHail();
+                    SendHailConfirmed();
 
                     // Send to userspace
                     Socket.PublishEvent(new NetworkEvent()
@@ -564,11 +406,318 @@ namespace Ruffles.Connections
                         MemoryManager = MemoryManager
                     });
                 }
-                else
+            }
+            finally
+            {
+                _stateLock.ExitUpgradeableReadLock();
+            }
+        }
+
+        internal void HandleHeartbeat(ArraySegment<byte> payload)
+        {
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.Connected)
                 {
-                    // Failed, disconnect them
-                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + EndPoint + " failed the challenge");
+                    HeapPointers pointers = HeartbeatChannel.HandleIncomingMessagePoll(payload);
+
+                    if (pointers != null)
+                    {
+                        MemoryWrapper wrapper = (MemoryWrapper)pointers.Pointers[0];
+
+                        if (wrapper != null)
+                        {
+                            if (wrapper.AllocatedMemory != null)
+                            {
+                                LastMessageIn = NetTime.Now;
+
+                                // Dealloc the memory
+                                MemoryManager.DeAlloc(wrapper.AllocatedMemory);
+                            }
+
+                            if (wrapper.DirectMemory != null)
+                            {
+                                LastMessageIn = NetTime.Now;
+                            }
+
+                            // Dealloc the wrapper
+                            MemoryManager.DeAlloc(wrapper);
+                        }
+
+                        // Dealloc the pointers
+                        MemoryManager.DeAlloc(pointers);
+                    }
                 }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
+        internal void HandleMTURequest(uint size)
+        {
+            // This does not access anything shared. We thus dont need to lock the state. If the state is raced or outdated its no harm done.
+            // TODO: Remove lock
+
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.Connected)
+                {
+                    // Alloc memory for response
+                    HeapMemory memory = MemoryManager.AllocHeapMemory(size);
+
+                    // Write the header
+                    memory.Buffer[0] = HeaderPacker.Pack(MessageType.MTUResponse);
+
+                    // Send the response
+                    Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+
+                    // Dealloc the memory
+                    MemoryManager.DeAlloc(memory);
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
+        internal void HandleMTUResponse(uint size)
+        {
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.Connected)
+                {
+                    // Calculate the new MTU
+                    uint attemptedMtu = (uint)(MTU * Config.MTUGrowthFactor);
+
+                    if (attemptedMtu > Config.MaximumMTU)
+                    {
+                        attemptedMtu = Config.MaximumMTU;
+                    }
+
+                    if (attemptedMtu < Config.MinimumMTU)
+                    {
+                        attemptedMtu = Config.MinimumMTU;
+                    }
+
+                    if (attemptedMtu == size)
+                    {
+                        // This is a valid response
+
+                        if (Merger != null)
+                        {
+                            Merger.ExpandToSize((int)attemptedMtu);
+                        }
+
+                        // Set new MTU
+                        MTU = (ushort)attemptedMtu;
+
+                        // Set new status
+                        MTUStatus = new MessageStatus()
+                        {
+                            Attempts = 0,
+                            HasAcked = false,
+                            LastAttempt = NetTime.MinValue
+                        };
+
+                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + EndPoint + " MTU was increased to " + MTU);
+                    }
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
+        internal void HandleChannelData(ArraySegment<byte> payload)
+        {
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.Connected)
+                {
+                    LastMessageIn = NetTime.Now;
+
+                    ChannelRouter.HandleIncomingMessage(payload, this, Config, MemoryManager);
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
+        internal void HandleChannelAck(ArraySegment<byte> payload)
+        {
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.Connected)
+                {
+                    LastMessageIn = NetTime.Now;
+
+                    ChannelRouter.HandleIncomingAck(payload, this, Config, MemoryManager);
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
+        internal void HandleHailConfirmed()
+        {
+            // If the state is changed during a confirmation it does not matter. No shared data is used except the HailStatus which is fine.
+            // If reusing connection, this could become a race.
+            // TODO: Remove lock
+
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.Connected && !HailStatus.HasAcked)
+                {
+                    LastMessageIn = NetTime.Now;
+                    HailStatus.HasAcked = true;
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
+        internal void HandleChallengeRequest(ulong challenge, byte difficulty)
+        {
+            _stateLock.EnterReadLock();
+
+            try
+            {
+                if (State == ConnectionState.RequestingConnection)
+                {
+                    LastMessageIn = NetTime.Now;
+
+                    ulong additionsRequired = 0;
+                    ulong workingValue = challenge;
+
+                    // Solve the hashcash
+                    // TODO: Solve thread
+                    while (ChallengeDifficulty > 0 && ((workingValue << ((sizeof(ulong) * 8) - difficulty)) >> ((sizeof(ulong) * 8) - difficulty)) != 0)
+                    {
+                        additionsRequired++;
+                        workingValue = HashProvider.GetStableHash64(challenge + additionsRequired);
+                    }
+
+                    ConnectionChallenge = challenge;
+                    ChallengeDifficulty = difficulty;
+                    ChallengeAnswer = additionsRequired;
+
+                    // Set resend values
+                    HandshakeResendAttempts = 0;
+                    HandshakeStarted = NetTime.Now;
+                    HandshakeLastSendTime = NetTime.Now;
+                    State = ConnectionState.SolvingChallenge;
+
+                    // Send the response
+                    SendChallengeResponse();
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+        }
+
+        internal void HandleChallengeResponse(ulong proposedSolution)
+        {
+            _stateLock.EnterUpgradeableReadLock();
+
+            try
+            {
+                if (State == ConnectionState.RequestingChallenge)
+                {
+                    ulong claimedCollision = ConnectionChallenge + proposedSolution;
+
+                    // Check if it is solved
+                    bool isCollided = ChallengeDifficulty == 0 || ((HashProvider.GetStableHash64(claimedCollision) << ((sizeof(ulong) * 8) - ChallengeDifficulty)) >> ((sizeof(ulong) * 8) - ChallengeDifficulty)) == 0;
+
+                    if (isCollided)
+                    {
+                        // Success, they completed the hashcash challenge
+
+                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Client " + EndPoint + " successfully completed challenge of difficulty " + ChallengeDifficulty);
+
+                        // Assign the channels
+                        for (byte i = 0; i < Config.ChannelTypes.Length; i++)
+                        {
+                            Channels[i] = Socket.ChannelPool.GetChannel(Config.ChannelTypes[i], i, this, Config, MemoryManager);
+                        }
+
+                        // Reset hail status
+                        HailStatus = new MessageStatus()
+                        {
+                            Attempts = 0,
+                            HasAcked = false,
+                            LastAttempt = NetTime.MinValue
+                        };
+
+
+                        _stateLock.EnterWriteLock();
+
+                        try
+                        {
+                            // Change state to connected
+                            State = ConnectionState.Connected;
+                        }
+                        finally
+                        {
+                            _stateLock.ExitWriteLock();
+                        }
+
+                        // Save time
+                        ConnectionCompleted = NetTime.Now;
+
+                        // Print connected
+                        if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Client " + EndPoint + " successfully connected");
+
+                        // Send hail
+                        SendHail();
+
+                        // Send to userspace
+                        Socket.PublishEvent(new NetworkEvent()
+                        {
+                            Connection = this,
+                            Socket = Socket,
+                            Type = NetworkEventType.Connect,
+                            AllowUserRecycle = false,
+                            ChannelId = 0,
+                            Data = new ArraySegment<byte>(),
+                            InternalMemory = null,
+                            SocketReceiveTime = NetTime.Now,
+                            MemoryManager = MemoryManager
+                        });
+                    }
+                    else
+                    {
+                        // Failed, disconnect them
+                        if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + EndPoint + " failed the challenge");
+                    }
+                }
+            }
+            finally
+            {
+                _stateLock.ExitUpgradeableReadLock();
             }
         }
 
@@ -723,196 +872,259 @@ namespace Ruffles.Connections
 
         private void RunPathMTU()
         {
-            if (State == ConnectionState.Connected && MTU < Config.MaximumMTU && MTUStatus.Attempts < Config.MaxMTUAttempts && (NetTime.Now - MTUStatus.LastAttempt).TotalMilliseconds > Config.MTUAttemptDelay)
+            _stateLock.EnterReadLock();
+
+            try
             {
-                uint attemptedMtu = (uint)(MTU * Config.MTUGrowthFactor);
-
-                if (attemptedMtu > Config.MaximumMTU)
+                if (State == ConnectionState.Connected && MTU < Config.MaximumMTU && MTUStatus.Attempts < Config.MaxMTUAttempts && (NetTime.Now - MTUStatus.LastAttempt).TotalMilliseconds > Config.MTUAttemptDelay)
                 {
-                    attemptedMtu = Config.MaximumMTU;
+                    uint attemptedMtu = (uint)(MTU * Config.MTUGrowthFactor);
+
+                    if (attemptedMtu > Config.MaximumMTU)
+                    {
+                        attemptedMtu = Config.MaximumMTU;
+                    }
+
+                    if (attemptedMtu < Config.MinimumMTU)
+                    {
+                        attemptedMtu = Config.MinimumMTU;
+                    }
+
+                    MTUStatus.Attempts++;
+                    MTUStatus.LastAttempt = NetTime.Now;
+
+                    // Allocate memory
+                    HeapMemory memory = MemoryManager.AllocHeapMemory((uint)attemptedMtu);
+
+                    // Set the header
+                    memory.Buffer[0] = HeaderPacker.Pack(MessageType.MTURequest);
+
+                    // Send the request
+                    Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+
+                    // Dealloc the memory
+                    MemoryManager.DeAlloc(memory);
                 }
-
-                if (attemptedMtu < Config.MinimumMTU)
-                {
-                    attemptedMtu = Config.MinimumMTU;
-                }
-
-                MTUStatus.Attempts++;
-                MTUStatus.LastAttempt = NetTime.Now;
-
-                // Allocate memory
-                HeapMemory memory = MemoryManager.AllocHeapMemory((uint)attemptedMtu);
-
-                // Set the header
-                memory.Buffer[0] = HeaderPacker.Pack(MessageType.MTURequest);
-
-                // Send the request
-                Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
-
-                // Dealloc the memory
-                MemoryManager.DeAlloc(memory);
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
             }
         }
 
         private void RunChannelUpdates()
         {
-            if (State == ConnectionState.Connected)
+            bool timeout = false;
+
+            _stateLock.EnterReadLock();
+
+            try
             {
-                for (int i = 0; i < Channels.Length; i++)
+                if (State == ConnectionState.Connected)
                 {
-                    if (Channels[i] != null)
+                    for (int i = 0; i < Channels.Length; i++)
                     {
-                        Channels[i].InternalUpdate();
+                        if (Channels[i] != null)
+                        {
+                            Channels[i].InternalUpdate(out bool _timeout);
+
+                            timeout |= _timeout;
+                        }
                     }
                 }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
+            }
+
+            if (timeout)
+            {
+                Disconnect(false, true);
             }
         }
 
         private void CheckConnectionResends()
         {
-            switch (State)
+            _stateLock.EnterReadLock();
+
+            try
             {
-                case ConnectionState.RequestingConnection:
-                    {
-                        if ((!Config.TimeBasedConnectionChallenge || PreConnectionChallengeSolved) && (NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.ConnectionRequestMinResendDelay && HandshakeResendAttempts < Config.MaxConnectionRequestResends)
+                switch (State)
+                {
+                    case ConnectionState.RequestingConnection:
                         {
-                            HandshakeResendAttempts++;
-                            HandshakeLastSendTime = NetTime.Now;
-
-                            // Calculate the minimum size we can fit the packet in
-                            int minSize = 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (Config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
-
-                            // Calculate the actual size with respect to amplification padding
-                            int size = Math.Max(minSize, (int)Config.AmplificationPreventionHandshakePadding);
-
-                            // Allocate memory
-                            HeapMemory memory = MemoryManager.AllocHeapMemory((uint)size);
-
-                            // Write the header
-                            memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest);
-
-                            // Copy the identification token
-                            Buffer.BlockCopy(Constants.RUFFLES_PROTOCOL_IDENTIFICATION, 0, memory.Buffer, 1, Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length);
-
-                            if (Config.TimeBasedConnectionChallenge)
+                            if ((!Config.TimeBasedConnectionChallenge || PreConnectionChallengeSolved) && (NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.ConnectionRequestMinResendDelay && HandshakeResendAttempts < Config.MaxConnectionRequestResends)
                             {
-                                // Write the response unix time
-                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + x] = ((byte)(PreConnectionChallengeTimestamp >> (x * 8)));
+                                HandshakeResendAttempts++;
+                                HandshakeLastSendTime = NetTime.Now;
 
-                                // Write counter
-                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + x] = ((byte)(PreConnectionChallengeCounter >> (x * 8)));
+                                // Calculate the minimum size we can fit the packet in
+                                int minSize = 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (Config.TimeBasedConnectionChallenge ? sizeof(ulong) * 3 : 0);
 
-                                // Write IV
-                                for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + x] = ((byte)(PreConnectionChallengeIV >> (x * 8)));
+                                // Calculate the actual size with respect to amplification padding
+                                int size = Math.Max(minSize, (int)Config.AmplificationPreventionHandshakePadding);
 
-                                // Print debug
-                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest with challenge [Counter=" + PreConnectionChallengeCounter + "] [IV=" + PreConnectionChallengeIV + "] [Time=" + PreConnectionChallengeTimestamp + "] [Hash=" + HashProvider.GetStableHash64(PreConnectionChallengeTimestamp, PreConnectionChallengeCounter, PreConnectionChallengeIV) + "]");
+                                // Allocate memory
+                                HeapMemory memory = MemoryManager.AllocHeapMemory((uint)size);
+
+                                // Write the header
+                                memory.Buffer[0] = HeaderPacker.Pack((byte)MessageType.ConnectionRequest);
+
+                                // Copy the identification token
+                                Buffer.BlockCopy(Constants.RUFFLES_PROTOCOL_IDENTIFICATION, 0, memory.Buffer, 1, Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length);
+
+                                if (Config.TimeBasedConnectionChallenge)
+                                {
+                                    // Write the response unix time
+                                    for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + x] = ((byte)(PreConnectionChallengeTimestamp >> (x * 8)));
+
+                                    // Write counter
+                                    for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + sizeof(ulong) + x] = ((byte)(PreConnectionChallengeCounter >> (x * 8)));
+
+                                    // Write IV
+                                    for (byte x = 0; x < sizeof(ulong); x++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + x] = ((byte)(PreConnectionChallengeIV >> (x * 8)));
+
+                                    // Print debug
+                                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest with challenge [Counter=" + PreConnectionChallengeCounter + "] [IV=" + PreConnectionChallengeIV + "] [Time=" + PreConnectionChallengeTimestamp + "] [Hash=" + HashProvider.GetStableHash64(PreConnectionChallengeTimestamp, PreConnectionChallengeCounter, PreConnectionChallengeIV) + "]");
+                                }
+                                else
+                                {
+                                    // Print debug
+                                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest");
+                                }
+
+                                Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+
+                                // Release memory
+                                MemoryManager.DeAlloc(memory);
                             }
-                            else
+                        }
+                        break;
+                    case ConnectionState.RequestingChallenge:
+                        {
+                            if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts < Config.MaxHandshakeResends)
                             {
-                                // Print debug
-                                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest");
+                                // Resend challenge request
+                                SendChallengeRequest();
                             }
-
-                            Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
-
-                            // Release memory
-                            MemoryManager.DeAlloc(memory);
                         }
-                    }
-                    break;
-                case ConnectionState.RequestingChallenge:
-                    {
-                        if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts < Config.MaxHandshakeResends)
+                        break;
+                    case ConnectionState.SolvingChallenge:
                         {
-                            // Resend challenge request
-                            SendChallengeRequest();
+                            if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts < Config.MaxHandshakeResends)
+                            {
+                                // Resend response
+                                SendChallengeResponse();
+                            }
                         }
-                    }
-                    break;
-                case ConnectionState.SolvingChallenge:
-                    {
-                        if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts < Config.MaxHandshakeResends)
+                        break;
+                    case ConnectionState.Connected:
                         {
-                            // Resend response
-                            SendChallengeResponse();
+                            if (!HailStatus.HasAcked && (NetTime.Now - HailStatus.LastAttempt).TotalMilliseconds > Config.HandshakeResendDelay && HailStatus.Attempts < Config.MaxHandshakeResends)
+                            {
+                                // Resend hail
+                                SendHail();
+                            }
                         }
-                    }
-                    break;
-                case ConnectionState.Connected:
-                    {
-                        if (!HailStatus.HasAcked && (NetTime.Now - HailStatus.LastAttempt).TotalMilliseconds > Config.HandshakeResendDelay && HailStatus.Attempts < Config.MaxHandshakeResends)
-                        {
-                            // Resend hail
-                            SendHail();
-                        }
-                    }
-                    break;
+                        break;
+                }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
             }
         }
 
         private void CheckMergedPackets()
         {
-            if (State == ConnectionState.Connected)
-            {
-                ArraySegment<byte>? mergedPayload = Merger.TryFlush();
+            _stateLock.EnterReadLock();
 
-                if (mergedPayload != null)
+            try
+            {
+                if (State == ConnectionState.Connected)
                 {
-                    Send(mergedPayload.Value, true);
+                    ArraySegment<byte>? mergedPayload = Merger.TryFlush();
+
+                    if (mergedPayload != null)
+                    {
+                        Send(mergedPayload.Value, true);
+                    }
                 }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
             }
         }
 
         private void CheckConnectionTimeouts()
         {
-            if (State == ConnectionState.RequestingConnection)
+            _stateLock.EnterReadLock();
+
+            try
             {
-                if ((NetTime.Now - ConnectionStarted).TotalMilliseconds > Config.ConnectionRequestTimeout)
+                if (State == ConnectionState.RequestingConnection)
                 {
-                    // This client has taken too long to connect. Let it go.
-                    if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because handshake was not started");
-                    Disconnect(false, true);
+                    if ((NetTime.Now - ConnectionStarted).TotalMilliseconds > Config.ConnectionRequestTimeout)
+                    {
+                        // This client has taken too long to connect. Let it go.
+                        if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because handshake was not started");
+                        Disconnect(false, true);
+                    }
+                }
+                else if (State != ConnectionState.Connected)
+                {
+                    // They are not requesting connection. But they are not connected. This means they are doing a handshake
+                    if ((NetTime.Now - HandshakeStarted).TotalMilliseconds > Config.HandshakeTimeout)
+                    {
+                        // This client has taken too long to connect. Let it go.
+                        if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because it took too long to complete the handshake");
+                        Disconnect(false, true);
+                    }
+                }
+                else
+                {
+                    if ((NetTime.Now - LastMessageIn).TotalMilliseconds > Config.ConnectionTimeout)
+                    {
+                        // This client has not answered us in way too long. Let it go
+                        if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because no incoming message has been received");
+                        Disconnect(false, true);
+                    }
                 }
             }
-            else if (State != ConnectionState.Connected)
+            finally
             {
-                // They are not requesting connection. But they are not connected. This means they are doing a handshake
-                if ((NetTime.Now - HandshakeStarted).TotalMilliseconds > Config.HandshakeTimeout)
-                {
-                    // This client has taken too long to connect. Let it go.
-                    if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because it took too long to complete the handshake");
-                    Disconnect(false, true);
-                }
-            }
-            else
-            {
-                if ((NetTime.Now - LastMessageIn).TotalMilliseconds > Config.ConnectionTimeout)
-                {
-                    // This client has not answered us in way too long. Let it go
-                    if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because no incoming message has been received");
-                    Disconnect(false, true);
-                }
+                _stateLock.ExitReadLock();
             }
         }
 
         private void CheckConnectionHeartbeats()
         {
-            if (State == ConnectionState.Connected)
+            _stateLock.EnterReadLock();
+
+            try
             {
-                if ((NetTime.Now - LastMessageOut).TotalMilliseconds > Config.HeartbeatDelay)
+                if (State == ConnectionState.Connected)
                 {
-                    // This client has not been talked to in a long time. Send a heartbeat.
+                    if ((NetTime.Now - LastMessageOut).TotalMilliseconds > Config.HeartbeatDelay)
+                    {
+                        // This client has not been talked to in a long time. Send a heartbeat.
 
-                    // Create sequenced heartbeat packet
-                    HeapMemory heartbeatMemory = HeartbeatChannel.CreateOutgoingHeartbeatMessage();
+                        // Create sequenced heartbeat packet
+                        HeapMemory heartbeatMemory = HeartbeatChannel.CreateOutgoingHeartbeatMessage();
 
-                    // Send heartbeat
-                    Send(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
+                        // Send heartbeat
+                        Send(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
 
-                    // DeAlloc the memory
-                    MemoryManager.DeAlloc(heartbeatMemory);
+                        // DeAlloc the memory
+                        MemoryManager.DeAlloc(heartbeatMemory);
+                    }
                 }
+            }
+            finally
+            {
+                _stateLock.ExitReadLock();
             }
         }
 

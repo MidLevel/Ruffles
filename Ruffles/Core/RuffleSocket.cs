@@ -68,8 +68,6 @@ namespace Ruffles.Core
         private Socket ipv6Socket;
         private static readonly bool SupportsIPv6 = Socket.OSSupportsIPv6;
 
-        private readonly byte[] incomingBuffer;
-
         private readonly SlidingSet<ulong> challengeInitializationVectors;
 
         internal readonly MemoryManager MemoryManager;
@@ -77,7 +75,8 @@ namespace Ruffles.Core
         internal readonly ChannelPool ChannelPool;
         internal readonly SocketConfig Config;
 
-        private Thread _networkThread;
+        private Thread _logicThread;
+        private Thread _socketThread;
         private bool _initialized;
 
         public bool IsRunning { get; private set; }
@@ -150,9 +149,6 @@ namespace Ruffles.Core
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.InternalEventQueueSize + " internal event slots");
             internalEventQueue = new ConcurrentCircularQueue<InternalEvent>(config.InternalEventQueueSize);
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.MaxBufferSize + " bytes of incomingBuffer");
-            incomingBuffer = new byte[config.MaxBufferSize];
-
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.ConnectionChallengeHistory + " challenge IV slots");
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
 
@@ -198,9 +194,16 @@ namespace Ruffles.Core
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting networking thread");
 
             // Create network thread
-            _networkThread = new Thread(StartNetworkLogic)
+            _logicThread = new Thread(StartNetworkLogic)
             {
                 Name = "NetworkThread",
+                IsBackground = true
+            };
+
+            // Create network thread
+            _socketThread = new Thread(StartReceiveLogic)
+            {
+                Name = "SocketThread",
                 IsBackground = true
             };
 
@@ -208,7 +211,8 @@ namespace Ruffles.Core
             IsRunning = true;
 
             // Start network thread
-            _networkThread.Start();
+            _logicThread.Start();
+            _socketThread.Start();
 
             return true;
         }
@@ -230,7 +234,8 @@ namespace Ruffles.Core
             }
 
             IsRunning = false;
-            _networkThread.Join();
+            _logicThread.Join();
+            _socketThread.Join();
         }
 
         /// <summary>
@@ -666,12 +671,13 @@ namespace Ruffles.Core
 
         private void StartNetworkLogic()
         {
+            Stopwatch logicWatch = new Stopwatch();
+            logicWatch.Start();
+
             while (IsRunning)
             {
                 try
                 {
-                    InternalPollSocket(Config.SocketPollTime);
-
                     if (Simulator != null)
                     {
                         Simulator.RunLoop();
@@ -686,10 +692,63 @@ namespace Ruffles.Core
                     {
                         connection.Update();
                     }
+
+                    int sleepMs = (Config.LogicDelay - ((int)logicWatch.ElapsedMilliseconds));
+
+                    logicWatch.Reset();
+                    logicWatch.Start();
+
+                    if (sleepMs > 0)
+                    {
+                        Thread.Sleep(sleepMs);
+                    }
                 }
                 catch (Exception e)
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when running internal loop: " + e);
+                }
+            }
+        }
+
+        private readonly EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
+        private readonly EndPoint _fromIPv6Endpoint = new IPEndPoint(IPAddress.IPv6Any, 0);
+
+        private void StartReceiveLogic()
+        {
+            byte[] _incomingBuffer = new byte[Config.MaxBufferSize];
+            List<Socket> _selectSockets = new List<Socket>();
+
+            while (IsRunning)
+            {
+                _selectSockets.Clear();
+
+                if (ipv4Socket != null)
+                {
+                    _selectSockets.Add(ipv4Socket);
+                }
+
+                if (ipv6Socket != null)
+                {
+                    _selectSockets.Add(ipv6Socket);
+                }
+
+                Socket.Select(_selectSockets, null, null, 1000 * 1000);
+
+                for (int i = 0; i < _selectSockets.Count; i++)
+                {
+                    try
+                    {
+                        // Get a endpoint reference
+                        EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
+
+                        int size = _selectSockets[i].ReceiveFrom(_incomingBuffer, 0, _incomingBuffer.Length, SocketFlags.None, ref _endpoint);
+
+                        HandlePacket(new ArraySegment<byte>(_incomingBuffer, 0, size), _endpoint, true);
+                    }
+                    catch (Exception e)
+                    {
+                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                    }
                 }
             }
         }
@@ -711,73 +770,12 @@ namespace Ruffles.Core
                 else if (@event.Type == InternalEvent.InternalEventType.Send)
                 {
                     // Send the data
-                    ChannelRouter.SendMessage(new ArraySegment<byte>(@event.Data.Buffer, (int)@event.Data.VirtualOffset, (int)@event.Data.VirtualCount), @event.Connection, @event.ChannelId, @event.NoMerge, MemoryManager);
+                    @event.Connection.HandleDelayedChannelSend(@event.Data, @event.ChannelId, @event.NoMerge);
 
                     // Dealloc the memory
                     MemoryManager.DeAlloc(@event.Data);
                 }
             }
-        }
-
-        private EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
-        private EndPoint _fromIPv6Endpoint = new IPEndPoint(IPAddress.IPv6Any, 0);
-
-        private readonly List<Socket> _selectSockets = new List<Socket>();
-        private readonly Stopwatch _selectWatch = new Stopwatch();
-        private void InternalPollSocket(int ms)
-        {
-            _selectWatch.Reset();
-            _selectWatch.Start();
-
-            do
-            {
-                _selectSockets.Clear();
-
-                if (ipv4Socket != null)
-                {
-                    _selectSockets.Add(ipv4Socket);
-                }
-
-                if (ipv6Socket != null)
-                {
-                    _selectSockets.Add(ipv6Socket);
-                }
-
-#if MILLISECONDS_SELECT
-                int sleepTime = (ms - (int)_selectWatch.ElapsedMilliseconds);
-#else
-                int sleepTime = (ms - (int)_selectWatch.ElapsedMilliseconds) * 1000;
-#endif
-
-                // Check what sockets have data
-                if (sleepTime > 0)
-                {
-                    Socket.Select(_selectSockets, null, null, sleepTime);
-
-                    // Iterate the sockets with data
-                    for (int i = 0; i < _selectSockets.Count; i++)
-                    {
-                        try
-                        {
-                            do
-                            {
-                                // Get a endpoint reference
-                                EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
-
-                                int size = _selectSockets[i].ReceiveFrom(incomingBuffer, 0, incomingBuffer.Length, SocketFlags.None, ref _endpoint);
-
-                                HandlePacket(new ArraySegment<byte>(incomingBuffer, 0, size), _endpoint, true);
-                            } while (_selectSockets[i].Available > 0);
-                        }
-                        catch (Exception e)
-                        {
-                            if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
-                        }
-                    }
-                }
-            } while (_selectWatch.ElapsedMilliseconds < ms);
-
-            _selectWatch.Stop();
         }
 
         /// <summary>
