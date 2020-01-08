@@ -34,15 +34,13 @@ namespace Ruffles.Collections
 
         public bool CanSet(int index)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             bool foundEmpty = false;
 
             for (int i = 0; i < _array.Length; i++)
             {
-                foundEmpty |= _array[arrayBaseIndex + i].Index == -1;
+                foundEmpty |= _array[NumberUtils.WrapMod(index + i, _array.Length)].Index == -1;
 
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
                     return false;
                 }
@@ -57,7 +55,7 @@ namespace Ruffles.Collections
 
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
                     return true;
                 }
@@ -68,11 +66,9 @@ namespace Ruffles.Collections
 
         public bool CanUpdateOrSet(int index)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index || _array[arrayBaseIndex + i].Index == -1)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index || _array[NumberUtils.WrapMod(index + i, _array.Length)].Index == -1)
                 {
                     return true;
                 }
@@ -83,13 +79,11 @@ namespace Ruffles.Collections
 
         public bool TryUpdateOrSet(int index, T value)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
-                    _array[arrayBaseIndex + i] = new Element()
+                    _array[NumberUtils.WrapMod(index + i, _array.Length)] = new Element()
                     {
                         Index = index,
                         Value = value
@@ -102,9 +96,9 @@ namespace Ruffles.Collections
             // If we have not yet set. Check if there is a new spot instead
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == -1)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == -1)
                 {
-                    _array[arrayBaseIndex + i] = new Element()
+                    _array[NumberUtils.WrapMod(index + i, _array.Length)] = new Element()
                     {
                         Index = index,
                         Value = value
@@ -119,11 +113,9 @@ namespace Ruffles.Collections
 
         public bool TrySet(int index, T value)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
                     throw new ArgumentOutOfRangeException(nameof(index), index, "Cannot set a when value already exists");
                 }
@@ -131,9 +123,9 @@ namespace Ruffles.Collections
 
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == -1)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == -1)
                 {
-                    _array[arrayBaseIndex + i] = new Element()
+                    _array[NumberUtils.WrapMod(index + i, _array.Length)] = new Element()
                     {
                         Index = index,
                         Value = value
@@ -148,13 +140,11 @@ namespace Ruffles.Collections
 
         public bool TryUpdate(int index, T value)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
-                    _array[arrayBaseIndex + i] = new Element()
+                    _array[NumberUtils.WrapMod(index + i, _array.Length)] = new Element()
                     {
                         Index = index,
                         Value = value
@@ -169,13 +159,11 @@ namespace Ruffles.Collections
 
         public bool TryRemove(int index)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
-                    _array[arrayBaseIndex + i] = new Element()
+                    _array[NumberUtils.WrapMod(index + i, _array.Length)] = new Element()
                     {
                         Index = -1,
                         Value = default(T)
@@ -190,11 +178,9 @@ namespace Ruffles.Collections
 
         public bool Contains(int index)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
                     return true;
                 }
@@ -205,13 +191,11 @@ namespace Ruffles.Collections
 
         public bool TryGet(int index, out T value)
         {
-            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
-
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == index)
+                if (_array[NumberUtils.WrapMod(index + i, _array.Length)].Index == index)
                 {
-                    value = _array[arrayBaseIndex + i].Value;
+                    value = _array[NumberUtils.WrapMod(index + i, _array.Length)].Value;
 
                     return true;
                 }
