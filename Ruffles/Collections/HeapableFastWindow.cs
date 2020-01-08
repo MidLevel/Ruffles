@@ -1,9 +1,10 @@
-﻿using Ruffles.Memory;
+﻿using System;
+using Ruffles.Memory;
 using Ruffles.Utils;
 
 namespace Ruffles.Collections
 {
-    internal class HeapableFastWindow<T> where T : struct, IMemoryReleasable
+    internal class HeapableFastWindow<T> where T : IMemoryReleasable
     {
         private struct Element
         {
@@ -35,15 +36,19 @@ namespace Ruffles.Collections
         {
             int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
 
+            bool foundEmpty = false;
+
             for (int i = 0; i < _array.Length; i++)
             {
-                if (_array[arrayBaseIndex + i].Index == -1)
+                foundEmpty |= _array[arrayBaseIndex + i].Index == -1;
+
+                if (_array[arrayBaseIndex + i].Index == index)
                 {
-                    return true;
+                    return false;
                 }
             }
 
-            return false;
+            return foundEmpty;
         }
 
         public bool CanUpdate(int index)
@@ -76,9 +81,53 @@ namespace Ruffles.Collections
             return false;
         }
 
+        public bool TryUpdateOrSet(int index, T value)
+        {
+            int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
+
+            for (int i = 0; i < _array.Length; i++)
+            {
+                if (_array[arrayBaseIndex + i].Index == index)
+                {
+                    _array[arrayBaseIndex + i] = new Element()
+                    {
+                        Index = index,
+                        Value = value
+                    };
+
+                    return true;
+                }
+            }
+
+            // If we have not yet set. Check if there is a new spot instead
+            for (int i = 0; i < _array.Length; i++)
+            {
+                if (_array[arrayBaseIndex + i].Index == -1)
+                {
+                    _array[arrayBaseIndex + i] = new Element()
+                    {
+                        Index = index,
+                        Value = value
+                    };
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public bool TrySet(int index, T value)
         {
             int arrayBaseIndex = NumberUtils.WrapMod(index, _array.Length);
+
+            for (int i = 0; i < _array.Length; i++)
+            {
+                if (_array[arrayBaseIndex + i].Index == index)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(index), index, "Cannot set a when value already exists");
+                }
+            }
 
             for (int i = 0; i < _array.Length; i++)
             {
@@ -176,7 +225,10 @@ namespace Ruffles.Collections
         {
             for (int i = 0; i < _array.Length; i++)
             {
-                _array[i].Value.DeAlloc(_memoryManager);
+                if (_array[i].Value != null && _array[i].Value.IsAlloced)
+                {
+                    _array[i].Value.DeAlloc(_memoryManager);
+                }
 
                 _array[i] = new Element()
                 {
