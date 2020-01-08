@@ -683,6 +683,13 @@ namespace Ruffles.Core
                         Simulator.RunLoop();
                     }
 
+                    int elapsed = (int)logicWatch.ElapsedMilliseconds;
+
+                    if (elapsed <= 0)
+                    {
+                        elapsed = 1;
+                    }
+
                     if (Config.EnableQueuedIOEvents)
                     {
                         PollInternalIOQueue();
@@ -693,7 +700,7 @@ namespace Ruffles.Core
                         connection.Update();
                     }
 
-                    int sleepMs = (Config.LogicDelay - ((int)logicWatch.ElapsedMilliseconds));
+                    int sleepMs = (Config.LogicDelay - (((int)logicWatch.ElapsedMilliseconds) - elapsed));
 
                     logicWatch.Reset();
                     logicWatch.Start();
@@ -708,6 +715,8 @@ namespace Ruffles.Core
                     if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when running internal loop: " + e);
                 }
             }
+
+            logicWatch.Stop();
         }
 
         private readonly EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
