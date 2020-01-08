@@ -59,12 +59,12 @@ namespace Ruffles.Example
             if (IPv6)
             {
                 // IPv6 Connect
-                client.ConnectNow(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
+                client.Connect(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
             }
             else
             {
                 // IPv4 Connect
-                client.ConnectNow(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
+                client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
             }
 
             // The server stores the clients id here
@@ -133,7 +133,7 @@ namespace Ruffles.Example
                 if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
-                    server.SendNow(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientConnection, 1, false);
+                    clientConnection.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), 1, false);
                     Console.WriteLine("Sending packet: " + messageCounter);
 
                     messageCounter++;
