@@ -68,10 +68,8 @@ namespace Ruffles.Example
             }
 
             // The server stores the clients id here
-            ulong clientId = 0;
             Connection clientConnection = null;
             // The client stores the servers id here
-            ulong serverId = 0;
             Connection serverConnection = null;
 
             // The time when the connection started
@@ -105,7 +103,6 @@ namespace Ruffles.Example
 
                     if (serverEvent.Type == NetworkEventType.Connect)
                     {
-                        clientId = serverEvent.Connection.Id;
                         clientConnection = serverEvent.Connection;
                     }
                 }
@@ -121,7 +118,6 @@ namespace Ruffles.Example
 
                     if (clientEvent.Type == NetworkEventType.Connect)
                     {
-                        serverId = clientEvent.Connection.Id;
                         serverConnection = clientEvent.Connection;
                     }
 
@@ -137,7 +133,7 @@ namespace Ruffles.Example
                 if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
-                    server.SendNow(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
+                    server.SendNow(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientConnection, 1, false);
                     Console.WriteLine("Sending packet: " + messageCounter);
 
                     messageCounter++;
