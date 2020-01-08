@@ -20,16 +20,16 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
-            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
+            Connection clientsConnectionToServer = Connection.Stub(config);
+            Connection serversConnectionToClient = Connection.Stub(config);
 
             ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
 
             byte[] message = BufferHelper.GetRandomBuffer(1024, 0);
 
-            HeapMemory messageMemory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message, 0, 1024), out _, out bool dealloc).Pointers[0]);
-            HeapPointers payload = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset + 2, (int)messageMemory.VirtualCount - 2), out _);
+            HeapMemory messageMemory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message, 0, 1024), out bool dealloc).Pointers[0]);
+            HeapPointers payload = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(messageMemory.Buffer, (int)messageMemory.VirtualOffset + 2, (int)messageMemory.VirtualCount - 2));
 
             Assert.NotNull(payload);
 
@@ -57,8 +57,8 @@ namespace Ruffles.Tests.Channels
 
             MemoryManager memoryManager = new MemoryManager(config);
 
-            Connection clientsConnectionToServer = Connection.Stub(config, memoryManager);
-            Connection serversConnectionToClient = Connection.Stub(config, memoryManager);
+            Connection clientsConnectionToServer = Connection.Stub(config);
+            Connection serversConnectionToClient = Connection.Stub(config);
 
             ReliableSequencedFragmentedChannel clientChannel = new ReliableSequencedFragmentedChannel(0, clientsConnectionToServer, config, memoryManager);
             ReliableSequencedFragmentedChannel serverChannel = new ReliableSequencedFragmentedChannel(0, serversConnectionToClient, config, memoryManager);
@@ -69,16 +69,16 @@ namespace Ruffles.Tests.Channels
             byte[] message3 = BufferHelper.GetRandomBuffer(1024, 2);
 
             // Sequence all payloads as outgoing
-            HeapMemory message1Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message1, 0, 1024), out _, out bool dealloc).Pointers[0]);
-            HeapMemory message2Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message2, 0, 1024), out _, out dealloc).Pointers[0]);
-            HeapMemory message3Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message3, 0, 1024), out _, out dealloc).Pointers[0]);
+            HeapMemory message1Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message1, 0, 1024), out bool dealloc).Pointers[0]);
+            HeapMemory message2Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message2, 0, 1024), out dealloc).Pointers[0]);
+            HeapMemory message3Memory = ((HeapMemory)clientChannel.CreateOutgoingMessage(new ArraySegment<byte>(message3, 0, 1024), out dealloc).Pointers[0]);
 
             // Consume 1st payload
-            HeapPointers payload1 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message1Memory.Buffer, (int)message1Memory.VirtualOffset + 2, (int)message1Memory.VirtualCount - 2), out _);
+            HeapPointers payload1 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message1Memory.Buffer, (int)message1Memory.VirtualOffset + 2, (int)message1Memory.VirtualCount - 2));
             // Consume 3rd payload
-            HeapPointers payload3 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message3Memory.Buffer, (int)message3Memory.VirtualOffset + 2, (int)message3Memory.VirtualCount - 2), out _);
+            HeapPointers payload3 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message3Memory.Buffer, (int)message3Memory.VirtualOffset + 2, (int)message3Memory.VirtualCount - 2));
             // Consume 2nd payload
-            HeapPointers payload2 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message2Memory.Buffer, (int)message2Memory.VirtualOffset + 2, (int)message2Memory.VirtualCount - 2), out _);
+            HeapPointers payload2 = serverChannel.HandleIncomingMessagePoll(new ArraySegment<byte>(message2Memory.Buffer, (int)message2Memory.VirtualOffset + 2, (int)message2Memory.VirtualCount - 2));
 
             {
                 Assert.NotNull(payload1);
