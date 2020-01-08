@@ -47,7 +47,7 @@ With these security mitigations, the only way to bring the server down is to exh
 Ruffles handles all connection management for you. It's a fully connection oriented protocol with heartbeat keepalive packets sent to ensure the connection is alive.
 
 ### High Performance
-Ruffles is fully garbage free, this is accomplished with a custom memory allocator in GC space. This ensures no memory is leaked to the garbage collector unless for resizing purposes. This makes Ruffles blazing fast. It also avoids memory copies as much as possible. Because Ruffles still runs in GC space, any memory leaks in Ruffles will be handled by the garbage collector and the user will be notified as the memorys destructor is called along with a stacktrace of where the leaked memory was originally allocated. See [Implementation](https://github.com/MidLevel/Ruffles/blob/master/Ruffles/Memory/HeapMemory.cs#L51).
+Ruffles is fully garbage free, this is accomplished with a custom memory allocator in GC space. This ensures no memory is leaked to the garbage collector unless for resizing purposes. This makes Ruffles blazing fast. It also avoids memory copies as much as possible. Because Ruffles still runs in GC space, any memory leaks in Ruffles will be handled by the garbage collector and the user will be notified as the memorys destructor is called along with a stacktrace of where the leaked memory was originally allocated. See [Implementation](https://github.com/MidLevel/Ruffles/blob/master/Ruffles/Memory/ManagedMemory.cs#L17).
 
 ### Reliability and Sequencing
 There are currently a few ways of sending messages in Ruffles. The types are:
