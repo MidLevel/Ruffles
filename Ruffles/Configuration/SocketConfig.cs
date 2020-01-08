@@ -22,10 +22,6 @@ namespace Ruffles.Configuration
         /// </summary>
         public ushort EventQueueSize = 1024 * 8;
         /// <summary>
-        /// The size of the internal event queue.
-        /// </summary>
-        public ushort InternalEventQueueSize = 1024;
-        /// <summary>
         /// The pool size of the HeapPointers pool.
         /// </summary>
         public ushort HeapPointersPoolSize = 1024;
@@ -275,11 +271,6 @@ namespace Ruffles.Configuration
         /// Whether or not packet merging should be enabled.
         /// </summary>
         public bool EnablePacketMerging = true;
-        /// <summary>
-        /// Whether or not to enable internal IO event queueing.
-        /// Disabling this will prevent ConnectLater and DisconnectLater from working.
-        /// </summary>
-        public bool EnableQueuedIOEvents = true;
 
         public List<string> GetInvalidConfiguration()
         {

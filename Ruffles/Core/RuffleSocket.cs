@@ -62,7 +62,6 @@ namespace Ruffles.Core
 
         // TODO: Removed hardcoded size
         private readonly ConcurrentCircularQueue<NetworkEvent> userEventQueue;
-        private readonly ConcurrentCircularQueue<InternalEvent> internalEventQueue;
 
         private Socket ipv4Socket;
         private Socket ipv6Socket;
@@ -145,9 +144,6 @@ namespace Ruffles.Core
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.EventQueueSize + " event slots");
             userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(config.EventQueueSize);
-
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.InternalEventQueueSize + " internal event slots");
-            internalEventQueue = new ConcurrentCircularQueue<InternalEvent>(config.InternalEventQueueSize);
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.ConnectionChallengeHistory + " challenge IV slots");
             challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
@@ -514,11 +510,6 @@ namespace Ruffles.Core
 
                     int elapsed = (int)logicWatch.ElapsedMilliseconds;
 
-                    if (Config.EnableQueuedIOEvents)
-                    {
-                        PollInternalIOQueue();
-                    }
-
                     for (Connection connection = HeadConnection; connection != null; connection = connection.NextConnection)
                     {
                         connection.Update();
@@ -582,23 +573,6 @@ namespace Ruffles.Core
                     {
                         if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
                     }
-                }
-            }
-        }
-
-        private void PollInternalIOQueue()
-        {
-            while (internalEventQueue.TryDequeue(out InternalEvent @event))
-            {
-                if (@event.Type == InternalEvent.InternalEventType.Connect)
-                {
-                    // Send connection
-                    ConnectInternal(@event.Endpoint, @event.PreConnectionChallengeTimestamp, @event.PreConnectionChallengeCounter, @event.PreConnectionChallengeIV);
-                }
-                else if (@event.Type == InternalEvent.InternalEventType.Disconnect)
-                {
-                    // Disconnect
-                    @event.Connection.DisconnectInternal(@event.SendMessage, false);
                 }
             }
         }
