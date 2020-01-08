@@ -31,25 +31,7 @@ namespace Ruffles.Time
         /// <value>The startTime.</value>
         public static NetTime MinValue => new NetTime(StartTime);
 
-        private long InternalTicks
-        {
-            get
-            {
-                if (_internalTicks < StartTime)
-                    _internalTicks = StartTime;
-
-                return _internalTicks;
-            }
-            set
-            {
-                if (value < StartTime)
-                    value = StartTime;
-
-                _internalTicks = StartTime;
-            }
-        }
-
-        private long _internalTicks;
+        private readonly long InternalTicks;
 
         /// <summary>
         /// Gets the number of milliseconds since start.
@@ -64,10 +46,6 @@ namespace Ruffles.Time
 
         private NetTime(long ticks)
         {
-            // Hack
-            _internalTicks = ticks;
-
-            // Acutally use property
             InternalTicks = ticks;
         }
 
