@@ -74,8 +74,7 @@ namespace Ruffles.Core
         internal readonly ChannelPool ChannelPool;
         internal readonly SocketConfig Config;
 
-        private Thread _logicThread;
-        private Thread _socketThread;
+        private readonly List<Thread> _threads = new List<Thread>();
         private bool _initialized;
 
         public bool IsRunning { get; private set; }
@@ -187,28 +186,42 @@ namespace Ruffles.Core
                 }
             }
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting networking thread");
-
-            // Create network thread
-            _logicThread = new Thread(StartNetworkLogic)
+            // Create logic threads
+            for (int i = 0; i < Config.LogicThreads; i++)
             {
-                Name = "NetworkThread",
-                IsBackground = true
-            };
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating NetworkThread #" + i);
 
-            // Create network thread
-            _socketThread = new Thread(StartReceiveLogic)
+                _threads.Add(new Thread(StartNetworkLogic)
+                {
+                    Name = "NetworkThread #" + i,
+                    IsBackground = true
+                });
+            }
+
+            // Create socket threads
+            for (int i = 0; i < Config.SocketThreads; i++)
             {
-                Name = "SocketThread",
-                IsBackground = true
-            };
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating SocketThread #" + i);
+
+                _threads.Add(new Thread(StartSocketLogic)
+                {
+                    Name = "SocketThread #" + i,
+                    IsBackground = true
+                });
+            }
 
             // Set running state to true
             IsRunning = true;
 
-            // Start network thread
-            _logicThread.Start();
-            _socketThread.Start();
+            // Start threads
+            for (int i = 0; i < _threads.Count; i++)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting " + _threads[i].Name);
+
+                _threads[i].Start();
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Started " + (Config.LogicThreads + Config.SocketThreads) + " sockets");
 
             return true;
         }
@@ -230,8 +243,18 @@ namespace Ruffles.Core
             }
 
             IsRunning = false;
-            _logicThread.Join();
-            _socketThread.Join();
+
+            int threadCount = _threads.Count;
+
+            for (int i = _threads.Count - 1; i >= 0; i--)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Joining " + _threads[i].Name);
+
+                _threads[i].Join();
+                _threads.RemoveAt(i);
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Joined " + threadCount + " threads");
         }
 
         /// <summary>
@@ -537,7 +560,7 @@ namespace Ruffles.Core
         private readonly EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
         private readonly EndPoint _fromIPv6Endpoint = new IPEndPoint(IPAddress.IPv6Any, 0);
 
-        private void StartReceiveLogic()
+        private void StartSocketLogic()
         {
             byte[] _incomingBuffer = new byte[Config.MaxBufferSize];
             List<Socket> _selectSockets = new List<Socket>();

@@ -74,6 +74,14 @@ namespace Ruffles.Configuration
         /// If this is enabled, all channels are automatically recycled when an connection dies.
         /// </summary>
         public bool ReuseChannels = true;
+        /// <summary>
+        /// The amount of logic threads to start.
+        /// </summary>
+        public int LogicThreads = 1;
+        /// <summary>
+        /// The amount of socket threads to start.
+        /// </summary>
+        public int SocketThreads = 1;
 
         // Bandwidth
         /// <summary>
