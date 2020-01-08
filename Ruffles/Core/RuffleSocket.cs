@@ -369,7 +369,7 @@ namespace Ruffles.Core
         {
             if (connection != null && connection.State == ConnectionState.Connected)
             {
-                ChannelRouter.SendMessage(payload, connection, channelId, noMerge, MemoryManager);
+                connection.HandleDelayedChannelSend(payload, channelId, noMerge);
 
                 return true;
             }
@@ -770,7 +770,7 @@ namespace Ruffles.Core
                 else if (@event.Type == InternalEvent.InternalEventType.Send)
                 {
                     // Send the data
-                    @event.Connection.HandleDelayedChannelSend(@event.Data, @event.ChannelId, @event.NoMerge);
+                    @event.Connection.HandleDelayedChannelSend(new ArraySegment<byte>(@event.Data.Buffer, (int)@event.Data.VirtualOffset, (int)@event.Data.VirtualCount), @event.ChannelId, @event.NoMerge);
 
                     // Dealloc the memory
                     MemoryManager.DeAlloc(@event.Data);

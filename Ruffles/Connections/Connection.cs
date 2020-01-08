@@ -223,7 +223,7 @@ namespace Ruffles.Connections
             }
         }
 
-        internal void HandleDelayedChannelSend(HeapMemory data, byte channelId, bool noMerge)
+        internal void HandleDelayedChannelSend(ArraySegment<byte> data, byte channelId, bool noMerge)
         {
             _stateLock.EnterReadLock();
 
@@ -232,7 +232,7 @@ namespace Ruffles.Connections
                 if (State == ConnectionState.Connected)
                 {
                     // Send the data
-                    ChannelRouter.SendMessage(new ArraySegment<byte>(data.Buffer, (int)data.VirtualOffset, (int)data.VirtualCount), this, channelId, noMerge, MemoryManager);
+                    ChannelRouter.SendMessage(data, this, channelId, noMerge, MemoryManager);
                 }
             }
             finally
