@@ -90,7 +90,7 @@ namespace Ruffles.Core
             {
                 if (ipv4Socket == null)
                 {
-                    return new IPEndPoint(IPAddress.Any, 0);
+                    return new IPEndPoint(IPAddress.None, 0);
                 }
 
                 return ipv4Socket.LocalEndPoint;
@@ -107,7 +107,7 @@ namespace Ruffles.Core
             {
                 if (ipv6Socket == null)
                 {
-                    return new IPEndPoint(IPAddress.IPv6Any, 0);
+                    return new IPEndPoint(IPAddress.IPv6None, 0);
                 }
 
                 return ipv6Socket.LocalEndPoint;
