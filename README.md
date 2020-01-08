@@ -113,16 +113,6 @@ Here are the features that are considered but not decided. This is to prevent bl
 * Multicasting
 * Meshing / Peer relaying
 
-## Locks
-Ruffles is designed to be mostly lockless. There are however a few situations where two actions happening at the same time causes Ruffles to lock up until one of the actions have completed.
-
-* If the user sends a packet on a channel and Ruffles is receiving or resending packets on that channel. This can be avoided by using ``SendLater``.
-* If the user sends two packets on one channel. This can be avoided by using ``SendLater``.
-* If the user sends a packet that is due for merging and Ruffles is trying to flush the merged packets. This can be avoided by sending with ``noMerge = true``.
-* If the user sends two packets that is due for merging at the same time. This can be avoided by sending with ``noMerge = true``.
-* If the user calls ConnectNow and Ruffles is modifying connections (Disconnecting, Connecting or Timing out). This can be avoided by using ``ConnectLater``.
-* If the user calls DisconnectNow and Ruffles is modifying connections (Disconnecting, Connecting or Timing out). This can be avoided by using ``DisconnectLater``.
-
 ## Fragmented
 The fragmented channel currently does not have any flow rate for ack resends.
 
