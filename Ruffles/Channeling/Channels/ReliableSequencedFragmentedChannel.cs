@@ -242,7 +242,7 @@ namespace Ruffles.Channeling.Channels
                             Size = isFinal ? (ushort?)(fragment + 1) : null
                         };
 
-                        _receiveSequencer.TryUpdate(sequence, value);
+                        _receiveSequencer.TrySet(sequence, value);
                     }
                     else
                     {
