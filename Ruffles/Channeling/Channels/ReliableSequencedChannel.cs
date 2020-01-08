@@ -15,7 +15,6 @@ namespace Ruffles.Channeling.Channels
         {
             public bool IsAlloced => Memory != null && !Memory.IsDead;
 
-            public ushort Sequence;
             public HeapMemory Memory;
             public NetTime LastSent;
             public NetTime FirstSent;
@@ -209,7 +208,6 @@ namespace Ruffles.Channeling.Channels
                     Attempts = 1,
                     LastSent = NetTime.Now,
                     FirstSent = NetTime.Now,
-                    Sequence = _lastOutgoingSequence,
                     Memory = memory
                 });
 
@@ -365,8 +363,7 @@ namespace Ruffles.Channeling.Channels
                                 Attempts = (ushort)(value.Attempts + 1),
                                 LastSent = NetTime.Now,
                                 FirstSent = value.FirstSent,
-                                Memory = value.Memory,
-                                Sequence = i
+                                Memory = value.Memory
                             });
 
                             connection.Send(new ArraySegment<byte>(value.Memory.Buffer, (int)value.Memory.VirtualOffset, (int)value.Memory.VirtualCount), false);
