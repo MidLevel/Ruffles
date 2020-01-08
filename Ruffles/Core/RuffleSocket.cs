@@ -230,7 +230,7 @@ namespace Ruffles.Core
             // Disconnect all clients
             for (Connection connection = HeadConnection; connection != null; connection = connection.NextConnection)
             {
-                connection.Disconnect(true, false);
+                connection.DisconnectInternal(true, false);
             }
 
             IsRunning = false;
@@ -356,68 +356,6 @@ namespace Ruffles.Core
         }
 
         /// <summary>
-        /// Sends the specified payload to a connection.
-        /// This will send the packet straight away. 
-        /// This can cause the channel to lock up. 
-        /// For higher performance sends, use SendLater.
-        /// </summary>
-        /// <param name="payload">The payload to send.</param>
-        /// <param name="connection">The connection to send to.</param>
-        /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
-        public bool SendNow(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge)
-        {
-            if (connection != null && connection.State == ConnectionState.Connected)
-            {
-                connection.HandleDelayedChannelSend(payload, channelId, noMerge);
-
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Sends the specified payload to a connection.
-        /// This will send the packet on the next network IO tick. 
-        /// This adds additional send delay but prevents the channel from locking. 
-        /// For reduced delay, use SendNow.
-        /// </summary>
-        /// <param name="payload">The payload to send.</param>
-        /// <param name="connection">The connection to send to.</param>
-        /// <param name="channelId">The channel index to send the payload over.</param>
-        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
-        public bool SendLater(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge)
-        {
-            if (!Config.EnableQueuedIOEvents)
-            {
-                throw new InvalidOperationException("Cannot call SendLater when EnableQueuedIOEvents is disabled");
-            }
-
-            if (connection != null && connection.State == ConnectionState.Connected)
-            {
-                // Alloc memory
-                HeapMemory memory = MemoryManager.AllocHeapMemory((uint)payload.Count);
-
-                // Copy the memory
-                Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 0, payload.Count);
-
-                internalEventQueue.Enqueue(new InternalEvent()
-                {
-                    Type = InternalEvent.InternalEventType.Send,
-                    Connection = connection,
-                    ChannelId = channelId,
-                    NoMerge = noMerge,
-                    Data = memory
-                });
-
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
         /// Sends an unconnected message.
         /// </summary>
         /// <param name="payload">Payload.</param>
@@ -454,7 +392,7 @@ namespace Ruffles.Core
         /// </summary>
         /// <returns>The pending connection.</returns>
         /// <param name="endpoint">The endpoint to connect to.</param>
-        public Connection ConnectNow(EndPoint endpoint)
+        public Connection Connect(EndPoint endpoint)
         {
             if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect (now) to " + endpoint);
 
@@ -491,69 +429,6 @@ namespace Ruffles.Core
             }
 
             return ConnectInternal(endpoint, unixTimestamp, counter, iv);
-        }
-
-        /// <summary>
-        /// Starts a connection to a endpoint.
-        /// This does the connection security logic on the calling thread. NOT the network thread. 
-        /// If you have a high security connection, the solver will run on the caller thread.
-        /// This call will NOT block the network thread and is faster than ConnectNow.
-        /// </summary>
-        /// <param name="endpoint">The endpoint to connect to.</param>
-        public void ConnectLater(EndPoint endpoint)
-        {
-            if (!Config.EnableQueuedIOEvents)
-            {
-                throw new InvalidOperationException("Cannot call ConnectLater when EnableQueuedIOEvents is disabled");
-            }
-
-            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect (later) to " + endpoint);
-
-            InternalEvent @event = new InternalEvent()
-            {
-                Type = InternalEvent.InternalEventType.Connect,
-                Endpoint = endpoint
-            };
-
-            if (Config.TimeBasedConnectionChallenge)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Using time based connection challenge. Calculating with difficulty " + Config.ChallengeDifficulty);
-
-                // Current unix time
-                ulong unixTimestamp = (ulong)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
-
-                // Save for resends
-                @event.PreConnectionChallengeTimestamp = unixTimestamp;
-
-                ulong counter = 0;
-                ulong iv = RandomProvider.GetRandomULong();
-
-                // Save for resends
-                @event.PreConnectionChallengeIV = iv;
-
-                // Find collision
-                ulong hash;
-                do
-                {
-                    // Attempt to calculate a new hash collision
-                    hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
-
-                    // Increment counter
-                    counter++;
-                }
-                while ((hash << (sizeof(ulong) * 8 - Config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - Config.ChallengeDifficulty) != 0);
-
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts. [Counter=" + (counter - 1) + "] [IV=" + iv + "] [Time=" + unixTimestamp + "] [Hash=" + hash + "]");
-
-                // Make counter 1 less
-                counter--;
-
-                // Save for resends
-                @event.PreConnectionChallengeCounter = counter;
-            }
-
-            // Queue the event for the network thread
-            internalEventQueue.Enqueue(@event);
         }
 
         private Connection ConnectInternal(EndPoint endpoint, ulong unixTimestamp, ulong counter, ulong iv)
@@ -610,7 +485,7 @@ namespace Ruffles.Core
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Sending connection request to " + endpoint);
 
                 // Send the packet
-                connection.Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+                connection.SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
                 // Dealloc the memory
                 MemoryManager.DeAlloc(memory);
@@ -621,52 +496,6 @@ namespace Ruffles.Core
             }
 
             return connection;
-        }
-
-        /// <summary>
-        /// Disconnect the specified connection.
-        /// This call will NOT block the network thread and is faster than DisconnectNow.
-        /// </summary>
-        /// <param name="connection">The connection to disconnect.</param>
-        /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public bool DisconnectLater(Connection connection, bool sendMessage)
-        {
-            if (!Config.EnableQueuedIOEvents)
-            {
-                throw new InvalidOperationException("Cannot call DisconnectLater when EnableQueuedIOEvents is disabled");
-            }
-
-            if (connection != null && connection.State == ConnectionState.Connected)
-            {
-                // Queue the event for the network thread
-                internalEventQueue.Enqueue(new InternalEvent()
-                {
-                    Type = InternalEvent.InternalEventType.Disconnect,
-                    Connection = connection,
-                    SendMessage = sendMessage
-                });
-
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Disconnect the specified connection.
-        /// </summary>
-        /// <param name="connection">The connection to disconnect.</param>
-        /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
-        public bool DisconnectNow(Connection connection, bool sendMessage)
-        {
-            if (connection != null && connection.State == ConnectionState.Connected)
-            {
-                connection.Disconnect(sendMessage, false);
-
-                return true;
-            }
-
-            return false;
         }
 
         private void StartNetworkLogic()
@@ -769,15 +598,7 @@ namespace Ruffles.Core
                 else if (@event.Type == InternalEvent.InternalEventType.Disconnect)
                 {
                     // Disconnect
-                    @event.Connection.Disconnect(@event.SendMessage, false);
-                }
-                else if (@event.Type == InternalEvent.InternalEventType.Send)
-                {
-                    // Send the data
-                    @event.Connection.HandleDelayedChannelSend(new ArraySegment<byte>(@event.Data.Buffer, (int)@event.Data.VirtualOffset, (int)@event.Data.VirtualCount), @event.ChannelId, @event.NoMerge);
-
-                    // Dealloc the memory
-                    MemoryManager.DeAlloc(@event.Data);
+                    @event.Connection.DisconnectInternal(@event.SendMessage, false);
                 }
             }
         }
@@ -1145,7 +966,7 @@ namespace Ruffles.Core
 
                         if (connection != null)
                         {
-                            connection.Disconnect(false, false);
+                            connection.DisconnectInternal(false, false);
                         }
                     }
                     break;

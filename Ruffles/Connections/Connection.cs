@@ -198,7 +198,30 @@ namespace Ruffles.Connections
             }
         }
 
-        internal void Send(ArraySegment<byte> payload, bool noMerge)
+        /// <summary>
+        /// Disconnect the specified connection.
+        /// </summary>
+        /// <param name="sendMessage">If set to <c>true</c> the remote will be notified of the disconnect rather than timing out.</param>
+        public void Disconnect(bool sendMessage)
+        {
+            DisconnectInternal(sendMessage, false);
+        }
+
+        /// <summary>
+        /// Sends the specified payload to a connection.
+        /// This will send the packet straight away. 
+        /// This can cause the channel to lock up. 
+        /// For higher performance sends, use SendLater.
+        /// </summary>
+        /// <param name="payload">The payload to send.</param>
+        /// <param name="channelId">The channel index to send the payload over.</param>
+        /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
+        public bool Send(ArraySegment<byte> payload, byte channelId, bool noMerge)
+        {
+            return HandleChannelSend(payload, channelId, noMerge);
+        }
+
+        internal void SendInternal(ArraySegment<byte> payload, bool noMerge)
         {
 #if ALLOW_CONNECTION_STUB
             if (IsStub)
@@ -223,7 +246,7 @@ namespace Ruffles.Connections
             }
         }
 
-        internal void HandleDelayedChannelSend(ArraySegment<byte> data, byte channelId, bool noMerge)
+        internal bool HandleChannelSend(ArraySegment<byte> data, byte channelId, bool noMerge)
         {
             _stateLock.EnterReadLock();
 
@@ -233,15 +256,19 @@ namespace Ruffles.Connections
                 {
                     // Send the data
                     ChannelRouter.SendMessage(data, this, channelId, noMerge, MemoryManager);
+
+                    return true;
                 }
             }
             finally
             {
                 _stateLock.ExitReadLock();
             }
+
+            return false;
         }
 
-        internal void Disconnect(bool sendMessage, bool timeout)
+        internal void DisconnectInternal(bool sendMessage, bool timeout)
         {
 #if ALLOW_CONNECTION_STUB
             if (IsStub)
@@ -267,7 +294,7 @@ namespace Ruffles.Connections
                     memory.Buffer[0] = HeaderPacker.Pack(MessageType.Disconnect);
 
                     // Send disconnect message
-                    Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+                    SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
                     // Release memory
                     MemoryManager.DeAlloc(memory);
@@ -475,7 +502,7 @@ namespace Ruffles.Connections
                     memory.Buffer[0] = HeaderPacker.Pack(MessageType.MTUResponse);
 
                     // Send the response
-                    Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+                    SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
                     // Dealloc the memory
                     MemoryManager.DeAlloc(memory);
@@ -745,7 +772,7 @@ namespace Ruffles.Connections
             }
 
             // Send the response
-            Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+            SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
             // Release memory
             MemoryManager.DeAlloc(memory);
@@ -763,7 +790,7 @@ namespace Ruffles.Connections
             memory.Buffer[0] = HeaderPacker.Pack(MessageType.HailConfirmed);
 
             // Send confirmation
-            Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+            SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
             // Release memory
             MemoryManager.DeAlloc(memory);
@@ -793,7 +820,7 @@ namespace Ruffles.Connections
             for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + i] = ((byte)(ChallengeAnswer >> (i * 8)));
 
             // Send the challenge response
-            Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+            SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
             // Release memory
             MemoryManager.DeAlloc(memory);
@@ -824,7 +851,7 @@ namespace Ruffles.Connections
             memory.Buffer[1 + sizeof(ulong)] = ChallengeDifficulty;
 
             // Send the challenge
-            Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+            SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
             // Release memory
             MemoryManager.DeAlloc(memory);
@@ -900,7 +927,7 @@ namespace Ruffles.Connections
                     memory.Buffer[0] = HeaderPacker.Pack(MessageType.MTURequest);
 
                     // Send the request
-                    Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+                    SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
                     // Dealloc the memory
                     MemoryManager.DeAlloc(memory);
@@ -940,7 +967,7 @@ namespace Ruffles.Connections
 
             if (timeout)
             {
-                Disconnect(false, true);
+                DisconnectInternal(false, true);
             }
         }
 
@@ -994,7 +1021,7 @@ namespace Ruffles.Connections
                                     if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Resending ConnectionRequest");
                                 }
 
-                                Send(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
+                                SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
 
                                 // Release memory
                                 MemoryManager.DeAlloc(memory);
@@ -1048,7 +1075,7 @@ namespace Ruffles.Connections
 
                     if (mergedPayload != null)
                     {
-                        Send(mergedPayload.Value, true);
+                        SendInternal(mergedPayload.Value, true);
                     }
                 }
             }
@@ -1070,7 +1097,7 @@ namespace Ruffles.Connections
                     {
                         // This client has taken too long to connect. Let it go.
                         if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because handshake was not started");
-                        Disconnect(false, true);
+                        DisconnectInternal(false, true);
                     }
                 }
                 else if (State != ConnectionState.Connected)
@@ -1080,7 +1107,7 @@ namespace Ruffles.Connections
                     {
                         // This client has taken too long to connect. Let it go.
                         if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because it took too long to complete the handshake");
-                        Disconnect(false, true);
+                        DisconnectInternal(false, true);
                     }
                 }
                 else
@@ -1089,7 +1116,7 @@ namespace Ruffles.Connections
                     {
                         // This client has not answered us in way too long. Let it go
                         if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because no incoming message has been received");
-                        Disconnect(false, true);
+                        DisconnectInternal(false, true);
                     }
                 }
             }
@@ -1115,7 +1142,7 @@ namespace Ruffles.Connections
                         HeapMemory heartbeatMemory = HeartbeatChannel.CreateOutgoingHeartbeatMessage();
 
                         // Send heartbeat
-                        Send(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
+                        SendInternal(new ArraySegment<byte>(heartbeatMemory.Buffer, (int)heartbeatMemory.VirtualOffset, (int)heartbeatMemory.VirtualCount), false);
 
                         // DeAlloc the memory
                         MemoryManager.DeAlloc(heartbeatMemory);

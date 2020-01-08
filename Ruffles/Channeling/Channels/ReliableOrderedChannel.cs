@@ -214,7 +214,7 @@ namespace Ruffles.Channeling.Channels
                             Sequence = _lastOutgoingPacket.Sequence
                         };
 
-                        connection.Send(new ArraySegment<byte>(_lastOutgoingPacket.Memory.Buffer, (int)_lastOutgoingPacket.Memory.VirtualOffset, (int)_lastOutgoingPacket.Memory.VirtualCount), false);
+                        connection.SendInternal(new ArraySegment<byte>(_lastOutgoingPacket.Memory.Buffer, (int)_lastOutgoingPacket.Memory.VirtualOffset, (int)_lastOutgoingPacket.Memory.VirtualCount), false);
                     }
                 }
             }
@@ -242,7 +242,7 @@ namespace Ruffles.Channeling.Channels
                 ackMemory.Buffer[3] = (byte)(sequence >> 8);
 
                 // Send ack
-                connection.Send(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false);
+                connection.SendInternal(new ArraySegment<byte>(ackMemory.Buffer, 0, 4), false);
 
                 // Return memory
                 memoryManager.DeAlloc(ackMemory);

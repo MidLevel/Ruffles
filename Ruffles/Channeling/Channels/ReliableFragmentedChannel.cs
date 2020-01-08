@@ -538,7 +538,7 @@ namespace Ruffles.Channeling.Channels
             ackMemory.Buffer[5] = (byte)(((byte)((fragment & 32767) >> 8)) | (byte)(isFinal ? 128 : 0));
 
             // Send ack
-            connection.Send(new ArraySegment<byte>(ackMemory.Buffer, 0, 6), false);
+            connection.SendInternal(new ArraySegment<byte>(ackMemory.Buffer, 0, 6), false);
 
             // Return memory
             memoryManager.DeAlloc(ackMemory);
@@ -562,7 +562,7 @@ namespace Ruffles.Channeling.Channels
             ackMemory.Buffer[5] = (byte)(encodedFragment >> 8);
 
             // Send ack
-            connection.Send(new ArraySegment<byte>(ackMemory.Buffer, 0, 6), false);
+            connection.SendInternal(new ArraySegment<byte>(ackMemory.Buffer, 0, 6), false);
 
             // Return memory
             memoryManager.DeAlloc(ackMemory);
@@ -598,7 +598,7 @@ namespace Ruffles.Channeling.Channels
                                         Memory = ((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory
                                     };
 
-                                    connection.Send(new ArraySegment<byte>(((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.Buffer, (int)((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.VirtualOffset, (int)((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.VirtualCount), false);
+                                    connection.SendInternal(new ArraySegment<byte>(((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.Buffer, (int)((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.VirtualOffset, (int)((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.VirtualCount), false);
                                 }
                             }
                         }

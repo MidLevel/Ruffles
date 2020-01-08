@@ -126,7 +126,7 @@ namespace Ruffles.Messaging
                 {
                     for (int i = 0; i < memoryPointers.VirtualCount; i++)
                     {
-                        connection.Send(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noMerge);
+                        connection.SendInternal(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noMerge);
                     }
 
                     if (dealloc)

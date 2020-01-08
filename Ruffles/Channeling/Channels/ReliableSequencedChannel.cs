@@ -334,7 +334,7 @@ namespace Ruffles.Channeling.Channels
                 }
 
                 // Send ack
-                connection.Send(new ArraySegment<byte>(ackMemory.Buffer, 0, 4 + (config.EnableMergedAcks ? config.MergedAckBytes : 0)), false);
+                connection.SendInternal(new ArraySegment<byte>(ackMemory.Buffer, 0, 4 + (config.EnableMergedAcks ? config.MergedAckBytes : 0)), false);
 
                 // Return memory
                 memoryManager.DeAlloc(ackMemory);
@@ -366,7 +366,7 @@ namespace Ruffles.Channeling.Channels
                                 Memory = value.Memory
                             });
 
-                            connection.Send(new ArraySegment<byte>(value.Memory.Buffer, (int)value.Memory.VirtualOffset, (int)value.Memory.VirtualCount), false);
+                            connection.SendInternal(new ArraySegment<byte>(value.Memory.Buffer, (int)value.Memory.VirtualOffset, (int)value.Memory.VirtualCount), false);
                         }
                     }
                 }
