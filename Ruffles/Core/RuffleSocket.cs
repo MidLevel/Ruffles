@@ -685,11 +685,6 @@ namespace Ruffles.Core
 
                     int elapsed = (int)logicWatch.ElapsedMilliseconds;
 
-                    if (elapsed <= 0)
-                    {
-                        elapsed = 1;
-                    }
-
                     if (Config.EnableQueuedIOEvents)
                     {
                         PollInternalIOQueue();
