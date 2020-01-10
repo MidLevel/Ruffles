@@ -638,6 +638,16 @@ namespace Ruffles.Core
                     int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
                 }
             }
+            catch (SocketException e)
+            {
+                // MessageSize is ignored. This happens during path MTU
+
+                if (e.SocketErrorCode != SocketError.MessageSize)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
+
+                }
+            }
             catch (Exception e)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
