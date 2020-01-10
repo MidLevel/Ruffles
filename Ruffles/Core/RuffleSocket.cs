@@ -592,6 +592,16 @@ namespace Ruffles.Core
 
                         HandlePacket(new ArraySegment<byte>(_incomingBuffer, 0, size), _endpoint, true);
                     }
+                    catch (SocketException e)
+                    {
+                        // TODO: Handle ConnectionReset and ConnectionRefused for Connect? More responsive?
+                        // ConnectionReset and ConnectionRefused are triggered by local ICMP packets. Indicates remote is not present.
+                        // MessageSize is triggered by remote ICMP. Usually during path MTU
+                        if (e.SocketErrorCode != SocketError.ConnectionReset && e.SocketErrorCode != SocketError.ConnectionRefused && e.SocketErrorCode != SocketError.TimedOut && e.SocketErrorCode != SocketError.MessageSize)
+                        {
+                            if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                        }
+                    }
                     catch (Exception e)
                     {
                         if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
@@ -645,7 +655,6 @@ namespace Ruffles.Core
                 if (e.SocketErrorCode != SocketError.MessageSize)
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
-
                 }
             }
             catch (Exception e)
