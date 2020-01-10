@@ -130,7 +130,7 @@ namespace Ruffles.Example
 
                 clientEvent.Recycle();
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
+                if (serverConnection != null && clientConnection != null && serverConnection.State == ConnectionState.Connected && clientConnection.State == ConnectionState.Connected && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
                     clientConnection.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), 1, false);
@@ -140,7 +140,7 @@ namespace Ruffles.Example
                     lastSent = DateTime.Now;
                 }
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastStatusPrint).TotalSeconds >= 5)
+                if (serverConnection != null && clientConnection != null && serverConnection.State == ConnectionState.Connected && clientConnection.State == ConnectionState.Connected && (DateTime.Now - lastStatusPrint).TotalSeconds >= 5)
                 {
                     Console.WriteLine("Ping: " + serverConnection.SmoothRoundtrip + "ms, " + clientConnection.SmoothRoundtrip + "ms");
                     lastStatusPrint = DateTime.Now;
