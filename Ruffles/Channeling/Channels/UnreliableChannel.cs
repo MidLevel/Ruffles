@@ -32,7 +32,7 @@ namespace Ruffles.Channeling.Channels
             this.config = config;
             this.memoryManager = memoryManager;
 
-            _incomingAckedPackets = new SlidingWindow<bool>(config.ReliabilityWindowSize, true, sizeof(ushort));
+            _incomingAckedPackets = new SlidingWindow<bool>(config.ReliabilityWindowSize);
         }
 
         public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
@@ -88,14 +88,14 @@ namespace Ruffles.Channeling.Channels
 
             lock (_lock)
             {
-                if (_incomingAckedPackets[sequence])
+                if (_incomingAckedPackets.Contains(sequence))
                 {
                     // We have already received this message. Ignore it.
                     return null;
                 }
 
                 // Add to sequencer
-                _incomingAckedPackets[sequence] = true;
+                _incomingAckedPackets.Set(sequence, true);
 
                 // Alloc pointers
                 HeapPointers pointers = memoryManager.AllocHeapPointers(1);
@@ -117,9 +117,6 @@ namespace Ruffles.Channeling.Channels
         {
             lock (_lock)
             {
-                // Clear all incoming states
-                _incomingAckedPackets.Release();
-
                 // Clear all outgoing states
                 _lastOutboundSequenceNumber = 0;
             }

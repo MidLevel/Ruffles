@@ -47,13 +47,13 @@ namespace Ruffles.Channeling.Channels
 
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
-        private readonly HeapableFastWindow<PendingIncomingPacket> _receiveSequencer;
+        private readonly HeapableFixedDictionary<PendingIncomingPacket> _receiveSequencer;
         private readonly SlidingWindow<NetTime> _lastAckTimes;
 
         // Outgoing sequencing
         private ushort _lastOutgoingSequence;
         private ushort _outgoingLowestAckedSequence;
-        private readonly HeapableFastWindow<PendingOutgoingPacket> _sendSequencer;
+        private readonly HeapableFixedDictionary<PendingOutgoingPacket> _sendSequencer;
 
         // Channel info
         private byte channelId;
@@ -72,9 +72,9 @@ namespace Ruffles.Channeling.Channels
             this.memoryManager = memoryManager;
 
             // Alloc the in flight windows for receive and send
-            _receiveSequencer = new HeapableFastWindow<PendingIncomingPacket>(config.ReliabilityWindowSize, memoryManager);
-            _sendSequencer = new HeapableFastWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, memoryManager);
-            _lastAckTimes = new SlidingWindow<NetTime>(config.ReliableAckFlowWindowSize, true, sizeof(ushort));
+            _receiveSequencer = new HeapableFixedDictionary<PendingIncomingPacket>(config.ReliabilityWindowSize, memoryManager);
+            _sendSequencer = new HeapableFixedDictionary<PendingOutgoingPacket>(config.ReliabilityWindowSize, memoryManager);
+            _lastAckTimes = new SlidingWindow<NetTime>(config.ReliableAckFlowWindowSize);
         }
 
         public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload)
@@ -124,7 +124,7 @@ namespace Ruffles.Channeling.Channels
                         pointers.Pointers[1 + i] = memoryManager.AllocMemoryWrapper(value.Memory);
 
                         // Kill
-                        _receiveSequencer.TryRemove(_incomingLowestAckedSequence);
+                        _receiveSequencer.Remove(_incomingLowestAckedSequence);
                     }
 
                     return pointers;
@@ -151,7 +151,7 @@ namespace Ruffles.Channeling.Channels
                         Buffer.BlockCopy(payload.Array, payload.Offset + 2, memory.Buffer, 0, payload.Count - 2);
 
                         // Add to sequencer
-                        _receiveSequencer.TrySet(sequence, new PendingIncomingPacket()
+                        _receiveSequencer.Set(sequence, new PendingIncomingPacket()
                         {
                             Memory = memory,
                             Sequence = sequence
@@ -203,7 +203,7 @@ namespace Ruffles.Channeling.Channels
                 Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 4, payload.Count);
 
                 // Add the memory to the outgoing sequencer
-                _sendSequencer.TrySet(_lastOutgoingSequence, new PendingOutgoingPacket()
+                _sendSequencer.Set(_lastOutgoingSequence, new PendingOutgoingPacket()
                 {
                     Attempts = 1,
                     LastSent = NetTime.Now,
@@ -272,7 +272,7 @@ namespace Ruffles.Channeling.Channels
                     connection.AddRoundtripSample(roundtrip);
 
                     // Kill the packet
-                    _sendSequencer.TryRemove(sequence);
+                    _sendSequencer.Remove(sequence);
 
                     if (sequence == (ushort)(_outgoingLowestAckedSequence + 1))
                     {
@@ -292,10 +292,10 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence)
         {
             // Check the last ack time
-            if ((NetTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > config.ReliabilityMinAckResendDelay)
+            if (!_lastAckTimes.TryGet(sequence, out NetTime value) || ((NetTime.Now - value).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - value).TotalMilliseconds > config.ReliabilityMinAckResendDelay))
             {
                 // Set the last ack time
-                _lastAckTimes[sequence] = NetTime.Now;
+                _lastAckTimes.Set(sequence, NetTime.Now);
 
                 // Alloc ack memory
                 HeapMemory ackMemory = memoryManager.AllocHeapMemory(4 + (uint)(config.EnableMergedAcks ? config.MergedAckBytes : 0));
@@ -325,7 +325,7 @@ namespace Ruffles.Channeling.Channels
                         if (bitAcked)
                         {
                             // Set the ack time for this packet
-                            _lastAckTimes[sequence] = NetTime.Now;
+                            _lastAckTimes.Set(bitSequence, NetTime.Now);
                         }
 
                         // Write single ack bit
@@ -358,7 +358,7 @@ namespace Ruffles.Channeling.Channels
                                 return;
                             }
 
-                            _sendSequencer.TryUpdate(i, new PendingOutgoingPacket()
+                            _sendSequencer.Update(i, new PendingOutgoingPacket()
                             {
                                 Attempts = (ushort)(value.Attempts + 1),
                                 LastSent = NetTime.Now,

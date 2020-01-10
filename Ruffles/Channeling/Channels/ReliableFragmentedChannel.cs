@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
@@ -162,12 +161,12 @@ namespace Ruffles.Channeling.Channels
         // Incoming sequencing
         private readonly HashSet<ushort> _incomingAckedSequences = new HashSet<ushort>();
         private ushort _incomingLowestAckedSequence;
-        private readonly HeapableFastWindow<PendingIncomingPacket> _receiveSequencer;
+        private readonly HeapableFixedDictionary<PendingIncomingPacket> _receiveSequencer;
 
         // Outgoing sequencing
         private ushort _lastOutgoingSequence;
         private ushort _outgoingLowestAckedSequence;
-        private readonly HeapableFastWindow<PendingOutgoingPacket> _sendSequencer;
+        private readonly HeapableFixedDictionary<PendingOutgoingPacket> _sendSequencer;
 
         // Channel info
         private byte channelId;
@@ -186,8 +185,8 @@ namespace Ruffles.Channeling.Channels
             this.memoryManager = memoryManager;
 
             // Alloc the in flight windows for receive and send
-            _receiveSequencer = new HeapableFastWindow<PendingIncomingPacket>(config.ReliabilityWindowSize, memoryManager);
-            _sendSequencer = new HeapableFastWindow<PendingOutgoingPacket>(config.ReliabilityWindowSize, memoryManager);
+            _receiveSequencer = new HeapableFixedDictionary<PendingIncomingPacket>(config.ReliabilityWindowSize, memoryManager);
+            _sendSequencer = new HeapableFixedDictionary<PendingOutgoingPacket>(config.ReliabilityWindowSize, memoryManager);
         }
 
         public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload)
@@ -244,7 +243,7 @@ namespace Ruffles.Channeling.Channels
                             Size = isFinal ? (ushort?)(fragment + 1) : null
                         };
 
-                        _receiveSequencer.TrySet(sequence, value);
+                        _receiveSequencer.Set(sequence, value);
                     }
                     else
                     {
@@ -269,7 +268,7 @@ namespace Ruffles.Channeling.Channels
                                 Size = isFinal ? (ushort?)(fragment + 1) : value.Size
                             };
 
-                            _receiveSequencer.TryUpdate(sequence, value);
+                            _receiveSequencer.Update(sequence, value);
                         }
 
                         // We might also have to expand the virtual count
@@ -285,7 +284,7 @@ namespace Ruffles.Channeling.Channels
                                 Size = isFinal ? (ushort?)(fragment + 1) : value.Size
                             };
 
-                            _receiveSequencer.TryUpdate(sequence, value);
+                            _receiveSequencer.Update(sequence, value);
                         }
                     }
 
@@ -352,7 +351,7 @@ namespace Ruffles.Channeling.Channels
                         value.DeAlloc(memoryManager);
 
                         // Kill
-                        _receiveSequencer.TryRemove(sequence);
+                        _receiveSequencer.Remove(sequence);
 
                         // Alloc pointers
                         HeapPointers pointers = memoryManager.AllocHeapPointers(1);
@@ -445,7 +444,7 @@ namespace Ruffles.Channeling.Channels
                 }
 
                 // Add the memory to the outgoing sequencer
-                _sendSequencer.TrySet(_lastOutgoingSequence, new PendingOutgoingPacket()
+                _sendSequencer.Set(_lastOutgoingSequence, new PendingOutgoingPacket()
                 {
                     Fragments = outgoingFragments
                 });
@@ -502,7 +501,7 @@ namespace Ruffles.Channeling.Channels
                         value.DeAlloc(memoryManager);
 
                         // Kill the wrapper packet
-                        _sendSequencer.TryRemove(sequence);
+                        _sendSequencer.Remove(sequence);
 
                         if (sequence == (ushort)(_outgoingLowestAckedSequence + 1))
                         {

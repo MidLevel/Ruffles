@@ -65,7 +65,7 @@ namespace Ruffles.Channeling.Channels
                 Sequence = 0
             };
 
-            _lastAckTimes = new SlidingWindow<NetTime>(config.ReliableAckFlowWindowSize, true, sizeof(ushort));
+            _lastAckTimes = new SlidingWindow<NetTime>(config.ReliableAckFlowWindowSize);
         }
 
         public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
@@ -225,10 +225,10 @@ namespace Ruffles.Channeling.Channels
         private void SendAck(ushort sequence)
         {
             // Check the last ack time
-            if ((NetTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - _lastAckTimes[sequence]).TotalMilliseconds > config.ReliabilityMinAckResendDelay)
+            if (!_lastAckTimes.TryGet(sequence, out NetTime value) || ((NetTime.Now - value).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - value).TotalMilliseconds > config.ReliabilityMinAckResendDelay))
             {
                 // Set the last ack time
-                _lastAckTimes[sequence] = NetTime.Now;
+                _lastAckTimes.Set(sequence, NetTime.Now);
 
                 // Alloc ack memory
                 HeapMemory ackMemory = memoryManager.AllocHeapMemory(4);
