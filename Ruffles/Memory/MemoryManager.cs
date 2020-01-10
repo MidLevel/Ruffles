@@ -1,4 +1,7 @@
 ﻿using System;
+#if DEBUG
+using System.Diagnostics;
+#endif
 using System.Threading;
 using Ruffles.Collections;
 using Ruffles.Configuration;
@@ -87,7 +90,7 @@ namespace Ruffles.Memory
 
 #if DEBUG
             // The allocation stacktrace allows us to see where the alloc occured that caused the leak
-            pointers.allocStacktrace = Environment.StackTrace;
+            pointers.allocStacktrace = new StackTrace(true);
 #endif
 
             return pointers;
@@ -127,7 +130,7 @@ namespace Ruffles.Memory
 
 #if DEBUG
             // The allocation stacktrace allows us to see where the alloc occured that caused the leak
-            memory.allocStacktrace = Environment.StackTrace;
+            memory.allocStacktrace = new StackTrace(true);
 #endif
 
             return memory;
@@ -167,7 +170,7 @@ namespace Ruffles.Memory
 
 #if DEBUG
             // The allocation stacktrace allows us to see where the alloc occured that caused the leak
-            wrapper.allocStacktrace = Environment.StackTrace;
+            wrapper.allocStacktrace = new StackTrace(true);
 #endif
 
             return wrapper;

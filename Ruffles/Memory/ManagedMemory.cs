@@ -1,4 +1,7 @@
 ﻿using System;
+#if DEBUG
+using System.Diagnostics;
+#endif
 using Ruffles.Utils;
 
 namespace Ruffles.Memory
@@ -11,7 +14,7 @@ namespace Ruffles.Memory
         internal bool IsDead;
 
 #if DEBUG
-        internal string allocStacktrace;
+        internal StackTrace allocStacktrace;
 #endif
 
         ~ManagedMemory()
