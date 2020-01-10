@@ -9,7 +9,7 @@ namespace Ruffles.Messaging
         private readonly byte[] _buffer;
         private int _position;
         private NetTime _lastFlushTime;
-        private ulong _flushDelay;
+        private readonly ulong _flushDelay;
         private int _size;
 
         private readonly int _maxSize;
