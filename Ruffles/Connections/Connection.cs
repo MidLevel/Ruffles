@@ -231,6 +231,8 @@ namespace Ruffles.Connections
             }
 #endif
 
+            LastMessageOut = NetTime.Now;
+
             bool merged = false;
 
             if (!Socket.Config.EnablePacketMerging || noMerge || !(merged = Merger.TryWrite(payload)))
