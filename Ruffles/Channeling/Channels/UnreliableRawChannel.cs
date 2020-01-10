@@ -23,13 +23,12 @@ namespace Ruffles.Channeling.Channels
             this.memoryManager = memoryManager;
         }
 
-        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
         {
             if (payload.Count > connection.MTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
-                dealloc = false;
-                return null;
+                return;
             }
 
             // Allocate the memory
@@ -42,16 +41,14 @@ namespace Ruffles.Channeling.Channels
             // Copy the payload
             Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 2, payload.Count);
 
-            // Tell the caller to deallc the memory
-            dealloc = true;
-
             // Allocate pointers
             HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
             // Point the first pointer to the memory
             pointers.Pointers[pointers.VirtualOffset] = memory;
 
-            return pointers;
+            // Send the message to the router. Tell the router to dealloc the memory as the channel no longer needs it.
+            ChannelRouter.SendMessage(pointers, true, connection, noMerge, memoryManager);
         }
 
         public void HandleAck(ArraySegment<byte> payload)

@@ -30,6 +30,12 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
+        private struct PendingSend
+        {
+            public HeapMemory Memory;
+            public bool NoMerge;
+        }
+
         // Incoming sequencing
         private readonly HashSet<ushort> _incomingAckedSequences = new HashSet<ushort>();
         private ushort _incomingLowestAckedSequence;
@@ -40,6 +46,7 @@ namespace Ruffles.Channeling.Channels
         private ushort _lastOutgoingSequence;
         private ushort _outgoingLowestAckedSequence;
         private readonly HeapableFixedDictionary<PendingOutgoingPacket> _sendSequencer;
+        private readonly Queue<PendingSend> _pendingSends = new Queue<PendingSend>();
         private readonly object _sendLock = new object();
 
         // Channel info
@@ -120,25 +127,41 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
+        {
+            lock (_sendLock)
+            {
+                CreateOutgoingMessageInternal(payload, noMerge);
+            }
+        }
+
+        private void CreateOutgoingMessageInternal(ArraySegment<byte> payload, bool noMerge)
         {
             if (payload.Count > connection.MTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
-                dealloc = false;
-                return null;
+                return;
             }
 
-            lock (_sendLock)
+            if (!_sendSequencer.CanSet((ushort)(_lastOutgoingSequence + 1)))
             {
-                if (!_sendSequencer.CanSet((ushort)(_lastOutgoingSequence + 1)))
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Outgoing packet window is exhausted. Expect delays");
+
+                // Alloc memory
+                HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count);
+
+                // Copy the payload
+                Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 0, payload.Count);
+
+                // Enqueue it
+                _pendingSends.Enqueue(new PendingSend()
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Outgoing packet window is exhausted. Packet lost");
-
-                    dealloc = false;
-                    return null;
-                }
-
+                    Memory = memory,
+                    NoMerge = noMerge
+                });
+            }
+            else
+            {
                 // Increment the sequence number
                 _lastOutgoingSequence++;
 
@@ -165,16 +188,14 @@ namespace Ruffles.Channeling.Channels
                     Memory = memory
                 });
 
-                // Tell the caller NOT to dealloc the memory, the channel needs it for resend purposes.
-                dealloc = false;
-
                 // Allocate pointers
                 HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
                 // Point the first pointer to the memory
                 pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(memory);
 
-                return pointers;
+                // Send the message to the router. Tell the router to NOT dealloc the memory as the channel needs it for resend purposes.
+                ChannelRouter.SendMessage(pointers, false, connection, noMerge, memoryManager);
             }
         }
 
@@ -239,6 +260,19 @@ namespace Ruffles.Channeling.Channels
                 for (ushort i = _outgoingLowestAckedSequence; !_sendSequencer.Contains(i) && SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) <= 0; i++)
                 {
                     _outgoingLowestAckedSequence = i;
+                }
+
+                // Check if we can start draining pending pool
+                while (_pendingSends.Count > 0 && _sendSequencer.CanSet((ushort)(_lastOutgoingSequence + 1)))
+                {
+                    // Dequeue the pending
+                    PendingSend pending = _pendingSends.Dequeue();
+
+                    // Sequence it
+                    CreateOutgoingMessageInternal(new ArraySegment<byte>(pending.Memory.Buffer, (int)pending.Memory.VirtualOffset, (int)pending.Memory.VirtualCount), pending.NoMerge);
+
+                    // Dealloc
+                    memoryManager.DeAlloc(pending.Memory);
                 }
             }
         }
@@ -343,6 +377,12 @@ namespace Ruffles.Channeling.Channels
                     _sendSequencer.Release();
                     _lastOutgoingSequence = 0;
                     _outgoingLowestAckedSequence = 0;
+
+                    // Dealloc all pending
+                    while (_pendingSends.Count > 0)
+                    {
+                        memoryManager.DeAlloc(_pendingSends.Dequeue().Memory);
+                    }
                 }
             }
         }

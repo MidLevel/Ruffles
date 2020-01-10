@@ -67,13 +67,12 @@ namespace Ruffles.Channeling.Channels
             _lastAckTimes = new SlidingWindow<NetTime>(config.ReliableAckFlowWindowSize);
         }
 
-        public HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
         {
             if (payload.Count > connection.MTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send message that was too large. Use a fragmented channel instead. [Size=" + payload.Count + "] [MaxMessageSize=" + config.MaxFragments + "]");
-                dealloc = false;
-                return null;
+                return;
             }
 
             lock (_sendLock)
@@ -109,16 +108,14 @@ namespace Ruffles.Channeling.Channels
                     Memory = memory
                 };
 
-                // Tell the caller NOT to dealloc the memory, the channel needs it for resend purposes.
-                dealloc = false;
-
                 // Allocate pointers
                 HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
                 // Point the first pointer to the memory
                 pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(memory);
 
-                return pointers;
+                // Send the message to the router. Tell the router to NOT dealloc the memory as the channel needs it for resend purposes.
+                ChannelRouter.SendMessage(pointers, false, connection, noMerge, memoryManager);
             }
         }
 

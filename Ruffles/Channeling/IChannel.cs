@@ -8,7 +8,7 @@ namespace Ruffles.Channeling
     internal interface IChannel
     {
         HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload);
-        HeapPointers CreateOutgoingMessage(ArraySegment<byte> payload, out bool dealloc);
+        void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge);
         void HandleAck(ArraySegment<byte> payload);
         void Release();
         void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager);

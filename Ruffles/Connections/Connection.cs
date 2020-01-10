@@ -257,7 +257,7 @@ namespace Ruffles.Connections
                 if (State == ConnectionState.Connected)
                 {
                     // Send the data
-                    ChannelRouter.SendMessage(data, this, channelId, noMerge, MemoryManager);
+                    ChannelRouter.CreateOutgoingMessage(data, this, channelId, noMerge);
 
                     return true;
                 }

@@ -109,7 +109,27 @@ namespace Ruffles.Messaging
             }
         }
 
-        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge, MemoryManager memoryManager)
+        internal static void SendMessage(HeapPointers pointers, bool dealloc, Connection connection, bool noMerge, MemoryManager memoryManager)
+        {
+            for (int i = 0; i < pointers.VirtualCount; i++)
+            {
+                connection.SendInternal(new ArraySegment<byte>(((HeapMemory)pointers.Pointers[i]).Buffer, (int)((HeapMemory)pointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)pointers.Pointers[i]).VirtualCount), noMerge);
+            }
+
+            if (dealloc)
+            {
+                // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
+                for (int i = 0; i < pointers.VirtualCount; i++)
+                {
+                    memoryManager.DeAlloc(((HeapMemory)pointers.Pointers[i]));
+                }
+            }
+
+            // Dealloc the array always.
+            memoryManager.DeAlloc(pointers);
+        }
+
+        internal static void CreateOutgoingMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge)
         {
             if (channelId < 0 || channelId >= connection.Channels.Length)
             {
@@ -120,27 +140,7 @@ namespace Ruffles.Messaging
 
             if (channel != null)
             {
-                HeapPointers memoryPointers = channel.CreateOutgoingMessage(payload, out bool dealloc);
-
-                if (memoryPointers != null)
-                {
-                    for (int i = 0; i < memoryPointers.VirtualCount; i++)
-                    {
-                        connection.SendInternal(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noMerge);
-                    }
-
-                    if (dealloc)
-                    {
-                        // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
-                        for (int i = 0; i < memoryPointers.VirtualCount; i++)
-                        {
-                            memoryManager.DeAlloc(((HeapMemory)memoryPointers.Pointers[i]));
-                        }
-                    }
-
-                    // Dealloc the array always.
-                    memoryManager.DeAlloc(memoryPointers);
-                }
+                channel.CreateOutgoingMessage(payload, noMerge);
             }
             else
             {
