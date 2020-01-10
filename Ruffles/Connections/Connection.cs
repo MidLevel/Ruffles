@@ -1,6 +1,7 @@
 ﻿#define ALLOW_CONNECTION_STUB
 
 using System;
+using System.Diagnostics;
 using System.Net;
 using System.Threading;
 using Ruffles.Channeling;
@@ -1091,6 +1092,8 @@ namespace Ruffles.Connections
         {
             _stateLock.EnterReadLock();
 
+            bool timeout = false;
+
             try
             {
                 if (State == ConnectionState.RequestingConnection)
@@ -1098,8 +1101,10 @@ namespace Ruffles.Connections
                     if ((NetTime.Now - ConnectionStarted).TotalMilliseconds > Config.ConnectionRequestTimeout)
                     {
                         // This client has taken too long to connect. Let it go.
+                        // TODO: This log can race and show multiple times
                         if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because handshake was not started");
-                        DisconnectInternal(false, true);
+
+                        timeout = true;
                     }
                 }
                 else if (State != ConnectionState.Connected)
@@ -1108,8 +1113,10 @@ namespace Ruffles.Connections
                     if ((NetTime.Now - HandshakeStarted).TotalMilliseconds > Config.HandshakeTimeout)
                     {
                         // This client has taken too long to connect. Let it go.
-                        if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because it took too long to complete the handshake");
-                        DisconnectInternal(false, true);
+                        // TODO: This log can race and show multiple times
+                       if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because it took too long to complete the handshake");
+
+                        timeout = true;
                     }
                 }
                 else
@@ -1117,14 +1124,21 @@ namespace Ruffles.Connections
                     if ((NetTime.Now - LastMessageIn).TotalMilliseconds > Config.ConnectionTimeout)
                     {
                         // This client has not answered us in way too long. Let it go
+                        // TODO: This log can race and show multiple times
                         if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Disconnecting client because no incoming message has been received");
-                        DisconnectInternal(false, true);
+
+                        timeout = true;
                     }
                 }
             }
             finally
             {
                 _stateLock.ExitReadLock();
+            }
+
+            if (timeout)
+            {
+                DisconnectInternal(false, true);
             }
         }
 
