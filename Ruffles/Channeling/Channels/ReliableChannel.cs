@@ -172,7 +172,7 @@ namespace Ruffles.Channeling.Channels
                 HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
                 // Point the first pointer to the memory
-                pointers.Pointers[pointers.VirtualOffset] = memory;
+                pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(memory);
 
                 return pointers;
             }
