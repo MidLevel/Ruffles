@@ -232,5 +232,46 @@ namespace Ruffles.Memory
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return memory wrapper. The queue is full. The memory will be given to the garbage collector. [MEMORY WRAPPER]");
             }
         }
+
+        internal void Release()
+        {
+            int releasedWrappers = 0;
+            int releasedPointers = 0;
+            int releasedMemory = 0;
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Releasing all memory held by MemoryManager to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Releasing MemoryWrappers to GC");
+
+            while (_pooledMemoryWrappers.TryDequeue(out MemoryWrapper wrapper))
+            {
+                wrapper.ReleasedToGC = true;
+                releasedWrappers++;
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Released " + releasedWrappers + " MemoryWrappers to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Releasing HeapPointers to GC");
+
+            while (_pooledPointerArrays.TryDequeue(out HeapPointers pointers))
+            {
+                pointers.ReleasedToGC = true;
+                releasedPointers++;
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Released " + releasedPointers + " HeapPointers to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Releasing HeapMemory to GC");
+
+            while (_pooledHeapMemory.TryDequeue(out HeapMemory memory))
+            {
+                memory.ReleasedToGC = true;
+                releasedMemory++;
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Released " + releasedMemory + " HeapMemories to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Released all memory held by MemoryManager to GC. [MemoryWrappers=" + releasedWrappers + "] [HeapPointers=" + releasedPointers + "] [HeapMemories=" + releasedMemory + "]");
+        }
     }
 }

@@ -12,6 +12,7 @@ namespace Ruffles.Memory
         internal abstract string LeakedType { get; }
         internal abstract string LeakedData { get; }
         internal bool IsDead;
+        internal bool ReleasedToGC;
 
 #if DEBUG
         internal StackTrace allocStacktrace;
@@ -19,6 +20,11 @@ namespace Ruffles.Memory
 
         ~ManagedMemory()
         {
+            if (ReleasedToGC)
+            {
+                return;
+            }
+
             try
             {
                 // If shutdown of the CLR has started, or the application domain is being unloaded. We don't want to print leak warnings. As these are legitimate deallocs and not leaks.
@@ -30,7 +36,6 @@ namespace Ruffles.Memory
                         if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning(LeakedType + " was just leaked from the MemoryManager " + LeakedData + " AllocStack: " + allocStacktrace);
 #else
                         if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning(LeakedType + " was just leaked from the MemoryManager " + LeakedData);
-
 #endif
                     }
                     else

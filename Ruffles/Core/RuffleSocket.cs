@@ -60,18 +60,17 @@ namespace Ruffles.Core
         // Lock for adding or removing connections. This is done to allow for a quick ref to be gained on the user thread when connecting.
         private readonly ReaderWriterLockSlim connectionsLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
 
-        // TODO: Removed hardcoded size
-        private readonly ConcurrentCircularQueue<NetworkEvent> userEventQueue;
+        private ConcurrentCircularQueue<NetworkEvent> userEventQueue;
 
         private Socket ipv4Socket;
         private Socket ipv6Socket;
         private static readonly bool SupportsIPv6 = Socket.OSSupportsIPv6;
 
-        private readonly SlidingSet<ulong> challengeInitializationVectors;
+        private SlidingSet<ulong> challengeInitializationVectors;
 
-        internal readonly MemoryManager MemoryManager;
-        internal readonly NetworkSimulator Simulator;
-        internal readonly ChannelPool ChannelPool;
+        internal MemoryManager MemoryManager { get; private set; }
+        internal NetworkSimulator Simulator { get; private set; }
+        internal ChannelPool ChannelPool { get; private set; }
         internal readonly SocketConfig Config;
 
         private readonly List<Thread> _threads = new List<Thread>();
@@ -116,9 +115,16 @@ namespace Ruffles.Core
 
         public RuffleSocket(SocketConfig config)
         {
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Checking SocketConfig validity...");
+            this.Config = config;
+        }
 
-            List<string> configurationErrors = config.GetInvalidConfiguration();
+        private void Initialize()
+        {
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Initializing socket");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Checking SocketConfig validity");
+
+            List<string> configurationErrors = Config.GetInvalidConfiguration();
 
             if (configurationErrors.Count > 0)
             {
@@ -129,11 +135,10 @@ namespace Ruffles.Core
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("SocketConfig is valid");
             }
 
-            this.Config = config;
 
-            if (config.UseSimulator)
+            if (Config.UseSimulator)
             {
-                Simulator = new NetworkSimulator(config.SimulatorConfig, SendRaw);
+                Simulator = new NetworkSimulator(Config.SimulatorConfig, SendRaw);
                 if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Simulator ENABLED");
             }
             else
@@ -141,22 +146,24 @@ namespace Ruffles.Core
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Simulator DISABLED");
             }
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.EventQueueSize + " event slots");
-            userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(config.EventQueueSize);
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.EventQueueSize + " event slots");
+            userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(Config.EventQueueSize);
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + config.ConnectionChallengeHistory + " challenge IV slots");
-            challengeInitializationVectors = new SlidingSet<ulong>((int)config.ConnectionChallengeHistory, true);
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ConnectionChallengeHistory + " challenge IV slots");
+            challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory, true);
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
-            MemoryManager = new MemoryManager(config);
+            MemoryManager = new MemoryManager(Config);
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating channel pool");
-            ChannelPool = new ChannelPool(config);
+            ChannelPool = new ChannelPool(Config);
 
             if (!NetTime.HighResolution)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("NetTime does not support high resolution. This might impact Ruffles performance");
             }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket initialized");
         }
 
         /// <summary>
@@ -182,6 +189,7 @@ namespace Ruffles.Core
                 else
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
+                    Initialize();
                     _initialized = true;
                 }
             }
@@ -221,7 +229,7 @@ namespace Ruffles.Core
                 _threads[i].Start();
             }
 
-            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Started " + (Config.LogicThreads + Config.SocketThreads) + " sockets");
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Started " + (Config.LogicThreads + Config.SocketThreads) + " threads");
 
             return true;
         }
@@ -277,6 +285,9 @@ namespace Ruffles.Core
 
             ipv4Socket.Close();
             ipv6Socket.Close();
+
+            // Release ALL memory to GC safely. If this is not done the MemoryManager will see it as a leak
+            MemoryManager.Release();
         }
 
         private bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool ipv6Dual)
