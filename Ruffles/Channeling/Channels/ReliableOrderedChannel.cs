@@ -34,19 +34,18 @@ namespace Ruffles.Channeling.Channels
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
         private readonly SlidingWindow<NetTime> _lastAckTimes;
+        private readonly object _receiveLock = new object();
 
         // Outgoing sequencing
         private ushort _lastOutgoingSequence;
         private PendingOutgoingPacket _lastOutgoingPacket;
+        private readonly object _sendLock = new object();
 
         // Channel info
         private byte channelId;
         private Connection connection;
         private SocketConfig config;
         private MemoryManager memoryManager;
-
-        // Lock for the channel, this allows sends and receives being done on different threads.
-        private readonly object _lock = new object();
 
         internal ReliableOrderedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
@@ -77,7 +76,7 @@ namespace Ruffles.Channeling.Channels
                 return null;
             }
 
-            lock (_lock)
+            lock (_sendLock)
             {
                 // Increment the sequence number
                 _lastOutgoingSequence++;
@@ -128,7 +127,7 @@ namespace Ruffles.Channeling.Channels
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
-            lock (_lock)
+            lock (_sendLock)
             {
                 if (_lastOutgoingPacket.Alive && _lastOutgoingPacket.Sequence == sequence)
                 {
@@ -144,7 +143,7 @@ namespace Ruffles.Channeling.Channels
                     connection.AddRoundtripSample(roundtrip);
 
                     // Kill the packet
-                    _lastOutgoingPacket= new PendingOutgoingPacket()
+                    _lastOutgoingPacket = new PendingOutgoingPacket()
                     {
                         Alive = false,
                         Sequence = sequence
@@ -158,7 +157,7 @@ namespace Ruffles.Channeling.Channels
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
-            lock (_lock)
+            lock (_receiveLock)
             {
                 if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0)
                 {
@@ -175,8 +174,8 @@ namespace Ruffles.Channeling.Channels
                     // Add to sequencer
                     _incomingLowestAckedSequence = sequence;
 
+                    // Send ack
                     SendAck(sequence);
-
 
                     // Alloc pointers
                     HeapPointers pointers = memoryManager.AllocHeapPointers(1);
@@ -191,7 +190,7 @@ namespace Ruffles.Channeling.Channels
 
         public void InternalUpdate(out bool timeout)
         {
-            lock (_lock)
+            lock (_sendLock)
             {
                 if (_lastOutgoingPacket.Alive)
                 {
@@ -251,35 +250,41 @@ namespace Ruffles.Channeling.Channels
 
         public void Release()
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                // Clear all incoming states
-                _incomingLowestAckedSequence = 0;
-
-                // Clear all outgoing states
-                _lastOutgoingSequence = 0;
-
-                // Reset the outgoing packet
-                _lastOutgoingPacket = new PendingOutgoingPacket()
+                lock (_receiveLock)
                 {
-                    Alive = false,
-                    Attempts = 0,
-                    FirstSent = NetTime.MinValue,
-                    LastSent = NetTime.MinValue,
-                    Memory = null,
-                    Sequence = 0
-                };
+                    // Clear all incoming states
+                    _incomingLowestAckedSequence = 0;
+
+                    // Clear all outgoing states
+                    _lastOutgoingSequence = 0;
+
+                    // Reset the outgoing packet
+                    _lastOutgoingPacket = new PendingOutgoingPacket()
+                    {
+                        Alive = false,
+                        Attempts = 0,
+                        FirstSent = NetTime.MinValue,
+                        LastSent = NetTime.MinValue,
+                        Memory = null,
+                        Sequence = 0
+                    };
+                }
             }
         }
 
         public void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                this.channelId = channelId;
-                this.connection = connection;
-                this.config = config;
-                this.memoryManager = memoryManager;
+                lock (_receiveLock)
+                {
+                    this.channelId = channelId;
+                    this.connection = connection;
+                    this.config = config;
+                    this.memoryManager = memoryManager;
+                }
             }
         }
     }

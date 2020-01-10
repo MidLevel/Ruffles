@@ -49,20 +49,19 @@ namespace Ruffles.Channeling.Channels
         private ushort _incomingLowestAckedSequence;
         private readonly HeapableFixedDictionary<PendingIncomingPacket> _receiveSequencer;
         private readonly SlidingWindow<NetTime> _lastAckTimes;
+        private readonly object _receiveLock = new object();
 
         // Outgoing sequencing
         private ushort _lastOutgoingSequence;
         private ushort _outgoingLowestAckedSequence;
         private readonly HeapableFixedDictionary<PendingOutgoingPacket> _sendSequencer;
+        private readonly object _sendLock = new object();
 
         // Channel info
         private byte channelId;
         private Connection connection;
         private SocketConfig config;
         private MemoryManager memoryManager;
-
-        // Lock for the channel, this allows sends and receives being done on different threads.
-        private readonly object _lock = new object();
 
         internal ReliableSequencedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
@@ -82,7 +81,7 @@ namespace Ruffles.Channeling.Channels
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
-            lock (_lock)
+            lock (_receiveLock)
             {
                 if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 || _receiveSequencer.Contains(sequence))
                 {
@@ -175,7 +174,7 @@ namespace Ruffles.Channeling.Channels
                 return null;
             }
 
-            lock (_lock)
+            lock (_sendLock)
             {
                 if (!_sendSequencer.CanSet((ushort)(_lastOutgoingSequence + 1)))
                 {
@@ -256,7 +255,7 @@ namespace Ruffles.Channeling.Channels
 
         private void HandleAck(ushort sequence)
         {
-            lock (_lock)
+            lock (_sendLock)
             {
                 if (_sendSequencer.TryGet(sequence, out PendingOutgoingPacket value))
                 {
@@ -343,7 +342,7 @@ namespace Ruffles.Channeling.Channels
 
         public void InternalUpdate(out bool timeout)
         {
-            lock (_lock)
+            lock (_sendLock)
             {
                 for (ushort i = (ushort)(_outgoingLowestAckedSequence + 1); SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) < 0; i++)
                 {
@@ -377,27 +376,33 @@ namespace Ruffles.Channeling.Channels
 
         public void Release()
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                // Clear all incoming states
-                _receiveSequencer.Release();
-                _incomingLowestAckedSequence = 0;
+                lock (_receiveLock)
+                {
+                    // Clear all incoming states
+                    _receiveSequencer.Release();
+                    _incomingLowestAckedSequence = 0;
 
-                // Clear all outgoing states
-                _sendSequencer.Release();
-                _lastOutgoingSequence = 0;
-                _outgoingLowestAckedSequence = 0;
+                    // Clear all outgoing states
+                    _sendSequencer.Release();
+                    _lastOutgoingSequence = 0;
+                    _outgoingLowestAckedSequence = 0;
+                }
             }
         }
 
         public void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                this.channelId = channelId;
-                this.connection = connection;
-                this.config = config;
-                this.memoryManager = memoryManager;
+                lock (_receiveLock)
+                {
+                    this.channelId = channelId;
+                    this.connection = connection;
+                    this.config = config;
+                    this.memoryManager = memoryManager;
+                }
             }
         }
     }

@@ -12,18 +12,17 @@ namespace Ruffles.Channeling.Channels
     {
         // Incoming sequencing
         private readonly SlidingWindow<bool> _incomingAckedPackets;
+        private readonly object _receiveLock = new object();
 
         // Outgoing sequencing
         private ushort _lastOutboundSequenceNumber;
+        private readonly object _sendLock = new object();
 
         // Channel info
         private byte channelId;
         private Connection connection;
         private SocketConfig config;
         private MemoryManager memoryManager;
-
-        // Lock for the channel, this allows sends and receives being done on different threads.
-        private readonly object _lock = new object();
 
         internal UnreliableChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
@@ -44,7 +43,7 @@ namespace Ruffles.Channeling.Channels
                 return null;
             }
 
-            lock (_lock)
+            lock (_sendLock)
             {
                 // Increment the sequence number
                 _lastOutboundSequenceNumber++;
@@ -86,7 +85,7 @@ namespace Ruffles.Channeling.Channels
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
-            lock (_lock)
+            lock (_receiveLock)
             {
                 if (_incomingAckedPackets.Contains(sequence))
                 {
@@ -115,21 +114,27 @@ namespace Ruffles.Channeling.Channels
 
         public void Release()
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                // Clear all outgoing states
-                _lastOutboundSequenceNumber = 0;
+                lock (_receiveLock)
+                {
+                    // Clear all outgoing states
+                    _lastOutboundSequenceNumber = 0;
+                }
             }
         }
 
         public void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                this.channelId = channelId;
-                this.connection = connection;
-                this.config = config;
-                this.memoryManager = memoryManager;
+                lock (_receiveLock)
+                {
+                    this.channelId = channelId;
+                    this.connection = connection;
+                    this.config = config;
+                    this.memoryManager = memoryManager;
+                }
             }
         }
     }

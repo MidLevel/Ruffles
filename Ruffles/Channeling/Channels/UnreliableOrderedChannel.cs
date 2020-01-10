@@ -11,18 +11,17 @@ namespace Ruffles.Channeling.Channels
     {
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
+        private readonly object _receiveLock = new object();
 
         // Outgoing sequencing
         private ushort _lastOutboundSequenceNumber;
+        private readonly object _sendLock = new object();
 
         // Channel info
         private byte channelId;
         private Connection connection;
         private MemoryManager memoryManager;
         private SocketConfig config;
-
-        // Lock for the channel, this allows sends and receives being done on different threads.
-        private readonly object _lock = new object();
 
         internal UnreliableOrderedChannel(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
@@ -41,7 +40,7 @@ namespace Ruffles.Channeling.Channels
                 return null;
             }
 
-            lock (_lock)
+            lock (_sendLock)
             {
                 // Increment the sequence number
                 _lastOutboundSequenceNumber++;
@@ -75,7 +74,7 @@ namespace Ruffles.Channeling.Channels
 
         internal HeapMemory CreateOutgoingHeartbeatMessage()
         {
-            lock (_lock)
+            lock (_sendLock)
             {
                 // Increment the sequence number
                 _lastOutboundSequenceNumber++;
@@ -104,7 +103,7 @@ namespace Ruffles.Channeling.Channels
             // Read the sequence number
             ushort sequence = (ushort)(payload.Array[payload.Offset] | (ushort)(payload.Array[payload.Offset + 1] << 8));
 
-            lock (_lock)
+            lock (_receiveLock)
             {
                 if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) > 0)
                 {
@@ -132,24 +131,30 @@ namespace Ruffles.Channeling.Channels
 
         public void Release()
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                // Clear all incoming states
-                _incomingLowestAckedSequence = 0;
+                lock (_receiveLock)
+                {
+                    // Clear all incoming states
+                    _incomingLowestAckedSequence = 0;
 
-                // Clear all outgoing states
-                _lastOutboundSequenceNumber = 0;
+                    // Clear all outgoing states
+                    _lastOutboundSequenceNumber = 0;
+                }
             }
         }
 
         public void Assign(byte channelId, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
-            lock (_lock)
+            lock (_sendLock)
             {
-                this.channelId = channelId;
-                this.connection = connection;
-                this.config = config;
-                this.memoryManager = memoryManager;
+                lock (_receiveLock)
+                {
+                    this.channelId = channelId;
+                    this.connection = connection;
+                    this.config = config;
+                    this.memoryManager = memoryManager;
+                }
             }
         }
     }
