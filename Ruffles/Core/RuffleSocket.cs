@@ -343,6 +343,23 @@ namespace Ruffles.Core
 
             try
             {
+                const uint IOC_IN = 0x80000000;
+                const uint IOC_VENDOR = 0x18000000;
+                const uint SIO_UDP_CONNRESET = IOC_IN | IOC_VENDOR | 12;
+
+                unchecked
+                {
+                    socket.IOControl((int)SIO_UDP_CONNRESET, new byte[] { 0 }, null);
+                }
+
+            }
+            catch
+            {
+                // Ignore error when SIO_UDP_CONNRESET is not supported
+            }
+
+            try
+            {
                 // Bind the socket to the OS
                 socket.Bind(endpoint);
             }
