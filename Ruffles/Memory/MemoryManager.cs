@@ -1,4 +1,7 @@
 ﻿using System;
+#if DEBUG
+using System.Diagnostics;
+#endif
 using System.Threading;
 using Ruffles.Collections;
 using Ruffles.Configuration;
@@ -87,7 +90,7 @@ namespace Ruffles.Memory
 
 #if DEBUG
             // The allocation stacktrace allows us to see where the alloc occured that caused the leak
-            pointers.allocStacktrace = Environment.StackTrace;
+            pointers.allocStacktrace = new StackTrace(true);
 #endif
 
             return pointers;
@@ -127,7 +130,7 @@ namespace Ruffles.Memory
 
 #if DEBUG
             // The allocation stacktrace allows us to see where the alloc occured that caused the leak
-            memory.allocStacktrace = Environment.StackTrace;
+            memory.allocStacktrace = new StackTrace(true);
 #endif
 
             return memory;
@@ -167,7 +170,7 @@ namespace Ruffles.Memory
 
 #if DEBUG
             // The allocation stacktrace allows us to see where the alloc occured that caused the leak
-            wrapper.allocStacktrace = Environment.StackTrace;
+            wrapper.allocStacktrace = new StackTrace(true);
 #endif
 
             return wrapper;
@@ -228,6 +231,47 @@ namespace Ruffles.Memory
                 // Failed to enqueue pointers. Queue is full
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return memory wrapper. The queue is full. The memory will be given to the garbage collector. [MEMORY WRAPPER]");
             }
+        }
+
+        internal void Release()
+        {
+            int releasedWrappers = 0;
+            int releasedPointers = 0;
+            int releasedMemory = 0;
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Releasing all memory held by MemoryManager to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Releasing MemoryWrappers to GC");
+
+            while (_pooledMemoryWrappers.TryDequeue(out MemoryWrapper wrapper))
+            {
+                wrapper.ReleasedToGC = true;
+                releasedWrappers++;
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Released " + releasedWrappers + " MemoryWrappers to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Releasing HeapPointers to GC");
+
+            while (_pooledPointerArrays.TryDequeue(out HeapPointers pointers))
+            {
+                pointers.ReleasedToGC = true;
+                releasedPointers++;
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Released " + releasedPointers + " HeapPointers to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Releasing HeapMemory to GC");
+
+            while (_pooledHeapMemory.TryDequeue(out HeapMemory memory))
+            {
+                memory.ReleasedToGC = true;
+                releasedMemory++;
+            }
+
+            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Released " + releasedMemory + " HeapMemories to GC");
+
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Released all memory held by MemoryManager to GC. [MemoryWrappers=" + releasedWrappers + "] [HeapPointers=" + releasedPointers + "] [HeapMemories=" + releasedMemory + "]");
         }
     }
 }

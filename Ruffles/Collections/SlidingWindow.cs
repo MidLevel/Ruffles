@@ -1,75 +1,74 @@
-﻿using System;
-using Ruffles.Messaging;
-using Ruffles.Utils;
+﻿using Ruffles.Utils;
 
 namespace Ruffles.Collections
 {
     internal class SlidingWindow<T>
     {
-        private readonly int[] _indexes;
-        private readonly T[] _array;
-        private readonly byte _wrapSize;
-        private readonly bool _resetOld;
-        private ulong _lastHighestSequence;
-
-        public SlidingWindow(int size, bool resetOld, byte wrapSize)
+        private struct Element
         {
-            if (resetOld && size % 8 != 0)
-            {
-                throw new ArgumentException("Size needs to be a multiple of 8 when resetOld is enabled");
-            }
-
-            _array = new T[size];
-            _indexes = new int[size];
-            _wrapSize = wrapSize;
-            _resetOld = resetOld;
+            public int Index;
+            public T Value;
         }
 
-        public T this[int index]
+        private readonly Element[] _array;
+
+        public SlidingWindow(int size)
         {
-            get
-            {
-                int arrayIndex = NumberUtils.WrapMod(index, _array.Length);
+            _array = new Element[size];
 
-                if (_indexes[arrayIndex] == index)
-                    return _array[arrayIndex];
-                else
-                    return default(T);
-            }
-            set
-            {
-                if (_resetOld)
-                {
-                    long distance = SequencingUtils.Distance((ulong)index, _lastHighestSequence, _wrapSize);
-
-                    if (distance > 0)
-                    {
-                        for (int i = 1; i < distance; i++)
-                        {
-                            int resetArrayIndex = NumberUtils.WrapMod(((int) _lastHighestSequence + index + i), _array.Length);
-                            _indexes[resetArrayIndex] = ((int) _lastHighestSequence + index + i);
-                            _array[resetArrayIndex] = default(T);
-                        }
-
-                        _lastHighestSequence = (ulong)index;
-                    }
-                }
-
-                int arrayIndex = NumberUtils.WrapMod(index, _array.Length);
-                _indexes[arrayIndex] = index;
-                _array[arrayIndex] = value;
-            }
-        }
-
-        public void Release()
-        {
             for (int i = 0; i < _array.Length; i++)
             {
-                _indexes[i] = 0;
-                _array[i] = default(T);
+                _array[i] = new Element()
+                {
+                    Index = -1,
+                    Value = default(T)
+                };
+            }
+        }
+
+        public void Set(int index, T value)
+        {
+            int arrayIndex = NumberUtils.WrapMod(index, _array.Length);
+            int currentIndex = _array[arrayIndex].Index;
+
+            _array[arrayIndex] = new Element()
+            {
+                Index = index,
+                Value = value
+            };
+        }
+
+        public void Unset(int index)
+        {
+            int arrayIndex = NumberUtils.WrapMod(index, _array.Length);
+
+            if (_array[arrayIndex].Index == index)
+            {
+                _array[arrayIndex] = new Element()
+                {
+                    Index = -1,
+                    Value = default(T)
+                };
+            }
+        }
+
+        public bool Contains(int index)
+        {
+            return _array[NumberUtils.WrapMod(index, _array.Length)].Index == index;
+        }
+
+        public bool TryGet(int index, out T value)
+        {
+            int arrayIndex = NumberUtils.WrapMod(index, _array.Length);
+
+            if (_array[arrayIndex].Index == index)
+            {
+                value = _array[arrayIndex].Value;
+                return true;
             }
 
-            _lastHighestSequence = 0;
+            value = default(T);
+            return false;
         }
     }
 }

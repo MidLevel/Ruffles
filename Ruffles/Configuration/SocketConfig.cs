@@ -22,10 +22,6 @@ namespace Ruffles.Configuration
         /// </summary>
         public ushort EventQueueSize = 1024 * 8;
         /// <summary>
-        /// The size of the internal event queue.
-        /// </summary>
-        public ushort InternalEventQueueSize = 1024;
-        /// <summary>
         /// The pool size of the HeapPointers pool.
         /// </summary>
         public ushort HeapPointersPoolSize = 1024;
@@ -72,17 +68,20 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The max socket block time in milliseconds. This will affect how long the internal loop will block.
         /// </summary>
-        public ushort SocketPollTime = 50;
-        /// <summary>
-        /// Whether or not to reuse connections. Disabling this has a impact on memory and CPU.
-        /// If this is enabled, all connections has to be manually recycled by the user after receiving the disconnect or timeout events.
-        /// </summary>
-        public bool ReuseConnections = true;
+        public ushort LogicDelay = 50;
         /// <summary>
         /// Whether or not to reuse channels. Disabling this has an impact on memory and CPU.
         /// If this is enabled, all channels are automatically recycled when an connection dies.
         /// </summary>
         public bool ReuseChannels = true;
+        /// <summary>
+        /// The amount of logic threads to start.
+        /// </summary>
+        public int LogicThreads = 1;
+        /// <summary>
+        /// The amount of socket threads to start.
+        /// </summary>
+        public int SocketThreads = 1;
 
         // Bandwidth
         /// <summary>
@@ -139,37 +138,21 @@ namespace Ruffles.Configuration
         /// The maxmimum packet size. Should be larger than the MTU.
         /// </summary>
         public ushort MaxBufferSize = 1024 * 5;
-        /// <summary>
-        /// The maximum amount of connections. Increasing this increases the memory impact.
-        /// </summary>
-        public ushort MaxConnections = ushort.MaxValue;
 
         // Timeouts
         /// <summary>
         /// The amount of milliseconds from the connection request that the connection has to solve the challenge and complete the connection handshake.
         /// Note that this timeout only starts counting after the connection request has been approved.
         /// </summary>
-        public ulong HandshakeTimeout = 30_000;
+        public ulong HandshakeTimeout = 20_000;
         /// <summary>
         /// The amount of milliseconds of packet silence before a already connected connection will be disconnected.
         /// </summary>
-        public ulong ConnectionTimeout = 30_000;
+        public ulong ConnectionTimeout = 20_000;
         /// <summary>
         /// The amount milliseconds between heartbeat keep-alive packets are sent.
         /// </summary>
-        public ulong HeartbeatDelay = 20_000;
-        /// <summary>
-        /// The maximum percentage of reliable packets that are allowed to be dropped before a connection times out.
-        /// </summary>
-        public double MaxPacketLossPercentage = 0.8;
-        /// <summary>
-        /// The maximum roundtrip time before a connection times out.
-        /// </summary>
-        public uint MaxRoundtripTime = 1500;
-        /// <summary>
-        /// The grace period for a connection where PacketLoss and Roundtrip timeouts are not checked.
-        /// </summary>
-        public ulong ConnectionQualityGracePeriod = 5000;
+        public ulong HeartbeatDelay = 5000;
 
         // Handshake resends
         /// <summary>
@@ -217,11 +200,6 @@ namespace Ruffles.Configuration
         public bool TimeBasedConnectionChallenge = true;
 
         // Denial Of Service
-        /// <summary>
-        /// The maximum connection slots that can be used for pending connections. 
-        /// This is to limit slot filling attacks that has solved the connection request challenge.
-        /// </summary>
-        public ushort MaxPendingConnections = ushort.MaxValue;
         /// <summary>
         /// The amplification prevention padding of handshake requests. 
         /// All handshake packets sent by the connector will be of this size.
@@ -301,11 +279,6 @@ namespace Ruffles.Configuration
         /// Whether or not packet merging should be enabled.
         /// </summary>
         public bool EnablePacketMerging = true;
-        /// <summary>
-        /// Whether or not to enable internal IO event queueing.
-        /// Disabling this will prevent ConnectLater and DisconnectLater from working.
-        /// </summary>
-        public bool EnableQueuedIOEvents = true;
 
         public List<string> GetInvalidConfiguration()
         {
@@ -329,6 +302,16 @@ namespace Ruffles.Configuration
             if (ChannelTypes.Length > Constants.MAX_CHANNELS)
             {
                 messages.Add("Cannot have more than " + Constants.MAX_CHANNELS + " channels");
+            }
+
+            if (LogicThreads <= 0)
+            {
+                messages.Add("At least 1 LogicThread has to be assigned");
+            }
+
+            if (SocketThreads <= 0)
+            {
+                messages.Add("At least 1 SocketThread has to be assigned");
             }
 
             return messages;

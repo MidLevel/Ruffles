@@ -60,11 +60,6 @@ namespace Ruffles.Core
                     MemoryManager.DeAlloc(InternalMemory);
                 }
             }
-
-            if (Connection != null && Connection.Dead && !Connection.Recycled && (Type == NetworkEventType.Disconnect || Type == NetworkEventType.Timeout))
-            {
-                Connection.Recycled = true;
-            }
         }
     }
 }

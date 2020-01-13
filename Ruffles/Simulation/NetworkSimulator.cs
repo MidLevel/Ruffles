@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using Ruffles.Connections;
 using Ruffles.Time;
 
@@ -13,7 +14,7 @@ namespace Ruffles.Simulation
             public Connection Connection;
         }
 
-        internal delegate void SendDelegate(Connection connection, ArraySegment<byte> payload);
+        internal delegate void SendDelegate(EndPoint endpoint, ArraySegment<byte> payload);
 
         private readonly System.Random random = new System.Random();
         private readonly object _lock = new object();
@@ -61,7 +62,7 @@ namespace Ruffles.Simulation
             {
                 while (_packets.Keys.Count > 0 && NetTime.Now >= _packets.Keys[0])
                 {
-                    sendDelegate(_packets[_packets.Keys[0]].Connection, new ArraySegment<byte>(_packets[_packets.Keys[0]].Data, 0, _packets[_packets.Keys[0]].Data.Length));
+                    sendDelegate(_packets[_packets.Keys[0]].Connection.EndPoint, new ArraySegment<byte>(_packets[_packets.Keys[0]].Data, 0, _packets[_packets.Keys[0]].Data.Length));
                     _packets.RemoveAt(0);
                 }
             }

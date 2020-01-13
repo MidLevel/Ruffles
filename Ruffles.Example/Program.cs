@@ -59,19 +59,17 @@ namespace Ruffles.Example
             if (IPv6)
             {
                 // IPv6 Connect
-                client.ConnectNow(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
+                client.Connect(new IPEndPoint(IPAddress.Parse("0:0:0:0:0:0:0:1"), 5674));
             }
             else
             {
                 // IPv4 Connect
-                client.ConnectNow(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
+                client.Connect(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 5674));
             }
 
             // The server stores the clients id here
-            ulong clientId = 0;
             Connection clientConnection = null;
             // The client stores the servers id here
-            ulong serverId = 0;
             Connection serverConnection = null;
 
             // The time when the connection started
@@ -105,7 +103,6 @@ namespace Ruffles.Example
 
                     if (serverEvent.Type == NetworkEventType.Connect)
                     {
-                        clientId = serverEvent.Connection.Id;
                         clientConnection = serverEvent.Connection;
                     }
                 }
@@ -121,7 +118,6 @@ namespace Ruffles.Example
 
                     if (clientEvent.Type == NetworkEventType.Connect)
                     {
-                        serverId = clientEvent.Connection.Id;
                         serverConnection = clientEvent.Connection;
                     }
 
@@ -134,17 +130,17 @@ namespace Ruffles.Example
 
                 clientEvent.Recycle();
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
+                if (serverConnection != null && clientConnection != null && serverConnection.State == ConnectionState.Connected && clientConnection.State == ConnectionState.Connected && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
-                    server.SendNow(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), clientId, 1, false);
+                    clientConnection.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), 1, false);
                     Console.WriteLine("Sending packet: " + messageCounter);
 
                     messageCounter++;
                     lastSent = DateTime.Now;
                 }
 
-                if ((DateTime.Now - started).TotalSeconds > 10 && (DateTime.Now - lastStatusPrint).TotalSeconds >= 5)
+                if (serverConnection != null && clientConnection != null && serverConnection.State == ConnectionState.Connected && clientConnection.State == ConnectionState.Connected && (DateTime.Now - lastStatusPrint).TotalSeconds >= 5)
                 {
                     Console.WriteLine("Ping: " + serverConnection.SmoothRoundtrip + "ms, " + clientConnection.SmoothRoundtrip + "ms");
                     lastStatusPrint = DateTime.Now;

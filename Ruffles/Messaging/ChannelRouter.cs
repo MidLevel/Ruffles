@@ -9,9 +9,34 @@ using Ruffles.Utils;
 
 namespace Ruffles.Messaging
 {
-    internal static class PacketHandler
+    internal static class ChannelRouter
     {
-        internal static void HandleIncomingMessage(ArraySegment<byte> payload, Connection connection, SocketConfig activeConfig, MemoryManager memoryManager)
+        internal static void HandleIncomingAck(ArraySegment<byte> payload, Connection connection, SocketConfig config, MemoryManager memoryManager)
+        {
+            // This is where all data packets arrive after passing the connection handling.
+
+            byte channelId = payload.Array[payload.Offset];
+
+            if (channelId < 0 || channelId >= connection.Channels.Length)
+            {
+                // ChannelId out of range
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Got ack on channel out of range. [ChannelId=" + channelId + "]");
+                return;
+            }
+
+            IChannel channel = connection.Channels[channelId];
+
+            if (channel != null)
+            {
+                channel.HandleAck(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1));
+            }
+            else
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Receive ack failed because the channel is not assigned");
+            }
+        }
+
+        internal static void HandleIncomingMessage(ArraySegment<byte> payload, Connection connection, SocketConfig config, MemoryManager memoryManager)
         {
             // This is where all data packets arrive after passing the connection handling.
 
@@ -28,7 +53,7 @@ namespace Ruffles.Messaging
 
             if (channel != null)
             {
-                HeapPointers incomingPointers = channel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1), out byte headerBytes);
+                HeapPointers incomingPointers = channel.HandleIncomingMessagePoll(new ArraySegment<byte>(payload.Array, payload.Offset + 1, payload.Count - 1));
 
                 if (incomingPointers != null)
                 {
@@ -80,11 +105,31 @@ namespace Ruffles.Messaging
             }
             else
             {
-                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Receive packet failed because the channel is not assigned");
+                if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Receive message failed because the channel is not assigned");
             }
         }
 
-        internal static void SendMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge, MemoryManager memoryManager)
+        internal static void SendMessage(HeapPointers pointers, bool dealloc, Connection connection, bool noMerge, MemoryManager memoryManager)
+        {
+            for (int i = 0; i < pointers.VirtualCount; i++)
+            {
+                connection.SendInternal(new ArraySegment<byte>(((HeapMemory)pointers.Pointers[i]).Buffer, (int)((HeapMemory)pointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)pointers.Pointers[i]).VirtualCount), noMerge);
+            }
+
+            if (dealloc)
+            {
+                // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
+                for (int i = 0; i < pointers.VirtualCount; i++)
+                {
+                    memoryManager.DeAlloc(((HeapMemory)pointers.Pointers[i]));
+                }
+            }
+
+            // Dealloc the array always.
+            memoryManager.DeAlloc(pointers);
+        }
+
+        internal static void CreateOutgoingMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge)
         {
             if (channelId < 0 || channelId >= connection.Channels.Length)
             {
@@ -95,27 +140,7 @@ namespace Ruffles.Messaging
 
             if (channel != null)
             {
-                HeapPointers memoryPointers = channel.CreateOutgoingMessage(payload, out byte headerSize, out bool dealloc);
-
-                if (memoryPointers != null)
-                {
-                    for (int i = 0; i < memoryPointers.VirtualCount; i++)
-                    {
-                        connection.SendRaw(new ArraySegment<byte>(((HeapMemory)memoryPointers.Pointers[i]).Buffer, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualOffset, (int)((HeapMemory)memoryPointers.Pointers[i]).VirtualCount), noMerge, headerSize);
-                    }
-
-                    if (dealloc)
-                    {
-                        // DeAlloc the memory again. This is done for unreliable channels that dont need the message after the initial send.
-                        for (int i = 0; i < memoryPointers.VirtualCount; i++)
-                        {
-                            memoryManager.DeAlloc(((HeapMemory)memoryPointers.Pointers[i]));
-                        }
-                    }
-
-                    // Dealloc the array always.
-                    memoryManager.DeAlloc(memoryPointers);
-                }
+                channel.CreateOutgoingMessage(payload, noMerge);
             }
             else
             {
