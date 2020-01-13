@@ -337,9 +337,16 @@ namespace Ruffles.Core
                 }
             }
 
-            // Set the .NET buffer sizes. Defaults to 1 megabyte each
-            socket.ReceiveBufferSize = Constants.RECEIVE_SOCKET_BUFFER_SIZE;
-            socket.SendBufferSize = Constants.SEND_SOCKET_BUFFER_SIZE;
+            try
+            {
+                // Set the .NET buffer sizes. Defaults to 1 megabyte each
+                socket.ReceiveBufferSize = Constants.RECEIVE_SOCKET_BUFFER_SIZE;
+                socket.SendBufferSize = Constants.SEND_SOCKET_BUFFER_SIZE;
+            }
+            catch
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to set socket buffer size");
+            }
 
             try
             {
@@ -351,11 +358,20 @@ namespace Ruffles.Core
                 {
                     socket.IOControl((int)SIO_UDP_CONNRESET, new byte[] { 0 }, null);
                 }
-
             }
             catch
             {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to set SIO_UDP_CONNRESET");
                 // Ignore error when SIO_UDP_CONNRESET is not supported
+            }
+
+            try
+            {
+                socket.Ttl = (short)Constants.SOCKET_PACKET_TTL;
+            }
+            catch
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to set TTL");
             }
 
             try
