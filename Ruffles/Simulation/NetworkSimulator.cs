@@ -14,7 +14,7 @@ namespace Ruffles.Simulation
             public Connection Connection;
         }
 
-        internal delegate void SendDelegate(EndPoint endpoint, ArraySegment<byte> payload);
+        internal delegate bool SendDelegate(EndPoint endpoint, ArraySegment<byte> payload);
 
         private readonly System.Random random = new System.Random();
         private readonly object _lock = new object();

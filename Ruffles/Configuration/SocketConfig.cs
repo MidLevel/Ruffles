@@ -63,6 +63,10 @@ namespace Ruffles.Configuration
         /// Whether or not unconnected messages should be allowed.
         /// </summary>
         public bool AllowUnconnectedMessages = false;
+        /// <summary>
+        /// Whether or not broadcast messages should be allowed.
+        /// </summary>
+        public bool AllowBroadcasts = true;
 
         // Performance
         /// <summary>

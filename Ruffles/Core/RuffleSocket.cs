@@ -322,18 +322,28 @@ namespace Ruffles.Core
 
         private bool SetupAndBind(Socket socket, IPEndPoint endpoint)
         {
-            // Dont fragment is only supported on IPv4
+            // Dont fragment and broadcasting is only supported on IPv4
             if (socket.AddressFamily == AddressFamily.InterNetwork)
             {
                 try
                 {
                     socket.DontFragment = true;
                 }
-                catch (SocketException)
+                catch (SocketException e)
                 {
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to enable DontFragment: " + e);
                     // TODO: Handle
                     // This shouldnt happen when the OS supports it.
                     // This is used for path MTU to do application level fragmentation
+                }
+
+                try
+                {
+                    socket.EnableBroadcast = true;
+                }
+                catch (SocketException e)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to enable broadcasting: " + e);
                 }
             }
 
@@ -423,12 +433,12 @@ namespace Ruffles.Core
         /// </summary>
         /// <param name="payload">Payload.</param>
         /// <param name="endpoint">Endpoint.</param>
-        public void SendUnconnected(ArraySegment<byte> payload, IPEndPoint endpoint)
+        public bool SendUnconnected(ArraySegment<byte> payload, IPEndPoint endpoint)
         {
             if (payload.Count > Config.MinimumMTU)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error)  Logging.LogError("Tried to send unconnected message that was too large. [Size=" + payload.Count + "] [MaxMessageSize=" + Config.MaxFragments + "]");
-                return;
+                return false;
             }
 
             // Allocate the memory
@@ -441,10 +451,60 @@ namespace Ruffles.Core
             Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 1, payload.Count);
 
             // Send the packet
-            SendRaw(endpoint, new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount));
+            bool success = SendRaw(endpoint, new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount));
 
             // Release memory
             MemoryManager.DeAlloc(memory);
+
+            return success;
+        }
+
+        /// <summary>
+        /// Sends a broadcast packet to all local devices.
+        /// </summary>
+        /// <returns><c>true</c>, if broadcast was sent, <c>false</c> otherwise.</returns>
+        /// <param name="payload">The payload to send.</param>
+        /// <param name="port">The port to send the broadcast to.</param>
+        public bool SendBroadcast(ArraySegment<byte> payload, int port)
+        {
+            if (payload.Count > Config.MinimumMTU)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to send broadcast message that was too large. [Size=" + payload.Count + "] [MaxMessageSize=" + Config.MaxFragments + "]");
+                return false;
+            }
+
+            bool broadcastSuccess = false;
+            bool multicastSuccess = false;
+
+            // TODO: If payload has extra space. No need to realloc
+
+            // Alloc memory with space for header
+            HeapMemory memory = MemoryManager.AllocHeapMemory((uint)(payload.Count + 1));
+
+            // Write header
+            memory.Buffer[0] = HeaderPacker.Pack(MessageType.Broadcast);
+
+            // Copy payload
+            Buffer.BlockCopy(payload.Array, payload.Offset, memory.Buffer, 1, payload.Count);
+
+            try
+            {
+                if (ipv4Socket != null)
+                {
+                    broadcastSuccess = ipv4Socket.SendTo(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port)) > 0;
+                }
+
+                if (ipv6Socket != null)
+                {
+                    multicastSuccess = ipv6Socket.SendTo(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount, SocketFlags.None, new IPEndPoint(Constants.IPv6AllDevicesMulticastAddress, port)) > 0;
+                }
+            }
+            catch (Exception e)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Error when sending broadcast: " + e);
+            }
+
+            return broadcastSuccess || multicastSuccess;
         }
 
         /// <summary>
@@ -679,17 +739,17 @@ namespace Ruffles.Core
             };
         }
 
-        internal void SendRaw(EndPoint endpoint, ArraySegment<byte> payload)
+        internal bool SendRaw(EndPoint endpoint, ArraySegment<byte> payload)
         {
             try
             {
                 if (endpoint.AddressFamily == AddressFamily.InterNetwork)
                 {
-                    int sent = ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+                    return ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint) > 0;
                 }
                 else if (endpoint.AddressFamily == AddressFamily.InterNetworkV6)
                 {
-                    int sent = ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint);
+                    return ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint) > 0;
                 }
             }
             catch (SocketException e)
@@ -705,6 +765,8 @@ namespace Ruffles.Core
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
             }
+
+            return false;
         }
 
         private readonly List<ArraySegment<byte>> _mergeSegmentResults = new List<ArraySegment<byte>>();
@@ -1030,35 +1092,6 @@ namespace Ruffles.Core
                         }
                     }
                     break;
-                case MessageType.UnconnectedData:
-                    {
-                        if (!Config.AllowUnconnectedMessages)
-                        {
-                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Got unconnected message but SocketConfig.AllowUnconnectedMessages is disabled.");
-                            return;
-                        }
-
-                        // Alloc memory that can be borrowed to userspace
-                        HeapMemory memory = MemoryManager.AllocHeapMemory((uint)payload.Count - 1);
-
-                        // Copy payload to borrowed memory
-                        Buffer.BlockCopy(payload.Array, payload.Offset + 1, memory.Buffer, 0, payload.Count - 1);
-
-                        // Send to userspace
-                        PublishEvent(new NetworkEvent()
-                        {
-                            Connection = null,
-                            Socket = this,
-                            Type = NetworkEventType.UnconnectedData,
-                            AllowUserRecycle = true,
-                            Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
-                            InternalMemory = memory,
-                            SocketReceiveTime = NetTime.Now,
-                            ChannelId = 0,
-                            MemoryManager = MemoryManager
-                        });
-                    }
-                    break;
                 case MessageType.MTURequest:
                     {
                         if (!Config.EnablePathMTU)
@@ -1091,6 +1124,65 @@ namespace Ruffles.Core
                         }
                     }
                     break;
+                case MessageType.UnconnectedData:
+                    {
+                        if (!Config.AllowUnconnectedMessages)
+                        {
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Got unconnected message but SocketConfig.AllowUnconnectedMessages is false.");
+                            return;
+                        }
+
+                        // Alloc memory that can be borrowed to userspace
+                        HeapMemory memory = MemoryManager.AllocHeapMemory((uint)payload.Count - 1);
+
+                        // Copy payload to borrowed memory
+                        Buffer.BlockCopy(payload.Array, payload.Offset + 1, memory.Buffer, 0, payload.Count - 1);
+
+                        // Send to userspace
+                        PublishEvent(new NetworkEvent()
+                        {
+                            Connection = null,
+                            Socket = this,
+                            Type = NetworkEventType.UnconnectedData,
+                            AllowUserRecycle = true,
+                            Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
+                            InternalMemory = memory,
+                            SocketReceiveTime = NetTime.Now,
+                            ChannelId = 0,
+                            MemoryManager = MemoryManager
+                        });
+                    }
+                    break;
+                case MessageType.Broadcast:
+                    {
+                        if (!Config.AllowBroadcasts)
+                        {
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Got broadcast message but SocketConfig.AllowBroadcasts is false.");
+                            return;
+                        }
+
+                        // Alloc memory that can be borrowed to userspace
+                        HeapMemory memory = MemoryManager.AllocHeapMemory((uint)payload.Count - 1);
+
+                        // Copy payload to borrowed memory
+                        Buffer.BlockCopy(payload.Array, payload.Offset + 1, memory.Buffer, 0, payload.Count - 1);
+
+                        // Send to userspace
+                        PublishEvent(new NetworkEvent()
+                        {
+                            Connection = null,
+                            Socket = this,
+                            Type = NetworkEventType.BroadcastData,
+                            AllowUserRecycle = true,
+                            Data = new ArraySegment<byte>(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount),
+                            InternalMemory = memory,
+                            SocketReceiveTime = NetTime.Now,
+                            ChannelId = 0,
+                            MemoryManager = MemoryManager
+                        });
+                    }
+                    break;
+
             }
         }
 

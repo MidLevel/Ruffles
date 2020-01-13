@@ -1,4 +1,6 @@
-﻿namespace Ruffles.Configuration
+﻿using System.Net;
+
+namespace Ruffles.Configuration
 {
     internal static class Constants
     {
@@ -9,5 +11,6 @@
         internal static readonly int SOCKET_PACKET_TTL = 64;
         internal static readonly int MAX_CHANNELS = byte.MaxValue;
         internal static readonly int MAX_FRAGMENTS = 32768;
+        internal static readonly IPAddress IPv6AllDevicesMulticastAddress = IPAddress.Parse("FF02:0:0:0:0:0:0:1");
     }
 }

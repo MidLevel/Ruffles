@@ -28,6 +28,10 @@
         /// <summary>
         /// An endpoint sent unconnected data.
         /// </summary>
-        UnconnectedData
+        UnconnectedData,
+        /// <summary>
+        /// An endpoint sent broadcast data.
+        /// </summary>
+        BroadcastData
     }
 }

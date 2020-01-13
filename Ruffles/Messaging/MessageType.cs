@@ -15,6 +15,7 @@
         UnconnectedData,
         MTURequest,
         MTUResponse,
+        Broadcast,
         // Unknown should never be sent down the wire. Keep it at the highest binary
         Unknown = 255
     }
