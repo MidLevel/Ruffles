@@ -6,9 +6,6 @@
             ]
         }],
         "@semantic-release/release-notes-generator",
-        ["@semantic-release/exec", {
-            "verifyReleaseCmd": "powershell -Command \"(gc Ruffles.nuspec) -replace '<version>0.1.0</version>', -join('<version>', ${nextRelease.version}, '</version>') | Out-File Ruffles.nuspec\"",
-        }],
         ["@semantic-release/github", {
             "assets": [
                 {"path": "*net*.zip"}
