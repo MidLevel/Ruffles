@@ -24,8 +24,42 @@ namespace Ruffles.Core
     /// <summary>
     /// A dual IPv4 IPv6 socket using the Ruffles protocol.
     /// </summary>
-    public class RuffleSocket
+    public sealed class RuffleSocket
     {
+        // Separate connections and pending to prevent something like a slorris attack
+        private readonly Dictionary<EndPoint, Connection> addressConnectionLookup = new Dictionary<EndPoint, Connection>();
+        private Connection HeadConnection;
+
+        // Lock for adding or removing connections. This is done to allow for a quick ref to be gained on the user thread when connecting.
+        private readonly ReaderWriterLockSlim connectionsLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+
+        private Socket ipv4Socket;
+        private Socket ipv6Socket;
+        private static readonly bool SupportsIPv6 = Socket.OSSupportsIPv6;
+
+        private SlidingSet<ulong> challengeInitializationVectors;
+
+        internal MemoryManager MemoryManager { get; private set; }
+        internal NetworkSimulator Simulator { get; private set; }
+        internal ChannelPool ChannelPool { get; private set; }
+        internal readonly SocketConfig Config;
+
+        private readonly List<Thread> _threads = new List<Thread>();
+        private bool _initialized;
+
+        public bool IsRunning { get; private set; }
+        public bool IsTerminated { get; private set; }
+
+        // Events
+
+        // Syncronized event
+        private readonly AutoResetEvent _syncronizedEvent = new AutoResetEvent(false);
+        // Syncronized callbacks
+        private readonly ReaderWriterLockSlim _syncronizedCallbacksLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+        private readonly List<Tuple<SynchronizationContext, SendOrPostCallback>> _syncronizedCallbacks = new List<Tuple<SynchronizationContext, SendOrPostCallback>>();
+        // Event queue
+        private ConcurrentCircularQueue<NetworkEvent> userEventQueue;
+
         /// <summary>
         /// Gets a syncronization event that is set when a event is received.
         /// </summary>
@@ -43,11 +77,44 @@ namespace Ruffles.Core
             }
         }
 
-        // Syncronized event
-        private readonly AutoResetEvent _syncronizedEvent = new AutoResetEvent(false);
-        // Syncronized callbacks
-        private readonly ReaderWriterLockSlim _syncronizedCallbacksLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
-        private readonly List<Tuple<SynchronizationContext, SendOrPostCallback>> _syncronizedCallbacks = new List<Tuple<SynchronizationContext, SendOrPostCallback>>();
+        /// <summary>
+        /// Gets the local IPv4 listening endpoint.
+        /// </summary>
+        /// <value>The local IPv4 endpoint.</value>
+        public EndPoint LocalIPv4EndPoint
+        {
+            get
+            {
+                if (ipv4Socket == null)
+                {
+                    return new IPEndPoint(IPAddress.None, 0);
+                }
+
+                return ipv4Socket.LocalEndPoint;
+            }
+        }
+
+        /// <summary>
+        /// Gets the local IPv6 listening endpoint.
+        /// </summary>
+        /// <value>The local IPv6 endpoint.</value>
+        public EndPoint LocalIPv6EndPoint
+        {
+            get
+            {
+                if (ipv6Socket == null)
+                {
+                    return new IPEndPoint(IPAddress.IPv6None, 0);
+                }
+
+                return ipv6Socket.LocalEndPoint;
+            }
+        }
+
+        public RuffleSocket(SocketConfig config)
+        {
+            this.Config = config;
+        }
 
         /// <summary>
         /// Register a syncronized callback that is ran on a specific thread when a message arrives.
@@ -144,71 +211,6 @@ namespace Ruffles.Core
                     _syncronizedCallbacksLock.ExitReadLock();
                 }
             }
-        }
-
-        // Separate connections and pending to prevent something like a slorris attack
-        private readonly Dictionary<EndPoint, Connection> addressConnectionLookup = new Dictionary<EndPoint, Connection>();
-        private Connection HeadConnection;
-
-        // Lock for adding or removing connections. This is done to allow for a quick ref to be gained on the user thread when connecting.
-        private readonly ReaderWriterLockSlim connectionsLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
-
-        private ConcurrentCircularQueue<NetworkEvent> userEventQueue;
-
-        private Socket ipv4Socket;
-        private Socket ipv6Socket;
-        private static readonly bool SupportsIPv6 = Socket.OSSupportsIPv6;
-
-        private SlidingSet<ulong> challengeInitializationVectors;
-
-        internal MemoryManager MemoryManager { get; private set; }
-        internal NetworkSimulator Simulator { get; private set; }
-        internal ChannelPool ChannelPool { get; private set; }
-        internal readonly SocketConfig Config;
-
-        private readonly List<Thread> _threads = new List<Thread>();
-        private bool _initialized;
-
-        public bool IsRunning { get; private set; }
-        public bool IsTerminated { get; private set; }
-
-        /// <summary>
-        /// Gets the local IPv4 listening endpoint.
-        /// </summary>
-        /// <value>The local IPv4 endpoint.</value>
-        public EndPoint LocalIPv4EndPoint
-        {
-            get
-            {
-                if (ipv4Socket == null)
-                {
-                    return new IPEndPoint(IPAddress.None, 0);
-                }
-
-                return ipv4Socket.LocalEndPoint;
-            }
-        }
-
-        /// <summary>
-        /// Gets the local IPv6 listening endpoint.
-        /// </summary>
-        /// <value>The local IPv6 endpoint.</value>
-        public EndPoint LocalIPv6EndPoint
-        {
-            get
-            {
-                if (ipv6Socket == null)
-                {
-                    return new IPEndPoint(IPAddress.IPv6None, 0);
-                }
-
-                return ipv6Socket.LocalEndPoint;
-            }
-        }
-
-        public RuffleSocket(SocketConfig config)
-        {
-            this.Config = config;
         }
 
         private void Initialize()
