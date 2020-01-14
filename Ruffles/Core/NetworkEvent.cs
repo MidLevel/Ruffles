@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Net;
 using Ruffles.Connections;
-using Ruffles.Exceptions;
 using Ruffles.Memory;
 using Ruffles.Time;
 
@@ -43,6 +43,11 @@ namespace Ruffles.Core
         /// </summary>
         /// <value>The channelId the message was sent over.</value>
         public byte ChannelId { get; internal set; }
+        /// <summary>
+        /// Gets the endpoint the message was sent from.
+        /// </summary>
+        /// <value>The endpoint the message was sent from.</value>
+        public EndPoint EndPoint { get; internal set; }
 
         internal HeapMemory InternalMemory;
         internal MemoryManager MemoryManager;

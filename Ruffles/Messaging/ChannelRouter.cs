@@ -91,7 +91,8 @@ namespace Ruffles.Messaging
                                 InternalMemory = memory,
                                 SocketReceiveTime = NetTime.Now,
                                 ChannelId = channelId,
-                                MemoryManager = memoryManager
+                                MemoryManager = memoryManager,
+                                EndPoint = connection.EndPoint
                             });
                         }
 

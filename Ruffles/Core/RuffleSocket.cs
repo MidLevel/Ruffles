@@ -841,7 +841,8 @@ namespace Ruffles.Core
                 Type = NetworkEventType.Nothing,
                 ChannelId = 0,
                 SocketReceiveTime = NetTime.Now,
-                MemoryManager = MemoryManager
+                MemoryManager = MemoryManager,
+                EndPoint = null
             };
         }
 
@@ -1255,7 +1256,8 @@ namespace Ruffles.Core
                             InternalMemory = memory,
                             SocketReceiveTime = NetTime.Now,
                             ChannelId = 0,
-                            MemoryManager = MemoryManager
+                            MemoryManager = MemoryManager,
+                            EndPoint = endpoint
                         });
                     }
                     break;
@@ -1284,7 +1286,8 @@ namespace Ruffles.Core
                             InternalMemory = memory,
                             SocketReceiveTime = NetTime.Now,
                             ChannelId = 0,
-                            MemoryManager = MemoryManager
+                            MemoryManager = MemoryManager,
+                            EndPoint = endpoint
                         });
                     }
                     break;

@@ -334,7 +334,8 @@ namespace Ruffles.Connections
                         Data = new ArraySegment<byte>(),
                         InternalMemory = null,
                         SocketReceiveTime = NetTime.Now,
-                        MemoryManager = MemoryManager
+                        MemoryManager = MemoryManager,
+                        EndPoint = EndPoint
                     });
                 }
             }
@@ -433,7 +434,8 @@ namespace Ruffles.Connections
                         Data = new ArraySegment<byte>(),
                         InternalMemory = null,
                         SocketReceiveTime = NetTime.Now,
-                        MemoryManager = MemoryManager
+                        MemoryManager = MemoryManager,
+                        EndPoint = EndPoint
                     });
                 }
             }
@@ -735,7 +737,8 @@ namespace Ruffles.Connections
                             Data = new ArraySegment<byte>(),
                             InternalMemory = null,
                             SocketReceiveTime = NetTime.Now,
-                            MemoryManager = MemoryManager
+                            MemoryManager = MemoryManager,
+                            EndPoint = EndPoint
                         });
                     }
                     else
