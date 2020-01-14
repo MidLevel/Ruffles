@@ -27,29 +27,122 @@ namespace Ruffles.Core
     public class RuffleSocket
     {
         /// <summary>
-        /// Event that is raised when a network event occurs. This can be used as an alternative, or in combination with polling.
+        /// Gets a syncronization event that is set when a event is received.
         /// </summary>
-        public event Action<NetworkEvent> OnNetworkEvent;
+        /// <value>The syncronization event.</value>
+        public AutoResetEvent SyncronizationEvent
+        {
+            get
+            {
+                if (!Config.EnableSyncronizationEvent)
+                {
+                    throw new InvalidOperationException("Cannot get syncronzation event when EnableSyncronizationEvent is false");
+                }
+
+                return _syncronizedEvent;
+            }
+        }
+
+        // Syncronized event
+        private readonly AutoResetEvent _syncronizedEvent = new AutoResetEvent(false);
+        // Syncronized callbacks
+        private readonly ReaderWriterLockSlim _syncronizedCallbacksLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+        private readonly List<Tuple<SynchronizationContext, SendOrPostCallback>> _syncronizedCallbacks = new List<Tuple<SynchronizationContext, SendOrPostCallback>>();
+
+        /// <summary>
+        /// Register a syncronized callback that is ran on a specific thread when a message arrives.
+        /// </summary>
+        public void RegisterSyncronizedCallback(SendOrPostCallback callback, SynchronizationContext syncContext = null)
+        {
+            if (!Config.EnableSyncronizedCallbacks)
+            {
+                throw new InvalidOperationException("Cannot register a syncronized callback when EnableSyncronizedCallbacks is false");
+            }
+
+            if (syncContext == null)
+            {
+                syncContext = SynchronizationContext.Current;
+            }
+
+            if (syncContext == null)
+            {
+                throw new ArgumentNullException(nameof(syncContext), "Cannot register callback without a valid SyncronizationContext");
+            }
+
+            if (callback == null)
+            {
+                throw new ArgumentNullException(nameof(callback), "Cannot register a null callback");
+            }
+
+            _syncronizedCallbacksLock.EnterWriteLock();
+
+            try
+            {
+                _syncronizedCallbacks.Add(new Tuple<SynchronizationContext, SendOrPostCallback>(syncContext, callback));
+            }
+            finally
+            {
+                _syncronizedCallbacksLock.ExitWriteLock();
+            }
+        }
+
+        /// <summary>
+        /// Unregisters a syncronized callback.
+        /// </summary>
+        public void UnregisterSyncronizedCallback(SendOrPostCallback callback)
+        {
+            if (!Config.EnableSyncronizedCallbacks)
+            {
+                throw new InvalidOperationException("Cannot register a syncronized callback when EnableSyncronizedCallbacks is false");
+            }
+
+            if (callback == null)
+            {
+                throw new ArgumentNullException(nameof(callback), "Cannot unregister null callback");
+            }
+
+            _syncronizedCallbacksLock.EnterWriteLock();
+
+            try
+            {
+                for (int i = _syncronizedCallbacks.Count - 1; i >= 0; i++)
+                {
+                    if (_syncronizedCallbacks[i].Item2 == callback)
+                    {
+                        _syncronizedCallbacks.RemoveAt(i);
+                    }
+                }
+            }
+            finally
+            {
+                _syncronizedCallbacksLock.ExitWriteLock();
+            }
+        }
 
         internal void PublishEvent(NetworkEvent @event)
         {
-            bool delivered = false;
+            userEventQueue.Enqueue(@event);
 
-            if (Config.EnablePollEvents)
+            if (Config.EnableSyncronizationEvent)
             {
-                delivered = true;
-                userEventQueue.Enqueue(@event);
+                _syncronizedEvent.Set();
             }
 
-            if (Config.EnableCallbackEvents && OnNetworkEvent != null)
+            if (Config.EnableSyncronizedCallbacks)
             {
-                delivered = true;
-                OnNetworkEvent(@event);
-            }
+                _syncronizedCallbacksLock.EnterReadLock();
 
-            if (!delivered)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Unable to deliver event. Make sure you have PollEvents enabled and/or CallbackEvents enabled with a registered handler");
+                try
+                {
+                    for (int i = 0; i < _syncronizedCallbacks.Count; i++)
+                    {
+                        _syncronizedCallbacks[i].Item1.Post(_syncronizedCallbacks[i].Item2, this);
+                    }
+                }
+                finally
+                {
+                    _syncronizedCallbacksLock.ExitReadLock();
+                }
             }
         }
 

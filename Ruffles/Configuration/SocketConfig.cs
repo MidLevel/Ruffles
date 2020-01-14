@@ -9,13 +9,13 @@ namespace Ruffles.Configuration
     {
         // General
         /// <summary>
-        /// Whether or not to allow polling of the socket. This will require all messages to be processed in a queue.
+        /// Whether or not to enable the syncronization event to be triggered when a new event is added.
         /// </summary>
-        public bool EnablePollEvents = true;
+        public bool EnableSyncronizationEvent = true;
         /// <summary>
-        /// Whether or not to raise a callback when a event occurs.
+        /// Whether or not to enable invoking of syncronized callbacks when a new event is added.
         /// </summary>
-        public bool EnableCallbackEvents = true;
+        public bool EnableSyncronizedCallbacks = true;
         /// <summary>
         /// The size of the global event queue. 
         /// If this gets full no more events can be processed and the application will freeze until it is polled.
