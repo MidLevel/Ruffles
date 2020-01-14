@@ -67,7 +67,7 @@ namespace Ruffles.Core
         private readonly AutoResetEvent _syncronizedEvent = new AutoResetEvent(false);
         // Syncronized callbacks
         private readonly ReaderWriterLockSlim _syncronizedCallbacksLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
-        private readonly List<Tuple<SynchronizationContext, SendOrPostCallback>> _syncronizedCallbacks = new List<Tuple<SynchronizationContext, SendOrPostCallback>>();
+        private readonly List<NetTuple<SynchronizationContext, SendOrPostCallback>> _syncronizedCallbacks = new List<NetTuple<SynchronizationContext, SendOrPostCallback>>();
         // Event queue
         private ConcurrentCircularQueue<NetworkEvent> _userEventQueue;
 
@@ -156,7 +156,7 @@ namespace Ruffles.Core
 
             try
             {
-                _syncronizedCallbacks.Add(new Tuple<SynchronizationContext, SendOrPostCallback>(syncContext, callback));
+                _syncronizedCallbacks.Add(new NetTuple<SynchronizationContext, SendOrPostCallback>(syncContext, callback));
             }
             finally
             {
