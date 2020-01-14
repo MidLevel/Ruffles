@@ -46,8 +46,19 @@ namespace Ruffles.Core
         private readonly List<Thread> _threads = new List<Thread>();
         private bool _initialized;
 
+        /// <summary>
+        /// Gets a value indicating whether this <see cref="T:Ruffles.Core.RuffleSocket"/> is running.
+        /// </summary>
+        /// <value><c>true</c> if is running; otherwise, <c>false</c>.</value>
         public bool IsRunning { get; private set; }
+        /// <summary>
+        /// Gets a value indicating whether this <see cref="T:Ruffles.Core.RuffleSocket"/> is terminated.
+        /// </summary>
+        /// <value><c>true</c> if is terminated; otherwise, <c>false</c>.</value>
         public bool IsTerminated { get; private set; }
+        /// <summary>
+        /// Whether or not the current OS supports IPv6
+        /// </summary>
         public static readonly bool SupportsIPv6 = Socket.OSSupportsIPv6;
 
         // Events
