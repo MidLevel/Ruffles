@@ -21,6 +21,7 @@ namespace Ruffles.Configuration
         /// If this gets full no more events can be processed and the application will freeze until it is polled.
         /// </summary>
         public ushort EventQueueSize = 1024 * 8;
+        public int ProcessingQueueSize = 1024 * 8;
         /// <summary>
         /// The pool size of the HeapPointers pool.
         /// </summary>
@@ -86,6 +87,10 @@ namespace Ruffles.Configuration
         /// The amount of socket threads to start.
         /// </summary>
         public int SocketThreads = 1;
+        /// <summary>
+        /// The amount of packet processing threads to start.
+        /// </summary>
+        public int ProcessingThreads = 1;
 
         // Bandwidth
         /// <summary>

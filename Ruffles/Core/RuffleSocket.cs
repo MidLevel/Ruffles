@@ -71,6 +71,9 @@ namespace Ruffles.Core
         // Event queue
         private ConcurrentCircularQueue<NetworkEvent> _userEventQueue;
 
+        // Processing queue
+        private ConcurrentCircularQueue<NetTuple<HeapMemory, EndPoint>> _processingQueue;
+
         /// <summary>
         /// Gets a syncronization event that is set when a event is received.
         /// </summary>
@@ -255,6 +258,16 @@ namespace Ruffles.Core
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.EventQueueSize + " event slots");
             _userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(Config.EventQueueSize);
 
+            if (Config.ProcessingThreads > 0)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ProcessingQueueSize + " processing slots");
+                _processingQueue = new ConcurrentCircularQueue<NetTuple<HeapMemory, EndPoint>>(Config.ProcessingQueueSize);
+            }
+            else
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Not allocating processingQueue beucase ProcessingThreads is set to 0");
+            }
+
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ConnectionChallengeHistory + " challenge IV slots");
             _challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory, true);
 
@@ -320,6 +333,17 @@ namespace Ruffles.Core
                 _threads.Add(new Thread(StartSocketLogic)
                 {
                     Name = "SocketThread #" + i,
+                    IsBackground = true
+                });
+            }
+
+            for (int i = 0; i < Config.ProcessingThreads; i++)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating ProcessingThread #" + i);
+
+                _threads.Add(new Thread(StartPacketProcessing)
+                {
+                    Name = "ProcessingThread #" + i,
                     IsBackground = true
                 });
             }
@@ -772,7 +796,8 @@ namespace Ruffles.Core
 
         private void StartSocketLogic()
         {
-            byte[] _incomingBuffer = new byte[Config.MaxBufferSize];
+            // Only alloc buffer if we dont have any processing threads.
+            byte[] _incomingBuffer = Config.ProcessingThreads > 0 ? null : new byte[Config.MaxBufferSize];
             List<Socket> _selectSockets = new List<Socket>();
 
             while (IsRunning)
@@ -798,9 +823,39 @@ namespace Ruffles.Core
                         // Get a endpoint reference
                         EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
 
-                        int size = _selectSockets[i].ReceiveFrom(_incomingBuffer, 0, _incomingBuffer.Length, SocketFlags.None, ref _endpoint);
+                        byte[] receiveBuffer;
+                        int receiveSize;
+                        HeapMemory memory = null;
 
-                        HandlePacket(new ArraySegment<byte>(_incomingBuffer, 0, size), _endpoint, true);
+                        if (Config.ProcessingThreads > 0)
+                        {
+                            // Alloc memory for the packet. Alloc max MTU
+                            memory = MemoryManager.AllocHeapMemory((uint)Config.MaximumMTU);
+                            receiveSize = (int)memory.VirtualCount;
+                            receiveBuffer = memory.Buffer;
+                        }
+                        else
+                        {
+                            receiveBuffer = _incomingBuffer;
+                            receiveSize = _incomingBuffer.Length;
+                        }
+
+                        // Receive from socket
+                        int size = _selectSockets[i].ReceiveFrom(receiveBuffer, 0, receiveSize, SocketFlags.None, ref _endpoint);
+
+                        if (Config.ProcessingThreads > 0)
+                        {
+                            // Set the size to prevent reading to end
+                            memory.VirtualCount = (uint)size;
+
+                            // Process off thread
+                            _processingQueue.Enqueue(new NetTuple<HeapMemory, EndPoint>(memory, _endpoint));
+                        }
+                        else
+                        {
+                            // Process on thread
+                            HandlePacket(new ArraySegment<byte>(receiveBuffer, 0, receiveSize), _endpoint, true);
+                        }
                     }
                     catch (SocketException e)
                     {
@@ -816,6 +871,28 @@ namespace Ruffles.Core
                     {
                         if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
                     }
+                }
+            }
+        }
+
+        private void StartPacketProcessing()
+        {
+            while (IsRunning)
+            {
+                try
+                {
+                    while (_processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
+                    {
+                        // Process packet
+                        HandlePacket(new ArraySegment<byte>(packet.Item1.Buffer, (int)packet.Item1.VirtualOffset, (int)packet.Item1.VirtualCount), packet.Item2, true);
+
+                        // Dealloc the memory
+                        MemoryManager.DeAlloc(packet.Item1);
+                    }
+                }
+                catch (Exception e)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when processing packet: " + e);
                 }
             }
         }
@@ -877,7 +954,7 @@ namespace Ruffles.Core
         }
 
         private readonly List<ArraySegment<byte>> _mergeSegmentResults = new List<ArraySegment<byte>>();
-        internal void HandlePacket(ArraySegment<byte> payload, EndPoint endpoint, bool allowMergeUnpack, bool wirePacket = true)
+        internal void HandlePacket(ArraySegment<byte> payload, EndPoint endpoint, bool allowMergeUnpack)
         {
             if (payload.Count < 1)
             {
@@ -920,7 +997,7 @@ namespace Ruffles.Core
                                 for (int i = 0; i < _mergeSegmentResults.Count; i++)
                                 {
                                     // Handle the segment
-                                    HandlePacket(_mergeSegmentResults[i], endpoint, false, false);
+                                    HandlePacket(_mergeSegmentResults[i], endpoint, false);
                                 }
                             }
                         }
