@@ -27,17 +27,16 @@ namespace Ruffles.Core
     public sealed class RuffleSocket
     {
         // Separate connections and pending to prevent something like a slorris attack
-        private readonly Dictionary<EndPoint, Connection> addressConnectionLookup = new Dictionary<EndPoint, Connection>();
-        private Connection HeadConnection;
+        private readonly Dictionary<EndPoint, Connection> _addressConnectionLookup = new Dictionary<EndPoint, Connection>();
+        private Connection _headConnection;
 
         // Lock for adding or removing connections. This is done to allow for a quick ref to be gained on the user thread when connecting.
-        private readonly ReaderWriterLockSlim connectionsLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+        private readonly ReaderWriterLockSlim _connectionsLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
 
-        private Socket ipv4Socket;
-        private Socket ipv6Socket;
-        private static readonly bool SupportsIPv6 = Socket.OSSupportsIPv6;
+        private Socket _ipv4Socket;
+        private Socket _ipv6Socket;
 
-        private SlidingSet<ulong> challengeInitializationVectors;
+        private SlidingSet<ulong> _challengeInitializationVectors;
 
         internal MemoryManager MemoryManager { get; private set; }
         internal NetworkSimulator Simulator { get; private set; }
@@ -49,6 +48,7 @@ namespace Ruffles.Core
 
         public bool IsRunning { get; private set; }
         public bool IsTerminated { get; private set; }
+        public static readonly bool SupportsIPv6 = Socket.OSSupportsIPv6;
 
         // Events
 
@@ -58,7 +58,7 @@ namespace Ruffles.Core
         private readonly ReaderWriterLockSlim _syncronizedCallbacksLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
         private readonly List<Tuple<SynchronizationContext, SendOrPostCallback>> _syncronizedCallbacks = new List<Tuple<SynchronizationContext, SendOrPostCallback>>();
         // Event queue
-        private ConcurrentCircularQueue<NetworkEvent> userEventQueue;
+        private ConcurrentCircularQueue<NetworkEvent> _userEventQueue;
 
         /// <summary>
         /// Gets a syncronization event that is set when a event is received.
@@ -85,12 +85,12 @@ namespace Ruffles.Core
         {
             get
             {
-                if (ipv4Socket == null)
+                if (_ipv4Socket == null)
                 {
                     return new IPEndPoint(IPAddress.None, 0);
                 }
 
-                return ipv4Socket.LocalEndPoint;
+                return _ipv4Socket.LocalEndPoint;
             }
         }
 
@@ -102,12 +102,12 @@ namespace Ruffles.Core
         {
             get
             {
-                if (ipv6Socket == null)
+                if (_ipv6Socket == null)
                 {
                     return new IPEndPoint(IPAddress.IPv6None, 0);
                 }
 
-                return ipv6Socket.LocalEndPoint;
+                return _ipv6Socket.LocalEndPoint;
             }
         }
 
@@ -188,7 +188,7 @@ namespace Ruffles.Core
 
         internal void PublishEvent(NetworkEvent @event)
         {
-            userEventQueue.Enqueue(@event);
+            _userEventQueue.Enqueue(@event);
 
             if (Config.EnableSyncronizationEvent)
             {
@@ -242,10 +242,10 @@ namespace Ruffles.Core
             }
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.EventQueueSize + " event slots");
-            userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(Config.EventQueueSize);
+            _userEventQueue = new ConcurrentCircularQueue<NetworkEvent>(Config.EventQueueSize);
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ConnectionChallengeHistory + " challenge IV slots");
-            challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory, true);
+            _challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory, true);
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
             MemoryManager = new MemoryManager(Config);
@@ -340,7 +340,7 @@ namespace Ruffles.Core
             }
 
             // Disconnect all clients
-            for (Connection connection = HeadConnection; connection != null; connection = connection.NextConnection)
+            for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
             {
                 connection.DisconnectInternal(true, false);
             }
@@ -378,8 +378,8 @@ namespace Ruffles.Core
                 Stop();
             }
 
-            ipv4Socket.Close();
-            ipv6Socket.Close();
+            _ipv4Socket.Close();
+            _ipv6Socket.Close();
 
             // Release ALL memory to GC safely. If this is not done the MemoryManager will see it as a leak
             MemoryManager.Release();
@@ -388,16 +388,16 @@ namespace Ruffles.Core
         private bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool ipv6Dual)
         {
             // Create IPv4 UDP Socket
-            ipv4Socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            _ipv4Socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 
             // Setup IPv4 Socket and properly bind it to the OS
-            if (!SetupAndBind(ipv4Socket, new IPEndPoint(addressIPv4, port)))
+            if (!SetupAndBind(_ipv4Socket, new IPEndPoint(addressIPv4, port)))
             {
                 // Failed to bind socket
                 return false;
             }
 
-            int ipv4LocalPort = ((IPEndPoint)ipv4Socket.LocalEndPoint).Port;
+            int ipv4LocalPort = ((IPEndPoint)_ipv4Socket.LocalEndPoint).Port;
 
             if (!ipv6Dual || !SupportsIPv6)
             {
@@ -406,11 +406,11 @@ namespace Ruffles.Core
             }
 
             // Create IPv6 UDP Socket
-            ipv6Socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
+            _ipv6Socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
 
             // Setup IPv6 socket and bind it to the same port as the IPv4 socket was bound to.
             // Ignore if it fails
-            SetupAndBind(ipv6Socket, new IPEndPoint(addressIPv6, ipv4LocalPort));
+            SetupAndBind(_ipv6Socket, new IPEndPoint(addressIPv6, ipv4LocalPort));
 
             return true;
         }
@@ -584,14 +584,14 @@ namespace Ruffles.Core
 
             try
             {
-                if (ipv4Socket != null)
+                if (_ipv4Socket != null)
                 {
-                    broadcastSuccess = ipv4Socket.SendTo(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port)) > 0;
+                    broadcastSuccess = _ipv4Socket.SendTo(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount, SocketFlags.None, new IPEndPoint(IPAddress.Broadcast, port)) > 0;
                 }
 
-                if (ipv6Socket != null)
+                if (_ipv6Socket != null)
                 {
-                    multicastSuccess = ipv6Socket.SendTo(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount, SocketFlags.None, new IPEndPoint(Constants.IPv6AllDevicesMulticastAddress, port)) > 0;
+                    multicastSuccess = _ipv6Socket.SendTo(memory.Buffer, (int)memory.VirtualOffset, (int)memory.VirtualCount, SocketFlags.None, new IPEndPoint(Constants.IPv6AllDevicesMulticastAddress, port)) > 0;
                 }
             }
             catch (Exception e)
@@ -732,7 +732,7 @@ namespace Ruffles.Core
 
                     int elapsed = (int)logicWatch.ElapsedMilliseconds;
 
-                    for (Connection connection = HeadConnection; connection != null; connection = connection.NextConnection)
+                    for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
                     {
                         connection.Update();
                     }
@@ -768,14 +768,14 @@ namespace Ruffles.Core
             {
                 _selectSockets.Clear();
 
-                if (ipv4Socket != null)
+                if (_ipv4Socket != null)
                 {
-                    _selectSockets.Add(ipv4Socket);
+                    _selectSockets.Add(_ipv4Socket);
                 }
 
-                if (ipv6Socket != null)
+                if (_ipv6Socket != null)
                 {
-                    _selectSockets.Add(ipv6Socket);
+                    _selectSockets.Add(_ipv6Socket);
                 }
 
                 Socket.Select(_selectSockets, null, null, 1000 * 1000);
@@ -815,7 +815,7 @@ namespace Ruffles.Core
         /// <returns>The poll result.</returns>
         public NetworkEvent Poll()
         {
-            if (userEventQueue.TryDequeue(out NetworkEvent @event))
+            if (_userEventQueue.TryDequeue(out NetworkEvent @event))
             {
                 return @event;
             }
@@ -840,11 +840,11 @@ namespace Ruffles.Core
             {
                 if (endpoint.AddressFamily == AddressFamily.InterNetwork)
                 {
-                    return ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint) > 0;
+                    return _ipv4Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint) > 0;
                 }
                 else if (endpoint.AddressFamily == AddressFamily.InterNetworkV6)
                 {
-                    return ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint) > 0;
+                    return _ipv6Socket.SendTo(payload.Array, payload.Offset, payload.Count, SocketFlags.None, endpoint) > 0;
                 }
             }
             catch (SocketException e)
@@ -978,7 +978,7 @@ namespace Ruffles.Core
                                             ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 7] << 56));
 
                             // Ensure they dont reuse a IV
-                            if (challengeInitializationVectors[userIv])
+                            if (_challengeInitializationVectors[userIv])
                             {
                                 // This IV is being reused.
                                 if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They were trying to reuse an IV");
@@ -986,7 +986,7 @@ namespace Ruffles.Core
                             }
 
                             // Save the IV to the sliding window
-                            challengeInitializationVectors[userIv] = true;
+                            _challengeInitializationVectors[userIv] = true;
 
                             // Calculate the hash the user claims have a collision
                             ulong claimedHash = HashProvider.GetStableHash64(challengeUnixTime, counter, userIv);
@@ -1284,13 +1284,13 @@ namespace Ruffles.Core
         internal Connection GetConnection(EndPoint endpoint)
         {
             // Lock to prevent grabbing a half dead connection
-            connectionsLock.EnterReadLock();
+            _connectionsLock.EnterReadLock();
 
             try
             {
-                if (addressConnectionLookup.ContainsKey(endpoint))
+                if (_addressConnectionLookup.ContainsKey(endpoint))
                 {
-                    return addressConnectionLookup[endpoint];
+                    return _addressConnectionLookup[endpoint];
                 }
                 else
                 {
@@ -1299,23 +1299,23 @@ namespace Ruffles.Core
             }
             finally
             {
-                connectionsLock.ExitReadLock();
+                _connectionsLock.ExitReadLock();
             }
         }
 
         internal void RemoveConnection(Connection connection)
         {
             // Lock when removing the connection to prevent another thread grabbing it before its fully dead.
-            connectionsLock.EnterWriteLock();
+            _connectionsLock.EnterWriteLock();
 
             try
             {
                 // Remove lookup
-                if (addressConnectionLookup.Remove(connection.EndPoint))
+                if (_addressConnectionLookup.Remove(connection.EndPoint))
                 {
-                    if (connection == HeadConnection)
+                    if (connection == _headConnection)
                     {
-                        HeadConnection = HeadConnection.NextConnection;
+                        _headConnection = _headConnection.NextConnection;
                     }
 
                     if (connection.PreviousConnection != null)
@@ -1333,19 +1333,19 @@ namespace Ruffles.Core
             }
             finally
             {
-                connectionsLock.ExitWriteLock();
+                _connectionsLock.ExitWriteLock();
             }
         }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
         {
             // Lock when adding connection to prevent grabbing a half alive connection.
-            connectionsLock.EnterWriteLock();
+            _connectionsLock.EnterWriteLock();
 
             try
             {
                 // Make sure they are not already connected to prevent an attack where a single person can fill all the slots.
-                if (addressConnectionLookup.ContainsKey(endpoint))
+                if (_addressConnectionLookup.ContainsKey(endpoint))
                 {
                     return null;
                 }
@@ -1354,22 +1354,22 @@ namespace Ruffles.Core
                 Connection connection = new Connection(state, endpoint, this);
 
                 // Add lookup
-                addressConnectionLookup.Add(endpoint, connection);
+                _addressConnectionLookup.Add(endpoint, connection);
 
-                if (HeadConnection != null)
+                if (_headConnection != null)
                 {
                     // We have a connection as head.
-                    connection.NextConnection = HeadConnection;
-                    HeadConnection.PreviousConnection = connection;
+                    connection.NextConnection = _headConnection;
+                    _headConnection.PreviousConnection = connection;
                 }
 
-                HeadConnection = connection;
+                _headConnection = connection;
 
                 return connection;
             }
             finally
             {
-                connectionsLock.ExitWriteLock();
+                _connectionsLock.ExitWriteLock();
             }
         }
     }
