@@ -359,7 +359,7 @@ namespace Ruffles.Core
                 _threads[i].Start();
             }
 
-            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Started " + (Config.LogicThreads + Config.SocketThreads) + " threads");
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Started " + (Config.LogicThreads + Config.SocketThreads + Config.ProcessingThreads) + " threads");
 
             return true;
         }
