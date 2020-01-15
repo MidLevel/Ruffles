@@ -68,7 +68,7 @@ namespace Ruffles.Memory
 
                 if (createdHeapPointers >= 1024 && !_hasWarnedAboutPointerArrayLeaks)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP POINTERS]");
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak suspected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP POINTERS]");
                     _hasWarnedAboutPointerArrayLeaks = true;
                 }
 
@@ -108,7 +108,7 @@ namespace Ruffles.Memory
 
                 if (createdHeapMemory >= 1024 && !_hasWarnedAboutHeapMemoryLeaks)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP MEMORY]");
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak suspected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [HEAP MEMORY]");
                     _hasWarnedAboutHeapMemoryLeaks = true;
                 }
 
@@ -156,7 +156,7 @@ namespace Ruffles.Memory
 
                 if (createdMemoryWrappers >= 1024 && !_hasWarnedAboutMemoryWrapperLeaks)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak detected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [MEMORY WRAPPER]");
+                    if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Memory leak suspected. Are you leaking memory to the GC or are your windows too large? Leaking memory to the GC will cause slowdowns. Make sure all memory is deallocated. [MEMORY WRAPPER]");
                     _hasWarnedAboutMemoryWrapperLeaks = true;
                 }
 
