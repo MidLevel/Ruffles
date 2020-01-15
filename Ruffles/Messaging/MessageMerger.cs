@@ -89,11 +89,11 @@ namespace Ruffles.Messaging
             }
         }
 
-        internal ArraySegment<byte>? TryFlush()
+        internal ArraySegment<byte>? TryFlush(bool force)
         {
             lock (_lock)
             {
-                if (_position > 1 && (NetTime.Now - _lastFlushTime).TotalMilliseconds > _flushDelay)
+                if (_position > 1 && (force || (NetTime.Now - _lastFlushTime).TotalMilliseconds > _flushDelay))
                 {
                     // Its time to flush
 

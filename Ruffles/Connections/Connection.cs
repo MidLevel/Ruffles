@@ -1077,7 +1077,7 @@ namespace Ruffles.Connections
             {
                 if (State == ConnectionState.Connected)
                 {
-                    ArraySegment<byte>? mergedPayload = Merger.TryFlush();
+                    ArraySegment<byte>? mergedPayload = Merger.TryFlush(false);
 
                     if (mergedPayload != null)
                     {
@@ -1184,6 +1184,14 @@ namespace Ruffles.Connections
 
             if (Config.EnablePacketMerging)
             {
+                // Try to get one last flush
+                ArraySegment<byte>? mergedPayload = Merger.TryFlush(true);
+
+                if (mergedPayload != null)
+                {
+                    SendInternal(mergedPayload.Value, true);
+                }
+
                 // Clean the merger
                 Merger.Clear();
             }
