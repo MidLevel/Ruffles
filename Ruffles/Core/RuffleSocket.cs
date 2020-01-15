@@ -37,6 +37,7 @@ namespace Ruffles.Core
         private Socket _ipv6Socket;
 
         private SlidingSet<ulong> _challengeInitializationVectors;
+        private readonly object _challengeInitializationVectorsLock = new object();
 
         internal MemoryManager MemoryManager { get; private set; }
         internal NetworkSimulator Simulator { get; private set; }
@@ -269,7 +270,7 @@ namespace Ruffles.Core
             }
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ConnectionChallengeHistory + " challenge IV slots");
-            _challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory, true);
+            _challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory);
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
             MemoryManager = new MemoryManager(Config);
@@ -1066,16 +1067,16 @@ namespace Ruffles.Core
                                             ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 6] << 48) |
                                             ((ulong)payload.Array[payload.Offset + 1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + 7] << 56));
 
-                            // Ensure they dont reuse a IV
-                            if (_challengeInitializationVectors[userIv])
+                            lock (_challengeInitializationVectorsLock)
                             {
-                                // This IV is being reused.
-                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They were trying to reuse an IV");
-                                return;
+                                // Ensure they dont reuse a IV
+                                if (!_challengeInitializationVectors.TrySet(userIv))
+                                {
+                                    // This IV is being reused.
+                                    if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They were trying to reuse an IV");
+                                    return;
+                                }
                             }
-
-                            // Save the IV to the sliding window
-                            _challengeInitializationVectors[userIv] = true;
 
                             // Calculate the hash the user claims have a collision
                             ulong claimedHash = HashProvider.GetStableHash64(challengeUnixTime, counter, userIv);
