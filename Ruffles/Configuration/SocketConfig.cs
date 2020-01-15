@@ -313,11 +313,6 @@ namespace Ruffles.Configuration
                 messages.Add("Cannot have more than " + Constants.MAX_CHANNELS + " channels");
             }
 
-            if (LogicThreads <= 0)
-            {
-                messages.Add("At least 1 LogicThread has to be assigned");
-            }
-
             if (SocketThreads <= 0)
             {
                 messages.Add("At least 1 SocketThread has to be assigned");

@@ -793,7 +793,7 @@ namespace Ruffles.Core
 
                     // Save for resends
                     connection.PreConnectionChallengeIV = iv;
-
+                    
                     // Write IV
                     for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + Constants.RUFFLES_PROTOCOL_IDENTIFICATION.Length + (sizeof(ulong) * 2) + i] = ((byte)(iv >> (i * 8)));
 
@@ -865,6 +865,8 @@ namespace Ruffles.Core
             // Only alloc buffer if we dont have any processing threads.
             byte[] _incomingBuffer = Config.ProcessingThreads > 0 ? null : new byte[Config.MaxBufferSize];
             List<Socket> _selectSockets = new List<Socket>();
+            NetTime _lastLogicRun = NetTime.MinValue;
+            int socketSelect = Config.LogicThreads <= 0 ? Config.LogicDelay * 1000 : 1000 * 1000;
 
             while (IsRunning)
             {
@@ -880,7 +882,7 @@ namespace Ruffles.Core
                     _selectSockets.Add(_ipv6Socket);
                 }
 
-                Socket.Select(_selectSockets, null, null, 1000 * 1000);
+                Socket.Select(_selectSockets, null, null, socketSelect);
 
                 for (int i = 0; i < _selectSockets.Count; i++)
                 {
@@ -936,6 +938,22 @@ namespace Ruffles.Core
                     catch (Exception e)
                     {
                         if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                    }
+                }
+
+                // If we have no logic thread. Run logic on receive thread
+                if (Config.LogicThreads <= 0 && (NetTime.Now - _lastLogicRun).TotalMilliseconds > Config.LogicDelay)
+                {
+                    // Run logic
+
+                    if (Simulator != null)
+                    {
+                        Simulator.RunLoop();
+                    }
+
+                    for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
+                    {
+                        connection.Update();
                     }
                 }
             }
