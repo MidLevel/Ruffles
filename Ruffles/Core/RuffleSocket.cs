@@ -622,6 +622,8 @@ namespace Ruffles.Core
                 return false;
             }
 
+            // TODO: If payload has extra space. No need to realloc
+
             // Allocate the memory
             HeapMemory memory = MemoryManager.AllocHeapMemory((uint)payload.Count + 1);
 
@@ -684,6 +686,9 @@ namespace Ruffles.Core
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Error when sending broadcast: " + e);
             }
+
+            // Release memory
+            MemoryManager.DeAlloc(memory);
 
             return broadcastSuccess || multicastSuccess;
         }
