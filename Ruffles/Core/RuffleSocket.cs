@@ -276,8 +276,15 @@ namespace Ruffles.Core
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Not allocating processingQueue beucase ProcessingThreads is set to 0");
             }
 
-            if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ConnectionChallengeHistory + " challenge IV slots");
-            _challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory);
+            if (Config.TimeBasedConnectionChallenge)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ConnectionChallengeHistory + " challenge IV slots");
+                _challengeInitializationVectors = new SlidingSet<ulong>((int)Config.ConnectionChallengeHistory);
+            }
+            else
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Not allocating challenge IV cache beucase TimeBasedConnectionChallenge is set to false");
+            }
 
             if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating memory manager");
             MemoryManager = new MemoryManager(Config);
