@@ -922,7 +922,7 @@ namespace Ruffles.Core
                         else
                         {
                             // Process on thread
-                            HandlePacket(new ArraySegment<byte>(receiveBuffer, 0, receiveSize), _endpoint, true);
+                            HandlePacket(new ArraySegment<byte>(receiveBuffer, 0, size), _endpoint, true);
                         }
                     }
                     catch (SocketException e)
