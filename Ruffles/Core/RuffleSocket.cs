@@ -62,6 +62,8 @@ namespace Ruffles.Core
         /// </summary>
         /// <value><c>true</c> if is initialized; otherwise, <c>false</c>.</value>
         public bool IsInitialized { get; private set; }
+        // Lock for starting, stopping and shutting down
+        private readonly object _stateLock = new object();
         /// <summary>
         /// Whether or not the current OS supports IPv6
         /// </summary>
@@ -296,78 +298,81 @@ namespace Ruffles.Core
         /// </summary>
         public bool Start()
         {
-            if (IsRunning)
+            lock (_stateLock)
             {
-                throw new InvalidOperationException("Socket already started");
-            }
-
-            if (!IsInitialized)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Binding socket");
-                bool bindSuccess = Bind(Config.IPv4ListenAddress, Config.IPv6ListenAddress, Config.DualListenPort, Config.UseIPv6Dual);
-
-                if (!bindSuccess)
+                if (IsRunning)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to bind socket");
-                    return false;
+                    throw new InvalidOperationException("Socket already started");
                 }
-                else
+
+                if (!IsInitialized)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
-                    Initialize();
-                    IsInitialized = true;
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Binding socket");
+                    bool bindSuccess = Bind(Config.IPv4ListenAddress, Config.IPv6ListenAddress, Config.DualListenPort, Config.UseIPv6Dual);
+
+                    if (!bindSuccess)
+                    {
+                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to bind socket");
+                        return false;
+                    }
+                    else
+                    {
+                        if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
+                        Initialize();
+                        IsInitialized = true;
+                    }
                 }
-            }
 
-            // Create logic threads
-            for (int i = 0; i < Config.LogicThreads; i++)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating NetworkThread #" + i);
-
-                _threads.Add(new Thread(StartNetworkLogic)
+                // Create logic threads
+                for (int i = 0; i < Config.LogicThreads; i++)
                 {
-                    Name = "NetworkThread #" + i,
-                    IsBackground = true
-                });
-            }
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating NetworkThread #" + i);
 
-            // Create socket threads
-            for (int i = 0; i < Config.SocketThreads; i++)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating SocketThread #" + i);
+                    _threads.Add(new Thread(StartNetworkLogic)
+                    {
+                        Name = "NetworkThread #" + i,
+                        IsBackground = true
+                    });
+                }
 
-                _threads.Add(new Thread(StartSocketLogic)
+                // Create socket threads
+                for (int i = 0; i < Config.SocketThreads; i++)
                 {
-                    Name = "SocketThread #" + i,
-                    IsBackground = true
-                });
-            }
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating SocketThread #" + i);
 
-            for (int i = 0; i < Config.ProcessingThreads; i++)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating ProcessingThread #" + i);
+                    _threads.Add(new Thread(StartSocketLogic)
+                    {
+                        Name = "SocketThread #" + i,
+                        IsBackground = true
+                    });
+                }
 
-                _threads.Add(new Thread(StartPacketProcessing)
+                for (int i = 0; i < Config.ProcessingThreads; i++)
                 {
-                    Name = "ProcessingThread #" + i,
-                    IsBackground = true
-                });
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Creating ProcessingThread #" + i);
+
+                    _threads.Add(new Thread(StartPacketProcessing)
+                    {
+                        Name = "ProcessingThread #" + i,
+                        IsBackground = true
+                    });
+                }
+
+                // Set running state to true
+                IsRunning = true;
+
+                // Start threads
+                for (int i = 0; i < _threads.Count; i++)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting " + _threads[i].Name);
+
+                    _threads[i].Start();
+                }
+
+                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Started " + (Config.LogicThreads + Config.SocketThreads + Config.ProcessingThreads) + " threads");
+
+                return true;
             }
-
-            // Set running state to true
-            IsRunning = true;
-
-            // Start threads
-            for (int i = 0; i < _threads.Count; i++)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Starting " + _threads[i].Name);
-
-                _threads[i].Start();
-            }
-
-            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Started " + (Config.LogicThreads + Config.SocketThreads + Config.ProcessingThreads) + " threads");
-
-            return true;
         }
 
         /// <summary>
@@ -375,30 +380,33 @@ namespace Ruffles.Core
         /// </summary>
         public void Stop()
         {
-            if (!IsRunning)
+            lock (_stateLock)
             {
-                throw new InvalidOperationException("Cannot stop a non running socket");
+                if (!IsRunning)
+                {
+                    throw new InvalidOperationException("Cannot stop a non running socket");
+                }
+
+                // Disconnect all clients
+                for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
+                {
+                    connection.DisconnectInternal(true, false);
+                }
+
+                IsRunning = false;
+
+                int threadCount = _threads.Count;
+
+                for (int i = _threads.Count - 1; i >= 0; i--)
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Joining " + _threads[i].Name);
+
+                    _threads[i].Join();
+                    _threads.RemoveAt(i);
+                }
+
+                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Joined " + threadCount + " threads");
             }
-
-            // Disconnect all clients
-            for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
-            {
-                connection.DisconnectInternal(true, false);
-            }
-
-            IsRunning = false;
-
-            int threadCount = _threads.Count;
-
-            for (int i = _threads.Count - 1; i >= 0; i--)
-            {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Joining " + _threads[i].Name);
-
-                _threads[i].Join();
-                _threads.RemoveAt(i);
-            }
-
-            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Joined " + threadCount + " threads");
         }
 
         /// <summary>
@@ -406,51 +414,54 @@ namespace Ruffles.Core
         /// </summary>
         public void Shutdown()
         {
-            if (!IsInitialized)
+            lock (_stateLock)
             {
-                throw new InvalidOperationException("Cannot shutdown a non initialized socket");
+                if (!IsInitialized)
+                {
+                    throw new InvalidOperationException("Cannot shutdown a non initialized socket");
+                }
+
+                IsInitialized = false;
+
+                if (IsRunning)
+                {
+                    Stop();
+                }
+
+                // Release simulator
+                Simulator = null;
+
+                while (_userEventQueue != null && _userEventQueue.TryDequeue(out NetworkEvent networkEvent))
+                {
+                    // Recycle all packets to prevent leak detection
+                    networkEvent.Recycle();
+                }
+
+                // Release user queue
+                _userEventQueue = null;
+
+                while (_processingQueue != null && _processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
+                {
+                    // Dealloc all the pending memory to prevent leak detection
+                    MemoryManager.DeAlloc(packet.Item1);
+                }
+
+                // Release processing queue
+                _processingQueue = null;
+
+                // Release IV cache
+                _challengeInitializationVectors = null;
+
+                // Release channel pool
+                ChannelPool = null;
+
+                // Close sockets
+                _ipv4Socket.Close();
+                _ipv6Socket.Close();
+
+                // Release ALL memory to GC safely. If this is not done the MemoryManager will see it as a leak
+                MemoryManager.Release();
             }
-
-            IsInitialized = false;
-
-            if (IsRunning)
-            {
-                Stop();
-            }
-
-            // Release simulator
-            Simulator = null;
-
-            while (_userEventQueue != null && _userEventQueue.TryDequeue(out NetworkEvent networkEvent))
-            {
-                // Recycle all packets to prevent leak detection
-                networkEvent.Recycle();
-            }
-
-            // Release user queue
-            _userEventQueue = null;
-
-            while (_processingQueue != null && _processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
-            {
-                // Dealloc all the pending memory to prevent leak detection
-                MemoryManager.DeAlloc(packet.Item1);
-            }
-
-            // Release processing queue
-            _processingQueue = null;
-
-            // Release IV cache
-            _challengeInitializationVectors = null;
-
-            // Release channel pool
-            ChannelPool = null;
-
-            // Close sockets
-            _ipv4Socket.Close();
-            _ipv6Socket.Close();
-
-            // Release ALL memory to GC safely. If this is not done the MemoryManager will see it as a leak
-            MemoryManager.Release();
         }
 
         private bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool ipv6Dual)
