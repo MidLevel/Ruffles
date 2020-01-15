@@ -1,20 +1,32 @@
-﻿using System;
-
-namespace Ruffles.Messaging
+﻿namespace Ruffles.Messaging
 {
+    // TODO: Future proof this. Enum.IsDefined is too slow. Maybe precompute array of valid types?
     internal static class HeaderPacker
     {
         internal static byte Pack(MessageType messageType)
         {
-            if (!Enum.IsDefined(typeof(MessageType), messageType) || messageType == MessageType.Unknown)
+            switch (messageType)
             {
-                throw new ArgumentException("Has to be a valid MessageType", nameof(messageType));
+                case MessageType.ConnectionRequest:
+                case MessageType.ChallengeRequest:
+                case MessageType.ChallengeResponse:
+                case MessageType.Hail:
+                case MessageType.HailConfirmed:
+                case MessageType.Heartbeat:
+                case MessageType.Data:
+                case MessageType.Disconnect:
+                case MessageType.Ack:
+                case MessageType.Merge:
+                case MessageType.UnconnectedData:
+                case MessageType.MTURequest:
+                case MessageType.MTUResponse:
+                case MessageType.Broadcast:
+                    // First 4 bits is type
+                    return (byte)(((byte)messageType) & 15);
+                default:
+                    // First 4 bits is type
+                    return ((byte)MessageType.Unknown) & 15;
             }
-
-            // First 4 bits is type
-            byte header = (byte)(((byte)messageType) & 15);
-
-            return header;
         }
 
         internal static void Unpack(byte header, out MessageType messageType)
@@ -22,13 +34,29 @@ namespace Ruffles.Messaging
             // Get first 4 bits
             byte type = (byte)(header & 15);
 
-            if (!Enum.IsDefined(typeof(MessageType), type))
+            switch (type)
             {
-                messageType = MessageType.Unknown;   
-            }
-            else
-            {
-                messageType = (MessageType)type;
+                case (byte)MessageType.ConnectionRequest:
+                case (byte)MessageType.ChallengeRequest:
+                case (byte)MessageType.ChallengeResponse:
+                case (byte)MessageType.Hail:
+                case (byte)MessageType.HailConfirmed:
+                case (byte)MessageType.Heartbeat:
+                case (byte)MessageType.Data:
+                case (byte)MessageType.Disconnect:
+                case (byte)MessageType.Ack:
+                case (byte)MessageType.Merge:
+                case (byte)MessageType.UnconnectedData:
+                case (byte)MessageType.MTURequest:
+                case (byte)MessageType.MTUResponse:
+                case (byte)MessageType.Broadcast:
+                    // First 4 bits is type
+                    messageType = (MessageType)type;
+                    return;
+                default:
+                    // First 4 bits is type
+                    messageType = MessageType.Unknown;
+                    return;
             }
         }
     }
