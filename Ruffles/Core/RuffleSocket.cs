@@ -462,9 +462,19 @@ namespace Ruffles.Core
                 // Release channel pool
                 ChannelPool = null;
 
-                // Close sockets
-                _ipv4Socket.Close();
-                _ipv6Socket.Close();
+                if (_ipv4Socket != null)
+                {
+                    // Close socket
+                    _ipv4Socket.Close();
+                    _ipv4Socket = null;
+                }
+
+                if (_ipv6Socket != null)
+                {
+                    // Close socket
+                    _ipv6Socket.Close();
+                    _ipv6Socket = null;
+                }
 
                 // Release ALL memory to GC safely. If this is not done the MemoryManager will see it as a leak
                 MemoryManager.Release();
