@@ -45,7 +45,6 @@ namespace Ruffles.Core
         internal readonly SocketConfig Config;
 
         private readonly List<Thread> _threads = new List<Thread>();
-        private bool _initialized;
 
         /// <summary>
         /// Gets a value indicating whether this <see cref="T:Ruffles.Core.RuffleSocket"/> is running.
@@ -56,7 +55,13 @@ namespace Ruffles.Core
         /// Gets a value indicating whether this <see cref="T:Ruffles.Core.RuffleSocket"/> is terminated.
         /// </summary>
         /// <value><c>true</c> if is terminated; otherwise, <c>false</c>.</value>
-        public bool IsTerminated { get; private set; }
+        [Obsolete("Use IsIntiailized instead to determine whether this socket is terminated or not")]
+        public bool IsTerminated => !IsInitialized;
+        /// <summary>
+        /// Gets a value indicating whether this <see cref="T:Ruffles.Core.RuffleSocket"/> is initialized.
+        /// </summary>
+        /// <value><c>true</c> if is initialized; otherwise, <c>false</c>.</value>
+        public bool IsInitialized { get; private set; }
         /// <summary>
         /// Whether or not the current OS supports IPv6
         /// </summary>
@@ -296,7 +301,7 @@ namespace Ruffles.Core
                 throw new InvalidOperationException("Socket already started");
             }
 
-            if (!_initialized)
+            if (!IsInitialized)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Binding socket");
                 bool bindSuccess = Bind(Config.IPv4ListenAddress, Config.IPv6ListenAddress, Config.DualListenPort, Config.UseIPv6Dual);
@@ -310,7 +315,7 @@ namespace Ruffles.Core
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket was successfully bound");
                     Initialize();
-                    _initialized = true;
+                    IsInitialized = true;
                 }
             }
 
@@ -401,19 +406,46 @@ namespace Ruffles.Core
         /// </summary>
         public void Shutdown()
         {
-            if (!_initialized)
+            if (!IsInitialized)
             {
                 throw new InvalidOperationException("Cannot shutdown a non initialized socket");
             }
 
-            IsTerminated = true;
-            _initialized = false;
+            IsInitialized = false;
 
             if (IsRunning)
             {
                 Stop();
             }
 
+            // Release simulator
+            Simulator = null;
+
+            while (_userEventQueue != null && _userEventQueue.TryDequeue(out NetworkEvent networkEvent))
+            {
+                // Recycle all packets to prevent leak detection
+                networkEvent.Recycle();
+            }
+
+            // Release user queue
+            _userEventQueue = null;
+
+            while (_processingQueue != null && _processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
+            {
+                // Dealloc all the pending memory to prevent leak detection
+                MemoryManager.DeAlloc(packet.Item1);
+            }
+
+            // Release processing queue
+            _processingQueue = null;
+
+            // Release IV cache
+            _challengeInitializationVectors = null;
+
+            // Release channel pool
+            ChannelPool = null;
+
+            // Close sockets
             _ipv4Socket.Close();
             _ipv6Socket.Close();
 
