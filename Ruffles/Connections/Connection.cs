@@ -407,7 +407,7 @@ namespace Ruffles.Connections
                         for (byte i = 0; i < channelTypes.Count; i++)
                         {
                             // Assign the channel
-                            Channels[i] = Socket.ChannelPool.GetChannel((ChannelType)channelTypes.Array[channelTypes.Offset + i], i, this, Config, MemoryManager);
+                            Channels[i] = Socket.ChannelPool.GetChannel(ChannelTypeUtils.FromByte(channelTypes.Array[channelTypes.Offset + i]), i, this, Config, MemoryManager);
                         }
 
                         // Change state to connected
@@ -774,7 +774,7 @@ namespace Ruffles.Connections
             // Write the channel types
             for (byte i = 0; i < (byte)Config.ChannelTypes.Length; i++)
             {
-                memory.Buffer[2 + i] = (byte)Config.ChannelTypes[i];
+                memory.Buffer[2 + i] = ChannelTypeUtils.ToByte(Config.ChannelTypes[i]);
             }
 
             // Send the response

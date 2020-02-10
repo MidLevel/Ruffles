@@ -2,6 +2,7 @@
 using System.Net;
 using Ruffles.Channeling;
 using Ruffles.Simulation;
+using Ruffles.Utils;
 
 namespace Ruffles.Configuration
 {
@@ -41,7 +42,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The channels to pool.
         /// </summary>
-        public ChannelType PooledChannels = ChannelType.Reliable | ChannelType.ReliableFragmented | ChannelType.ReliableOrdered | ChannelType.ReliableSequenced | ChannelType.ReliableSequencedFragmented | ChannelType.Unreliable | ChannelType.UnreliableOrdered | ChannelType.UnreliableRaw;
+        public ChannelType PooledChannels = (ChannelType)~0; // Use ~0 to make Unity's Serialization happy.
 
         // Connection
         /// <summary>
@@ -316,6 +317,14 @@ namespace Ruffles.Configuration
             if (SocketThreads <= 0)
             {
                 messages.Add("At least 1 SocketThread has to be assigned");
+            }
+
+            for (int i = 0; i < ChannelTypes.Length; i++)
+            {
+                if (!ChannelTypeUtils.IsValidChannelType(ChannelTypes[i]))
+                {
+                    messages.Add("ChannelType at index " + i + " is not a valid ChannelType");
+                }
             }
 
             return messages;

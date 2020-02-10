@@ -1269,7 +1269,6 @@ namespace Ruffles.Core
                             // Read the amount of channels
                             byte channelCount = payload.Array[payload.Offset + 1];
 
-
                             if (channelCount > Constants.MAX_CHANNELS)
                             {
                                 // Too many channels
@@ -1289,7 +1288,7 @@ namespace Ruffles.Core
                             {
                                 byte channelType = payload.Array[payload.Offset + 2 + i];
 
-                                if (!Enum.IsDefined(typeof(ChannelType), channelType))
+                                if (!ChannelTypeUtils.IsValidChannelType(channelType))
                                 {
                                     // Unknown channel type. Disconnect.
                                     if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogError("Client " + endpoint + " sent an invalid ChannelType");
