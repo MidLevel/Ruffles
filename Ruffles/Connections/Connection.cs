@@ -645,7 +645,7 @@ namespace Ruffles.Connections
 
                     // Solve the hashcash
                     // TODO: Solve thread
-                    while (ChallengeDifficulty > 0 && ((workingValue << ((sizeof(ulong) * 8) - difficulty)) >> ((sizeof(ulong) * 8) - difficulty)) != 0)
+                    while (difficulty > 0 && ((workingValue << ((sizeof(ulong) * 8) - difficulty)) >> ((sizeof(ulong) * 8) - difficulty)) != 0)
                     {
                         additionsRequired++;
                         workingValue = HashProvider.GetStableHash64(challenge + additionsRequired);
