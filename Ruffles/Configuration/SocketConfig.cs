@@ -95,7 +95,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The amount of packet processing threads to start.
         /// </summary>
-        public int ProcessingThreads = 1;
+        public int ProcessingThreads = 0;
 
         // Bandwidth
         /// <summary>
