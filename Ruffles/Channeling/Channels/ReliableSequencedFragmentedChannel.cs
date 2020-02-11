@@ -456,16 +456,18 @@ namespace Ruffles.Channeling.Channels
                         {
                             if (value.Fragments.Pointers[j] != null)
                             {
-                                if ((NetTime.Now - ((PendingOutgoingFragment)value.Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)value.Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
+                                PendingOutgoingFragment fragment = (PendingOutgoingFragment)value.Fragments.Pointers[j];
+
+                                if ((NetTime.Now - fragment.LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - fragment.LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                                 {
-                                    if (((PendingOutgoingFragment)value.Fragments.Pointers[j]).Attempts >= config.ReliabilityMaxResendAttempts)
+                                    if (fragment.Attempts >= config.ReliabilityMaxResendAttempts)
                                     {
                                         // If they don't ack the message, disconnect them
                                         timeout = true;
                                         return;
                                     }
 
-                                    value.Fragments.Pointers[j] = new PendingOutgoingFragment()
+                                    fragment = new PendingOutgoingFragment()
                                     {
                                         Attempts = (ushort)(((PendingOutgoingFragment)value.Fragments.Pointers[j]).Attempts + 1),
                                         LastSent = NetTime.Now,
@@ -473,7 +475,9 @@ namespace Ruffles.Channeling.Channels
                                         Memory = ((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory
                                     };
 
-                                    connection.SendInternal(new ArraySegment<byte>(((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.Buffer, (int)((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.VirtualOffset, (int)((PendingOutgoingFragment)value.Fragments.Pointers[j]).Memory.VirtualCount), false);
+                                    value.Fragments.Pointers[j] = fragment;
+
+                                    connection.SendInternal(new ArraySegment<byte>(fragment.Memory.Buffer, (int)fragment.Memory.VirtualOffset, (int)fragment.Memory.VirtualCount), false);
                                 }
                             }
                         }
