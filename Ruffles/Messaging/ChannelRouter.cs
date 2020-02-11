@@ -151,20 +151,23 @@ namespace Ruffles.Messaging
 
         internal static void HandlePacketAckedByRemote(Connection connection, byte channelId, ulong notificationKey)
         {
-            connection.Socket.PublishEvent(new NetworkEvent()
+            if (connection.Socket.Config.EnableAckNotifications)
             {
-                AllowUserRecycle = false,
-                ChannelId = channelId,
-                Connection = connection,
-                NotificationKey = notificationKey,
-                Socket = connection.Socket,
-                Data = new ArraySegment<byte>(),
-                EndPoint = connection.EndPoint,
-                InternalMemory = null,
-                MemoryManager = null,
-                SocketReceiveTime = NetTime.Now,
-                Type = NetworkEventType.AckNotification
-            });
+                connection.Socket.PublishEvent(new NetworkEvent()
+                {
+                    AllowUserRecycle = false,
+                    ChannelId = channelId,
+                    Connection = connection,
+                    NotificationKey = notificationKey,
+                    Socket = connection.Socket,
+                    Data = new ArraySegment<byte>(),
+                    EndPoint = connection.EndPoint,
+                    InternalMemory = null,
+                    MemoryManager = connection.Socket.MemoryManager,
+                    SocketReceiveTime = NetTime.Now,
+                    Type = NetworkEventType.AckNotification
+                });
+            }
         }
     }
 }

@@ -293,6 +293,10 @@ namespace Ruffles.Configuration
         /// Whether or not packet merging should be enabled.
         /// </summary>
         public bool EnablePacketMerging = true;
+        /// <summary>
+        /// Whether or not acks should be reported to the user.
+        /// </summary>
+        public bool EnableAckNotifications = true;
 
         public List<string> GetInvalidConfiguration()
         {
