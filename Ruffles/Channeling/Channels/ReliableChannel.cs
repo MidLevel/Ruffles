@@ -287,7 +287,7 @@ namespace Ruffles.Channeling.Channels
                     {
                         if ((NetTime.Now - value.LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - value.LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                         {
-                            if (value.Attempts > config.ReliabilityMaxResendAttempts)
+                            if (value.Attempts >= config.ReliabilityMaxResendAttempts)
                             {
                                 // If they don't ack the message, disconnect them
                                 timeout = true;

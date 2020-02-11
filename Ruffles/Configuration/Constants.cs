@@ -12,5 +12,6 @@ namespace Ruffles.Configuration
         internal static readonly int MAX_CHANNELS = byte.MaxValue;
         internal static readonly int MAX_FRAGMENTS = 32768;
         internal static readonly IPAddress IPv6AllDevicesMulticastAddress = IPAddress.Parse("FF02:0:0:0:0:0:0:1");
+        internal static readonly int MINIMUM_MTU = 512;
     }
 }

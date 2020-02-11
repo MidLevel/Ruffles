@@ -205,7 +205,7 @@ namespace Ruffles.Channeling.Channels
             // IsFinal is the most significant bit
             bool isFinal = (ushort)((encodedFragment & 32768) >> 15) == 1;
 
-            if (fragment > config.MaxFragments)
+            if (fragment >= config.MaxFragments)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("FragmentId was too large. [FragmentId=" + fragment + "] [Config.MaxFragments=" + config.MaxFragments + "]. The fragment was silently dropped, expect a timeout.");
                 return null;
@@ -378,7 +378,7 @@ namespace Ruffles.Channeling.Channels
             // Calculate the amount of fragments required
             int fragmentsRequired = (payload.Count + (connection.MTU - 1)) / connection.MTU;
 
-            if (fragmentsRequired > config.MaxFragments)
+            if (fragmentsRequired >= config.MaxFragments)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Tried to create message that was too large. [Size=" + payload.Count + "] [FragmentsRequired=" + fragmentsRequired + "] [Config.MaxFragments=" + config.MaxFragments + "]");
                 return;
@@ -606,7 +606,7 @@ namespace Ruffles.Channeling.Channels
                             {
                                 if ((NetTime.Now - ((PendingOutgoingFragment)value.Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)value.Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                                 {
-                                    if (((PendingOutgoingFragment)value.Fragments.Pointers[j]).Attempts > config.ReliabilityMaxResendAttempts)
+                                    if (((PendingOutgoingFragment)value.Fragments.Pointers[j]).Attempts >= config.ReliabilityMaxResendAttempts)
                                     {
                                         // If they don't ack the message, disconnect them
                                         timeout = true;

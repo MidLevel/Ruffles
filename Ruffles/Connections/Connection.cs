@@ -52,7 +52,7 @@ namespace Ruffles.Connections
         public readonly RuffleSocket Socket;
 
         private ulong ConnectionChallenge { get; set; }
-        private byte ChallengeDifficulty { get; set; }
+        private int ChallengeDifficulty { get; set; }
         private ulong ChallengeAnswer { get; set; }
 
         /// <summary>
@@ -84,33 +84,33 @@ namespace Ruffles.Connections
         /// Gets the estimated smoothed roundtrip.
         /// </summary>
         /// <value>The estimated smoothed roundtrip.</value>
-        public uint SmoothRoundtrip { get; private set; }
+        public int SmoothRoundtrip { get; private set; }
         /// <summary>
         /// Gets the mean roundtrip.
         /// </summary>
         /// <value>The roundtrip.</value>
-        public uint Roundtrip { get; private set; }
+        public int Roundtrip { get; private set; }
         /// <summary>
         /// Gets the roundtrip varience.
         /// </summary>
         /// <value>The roundtrip varience.</value>
-        public uint RoundtripVarience { get; private set; }
+        public int RoundtripVarience { get; private set; }
         /// <summary>
         /// Gets the lowest roundtrip time recorded.
         /// </summary>
         /// <value>The lowest roundtrip.</value>
-        public uint LowestRoundtrip { get; private set; }
+        public int LowestRoundtrip { get; private set; }
         /// <summary>
         /// Gets the highest roundtrip varience recorded.
         /// </summary>
         /// <value>The highest roundtrip varience.</value>
-        public uint HighestRoundtripVarience { get; private set; }
+        public int HighestRoundtripVarience { get; private set; }
 
         /// <summary>
         /// Gets the maximum amount of bytes that can be sent in a single message.
         /// </summary>
         /// <value>The maximum transmission unit.</value>
-        public ushort MTU
+        public int MTU
         {
             get
             {
@@ -130,7 +130,7 @@ namespace Ruffles.Connections
             }
         }
         // Backing field for MTU property
-        private ushort _mtu;
+        private int _mtu;
         /// <summary>
         /// Called when the MTU changes.
         /// </summary>
@@ -138,7 +138,7 @@ namespace Ruffles.Connections
         /// <summary>
         /// Delegate representing a MTU change.
         /// </summary>
-        public delegate void MTUChangedDelegate(ushort MTU);
+        public delegate void MTUChangedDelegate(int MTU);
 
         private readonly UnreliableOrderedChannel HeartbeatChannel;
         private readonly MessageMerger Merger;
@@ -152,7 +152,7 @@ namespace Ruffles.Connections
 
 
         // Handshake resend values
-        internal byte HandshakeResendAttempts;
+        internal int HandshakeResendAttempts;
         internal NetTime HandshakeLastSendTime;
 
         private MemoryManager MemoryManager => Socket.MemoryManager;
@@ -359,11 +359,11 @@ namespace Ruffles.Connections
 
             if (SmoothRoundtrip == 0)
             {
-                SmoothRoundtrip = (uint)((1 - 0.125) + 0.125 * sample);
+                SmoothRoundtrip = (int)((1 - 0.125) + 0.125 * sample);
             }
             else
             {
-                SmoothRoundtrip = (uint)((1 - 0.125) * SmoothRoundtrip + 0.125 * sample);
+                SmoothRoundtrip = (int)((1 - 0.125) * SmoothRoundtrip + 0.125 * sample);
             }
 
             RoundtripVarience -= (RoundtripVarience / 4);
@@ -533,7 +533,7 @@ namespace Ruffles.Connections
                 if (State == ConnectionState.Connected)
                 {
                     // Calculate the new MTU
-                    uint attemptedMtu = (uint)(MTU * Config.MTUGrowthFactor);
+                    int attemptedMtu = (int)(MTU * Config.MTUGrowthFactor);
 
                     if (attemptedMtu > Config.MaximumMTU)
                     {
@@ -859,7 +859,7 @@ namespace Ruffles.Connections
             for (byte i = 0; i < sizeof(ulong); i++) memory.Buffer[1 + i] = ((byte)(ConnectionChallenge >> (i * 8)));
 
             // Write the challenge difficulty
-            memory.Buffer[1 + sizeof(ulong)] = ChallengeDifficulty;
+            memory.Buffer[1 + sizeof(ulong)] = (byte)ChallengeDifficulty;
 
             // Send the challenge
             SendInternal(new ArraySegment<byte>(memory.Buffer, 0, (int)memory.VirtualCount), true);
@@ -916,7 +916,7 @@ namespace Ruffles.Connections
             {
                 if (State == ConnectionState.Connected && MTU < Config.MaximumMTU && MTUStatus.Attempts < Config.MaxMTUAttempts && (NetTime.Now - MTUStatus.LastAttempt).TotalMilliseconds > Config.MTUAttemptDelay)
                 {
-                    uint attemptedMtu = (uint)(MTU * Config.MTUGrowthFactor);
+                    int attemptedMtu = (int)(MTU * Config.MTUGrowthFactor);
 
                     if (attemptedMtu > Config.MaximumMTU)
                     {
@@ -992,7 +992,7 @@ namespace Ruffles.Connections
                 {
                     case ConnectionState.RequestingConnection:
                         {
-                            if ((!Config.TimeBasedConnectionChallenge || PreConnectionChallengeSolved) && (NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.ConnectionRequestMinResendDelay && HandshakeResendAttempts < Config.MaxConnectionRequestResends)
+                            if ((!Config.TimeBasedConnectionChallenge || PreConnectionChallengeSolved) && (NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.ConnectionRequestMinResendDelay && HandshakeResendAttempts <= Config.MaxConnectionRequestResends)
                             {
                                 HandshakeResendAttempts++;
                                 HandshakeLastSendTime = NetTime.Now;
@@ -1041,7 +1041,7 @@ namespace Ruffles.Connections
                         break;
                     case ConnectionState.RequestingChallenge:
                         {
-                            if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts < Config.MaxHandshakeResends)
+                            if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts <= Config.MaxHandshakeResends)
                             {
                                 // Resend challenge request
                                 SendChallengeRequest();
@@ -1050,7 +1050,7 @@ namespace Ruffles.Connections
                         break;
                     case ConnectionState.SolvingChallenge:
                         {
-                            if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts < Config.MaxHandshakeResends)
+                            if ((NetTime.Now - HandshakeLastSendTime).TotalMilliseconds > Config.HandshakeResendDelay && HandshakeResendAttempts <= Config.MaxHandshakeResends)
                             {
                                 // Resend response
                                 SendChallengeResponse();
@@ -1059,7 +1059,7 @@ namespace Ruffles.Connections
                         break;
                     case ConnectionState.Connected:
                         {
-                            if (!HailStatus.HasAcked && (NetTime.Now - HailStatus.LastAttempt).TotalMilliseconds > Config.HandshakeResendDelay && HailStatus.Attempts < Config.MaxHandshakeResends)
+                            if (!HailStatus.HasAcked && (NetTime.Now - HailStatus.LastAttempt).TotalMilliseconds > Config.HandshakeResendDelay && HailStatus.Attempts <= Config.MaxHandshakeResends)
                             {
                                 // Resend hail
                                 SendHail();

@@ -21,24 +21,24 @@ namespace Ruffles.Configuration
         /// The size of the global event queue. 
         /// If this gets full no more events can be processed and the application will freeze until it is polled.
         /// </summary>
-        public ushort EventQueueSize = 1024 * 8;
+        public int EventQueueSize = 1024 * 8;
         public int ProcessingQueueSize = 1024 * 8;
         /// <summary>
         /// The pool size of the HeapPointers pool.
         /// </summary>
-        public ushort HeapPointersPoolSize = 1024;
+        public int HeapPointersPoolSize = 1024;
         /// <summary>
         /// The pool size of the HeapMemory pool.
         /// </summary>
-        public ushort HeapMemoryPoolSize = 1024;
+        public int HeapMemoryPoolSize = 1024;
         /// <summary>
         /// The pool size of the MemoryWrapper pool.
         /// </summary>
-        public ushort MemoryWrapperPoolSize = 1024;
+        public int MemoryWrapperPoolSize = 1024;
         /// <summary>
         /// The pool size of every channel pool.
         /// </summary>
-        public ushort ChannelPoolSize = 1024;
+        public int ChannelPoolSize = 1024;
         /// <summary>
         /// The channels to pool.
         /// </summary>
@@ -56,7 +56,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The port that will be used to listen on both IPv4 and IPv6 if UseDualMode is turned on.
         /// </summary>
-        public ushort DualListenPort = 0;
+        public int DualListenPort = 0;
         /// <summary>
         /// Whether or not the socket will listen on IPv4 and IPv6 in dual mode on the same port.
         /// </summary>
@@ -68,13 +68,13 @@ namespace Ruffles.Configuration
         /// <summary>
         /// Whether or not broadcast messages should be allowed.
         /// </summary>
-        public bool AllowBroadcasts = true;
+        public bool AllowBroadcasts = false;
 
         // Performance
         /// <summary>
         /// The max socket block time in milliseconds. This will affect how long the internal loop will block.
         /// </summary>
-        public ushort LogicDelay = 50;
+        public int LogicDelay = 50;
         /// <summary>
         /// Whether or not to reuse channels. Disabling this has an impact on memory and CPU.
         /// If this is enabled, all channels are automatically recycled when an connection dies.
@@ -98,11 +98,11 @@ namespace Ruffles.Configuration
         /// The maximum size of a merged packet. 
         /// Increasing this increases the memory usage for each connection.
         /// </summary>
-        public ushort MaxMergeMessageSize = 1024;
+        public int MaxMergeMessageSize = 1024;
         /// <summary>
         /// The maximum delay before merged packets are sent.
         /// </summary>
-        public ulong MaxMergeDelay = 100;
+        public int MaxMergeDelay = 100;
         /// <summary>
         /// Whether or not to enable merged acks for non fragmented channels.
         /// </summary>
@@ -110,17 +110,17 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The amount of bytes to use for merged acks.
         /// </summary>
-        public byte MergedAckBytes = 8;
+        public int MergedAckBytes = 8;
 
         // Fragmentation
         /// <summary>
         /// The maximum MTU size that will be attempted using path MTU.
         /// </summary>
-        public ushort MaximumMTU = 4096;
+        public int MaximumMTU = 4096;
         /// <summary>
         /// The minimum MTU size. This is the default maximum packet size.
         /// </summary>
-        public ushort MinimumMTU = 512;
+        public int MinimumMTU = 512;
         /// <summary>
         /// Whether or not to enable path MTU.
         /// </summary>
@@ -128,11 +128,11 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The maximum amount of MTU requests to attempt.
         /// </summary>
-        public byte MaxMTUAttempts = 8;
+        public int MaxMTUAttempts = 8;
         /// <summary>
         /// The delay in milliseconds between MTU resend attempts.
         /// </summary>
-        public ulong MTUAttemptDelay = 1000;
+        public int MTUAttemptDelay = 1000;
         /// <summary>
         /// The MTU growth factor.
         /// </summary>
@@ -141,66 +141,66 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The maximum amount of fragments allowed to be used.
         /// </summary>
-        public ushort MaxFragments = 512;
+        public int MaxFragments = 512;
 
         // Memory
         /// <summary>
         /// The maxmimum packet size. Should be larger than the MTU.
         /// </summary>
-        public ushort MaxBufferSize = 1024 * 5;
+        public int MaxBufferSize = 1024 * 5;
 
         // Timeouts
         /// <summary>
         /// The amount of milliseconds from the connection request that the connection has to solve the challenge and complete the connection handshake.
         /// Note that this timeout only starts counting after the connection request has been approved.
         /// </summary>
-        public ulong HandshakeTimeout = 20_000;
+        public int HandshakeTimeout = 20_000;
         /// <summary>
         /// The amount of milliseconds of packet silence before a already connected connection will be disconnected.
         /// </summary>
-        public ulong ConnectionTimeout = 20_000;
+        public int ConnectionTimeout = 20_000;
         /// <summary>
         /// The amount milliseconds between heartbeat keep-alive packets are sent.
         /// </summary>
-        public ulong HeartbeatDelay = 5000;
+        public int HeartbeatDelay = 5000;
 
         // Handshake resends
         /// <summary>
         /// The amount of milliseconds between resends during the handshake process.
         /// </summary>
-        public ulong HandshakeResendDelay = 500;
+        public int HandshakeResendDelay = 500;
         /// <summary>
         /// The maximum amount of packet resends to perform per stage of the handshake process.
         /// </summary>
-        public byte MaxHandshakeResends = 20;
+        public int MaxHandshakeResends = 20;
 
         // Connection request resends
         /// <summary>
         /// The delay between connection request resends in milliseconds.
         /// </summary>
-        public ulong ConnectionRequestMinResendDelay = 500;
+        public int ConnectionRequestMinResendDelay = 500;
         /// <summary>
         /// The maximum amount of connection requests to be sent.
         /// </summary>
-        public byte MaxConnectionRequestResends = 5;
+        public int MaxConnectionRequestResends = 5;
         /// <summary>
         /// The amount of time in milliseconds before a pending connection times out.
         /// </summary>
-        public ulong ConnectionRequestTimeout = 5000;
+        public int ConnectionRequestTimeout = 5000;
 
         // Security
         /// <summary>
         /// The difficulty of the challenge in bits. Higher difficulties exponentially increase the solve time.
         /// </summary>
-        public byte ChallengeDifficulty = 20;
+        public int ChallengeDifficulty = 20;
         /// <summary>
         /// The amount of successfull initialization vectors to keep for initial connection requests.
         /// </summary>
-        public uint ConnectionChallengeHistory = 2048;
+        public int ConnectionChallengeHistory = 2048;
         /// <summary>
         /// The connection request challenge time window in seconds.
         /// </summary>
-        public ulong ConnectionChallengeTimeWindow = 60 * 5;
+        public int ConnectionChallengeTimeWindow = 60 * 5;
         /// <summary>
         /// Whether or not to enable time based connection challenge. 
         /// Enabling this will prevent slot filling attacks but requires the connector and connection receivers times to be synced with a diff of
@@ -214,7 +214,7 @@ namespace Ruffles.Configuration
         /// The amplification prevention padding of handshake requests. 
         /// All handshake packets sent by the connector will be of this size.
         /// </summary>
-        public ushort AmplificationPreventionHandshakePadding = 512;
+        public int AmplificationPreventionHandshakePadding = 512;
 
         // Channels
         /// <summary>
@@ -226,15 +226,15 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The window size for reliable packets, reliable acks and unrelaible acks.
         /// </summary>
-        public ushort ReliabilityWindowSize = 512;
+        public int ReliabilityWindowSize = 512;
         /// <summary>
         /// The window size for last ack times.
         /// </summary>
-        public ushort ReliableAckFlowWindowSize = 1024;
+        public int ReliableAckFlowWindowSize = 1024;
         /// <summary>
         /// The maximum amount of resends reliable channels will attempt per packet before timing the connection out.
         /// </summary>
-        public ulong ReliabilityMaxResendAttempts = 30;
+        public int ReliabilityMaxResendAttempts = 30;
         /// <summary>
         /// The resend time multiplier. The resend delay for reliable packets is (RTT * ReliabilityResendRoundtripMultiplier).
         /// This is to account for flucuations in the network.
@@ -243,11 +243,11 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The minimum delay before a reliale packet is resent.
         /// </summary>
-        public ulong ReliabilityMinPacketResendDelay = 100;
+        public int ReliabilityMinPacketResendDelay = 100;
         /// <summary>
         /// The minimum delay before an ack is resent.
         /// </summary>
-        public ulong ReliabilityMinAckResendDelay = 100;
+        public int ReliabilityMinAckResendDelay = 100;
 
         // Simulation
         /// <summary>
@@ -294,11 +294,6 @@ namespace Ruffles.Configuration
         {
             List<string> messages = new List<string>();
 
-            if (MaxFragments > Constants.MAX_FRAGMENTS)
-            {
-                messages.Add("MaxFragments cannot be greater than " + Constants.MAX_FRAGMENTS);
-            }
-
             if (MaxMergeMessageSize > MaximumMTU)
             {
                 messages.Add("MaxMergeMessageSize cannot be greater than MaxMessageSize");
@@ -316,7 +311,17 @@ namespace Ruffles.Configuration
 
             if (SocketThreads <= 0)
             {
-                messages.Add("At least 1 SocketThread has to be assigned");
+                messages.Add("SocketThreads cannot be less than 1");
+            }
+
+            if (LogicThreads < 0)
+            {
+                messages.Add("LogicThreads cannot be less than 0. Use 0 to process on the SocketThread");
+            }
+
+            if (ProcessingThreads < 0)
+            {
+                messages.Add("ProcessingThreads cannot be less than 0. Use 0 to process on the SocketThread");
             }
 
             for (int i = 0; i < ChannelTypes.Length; i++)
@@ -325,6 +330,226 @@ namespace Ruffles.Configuration
                 {
                     messages.Add("ChannelType at index " + i + " is not a valid ChannelType");
                 }
+            }
+
+            if (DualListenPort > ushort.MaxValue)
+            {
+                messages.Add("DualListenPort cannot be greater than " + ushort.MaxValue);
+            }
+
+            if (DualListenPort < 0)
+            {
+                messages.Add("DualListenPort cannot be less than 0. Use 0 to get a random port");
+            }
+
+            if (LogicDelay < 0)
+            {
+                messages.Add("LogicDelay cannot be less than 0. Use 0 for no delay");
+            }
+
+            if (MaxMergeMessageSize < 32)
+            {
+                messages.Add("MaxMergeMessageSize cannot be less than 32. Set EnablePacketMerging to false to disable merging");
+            }
+
+            if (MaxMergeDelay < 0)
+            {
+                messages.Add("MaxMergeDelay cannot be less than 0. Set EnablePacketMerging to false to disable merging");
+            }
+
+            if (MergedAckBytes < 1)
+            {
+                messages.Add("MergedAckBytes cannot be less than 1. Set EnableMergedAcks to false to disable merged acks");
+            }
+
+            if (MinimumMTU < Constants.MINIMUM_MTU)
+            {
+                messages.Add("MinimumMTU cannot be less than " + Constants.MINIMUM_MTU);
+            }
+
+            if (MaxBufferSize < MaximumMTU)
+            {
+                messages.Add("MaxBufferSize cannot be less than MaximumMTU");
+            }
+
+            if (MaximumMTU < MinimumMTU)
+            {
+                messages.Add("MaximumMTU cannot be less than MinimumMTU");
+            }
+
+            if (MaxMTUAttempts < 1)
+            {
+                messages.Add("MaxMTUAttempts cannot be less than 1. Set EnablePathMTU to false to disable PathMTU");
+            }
+
+            if (MTUAttemptDelay < 0)
+            {
+                messages.Add("MTUAttemptDelay cannot be less than 0");
+            }
+
+            if (MTUGrowthFactor < 1)
+            {
+                messages.Add("MTUGrowthFactor cannot be less than 1");
+            }
+
+            if (MaxFragments < 1)
+            {
+                messages.Add("MaxFragments cannot be less than 1");
+            }
+
+            if (MaxFragments > Constants.MAX_FRAGMENTS)
+            {
+                messages.Add("MaxFragments cannot be greater than " + Constants.MAX_FRAGMENTS);
+            }
+
+            if (HandshakeTimeout < 0)
+            {
+                messages.Add("HandshakeTimeout cannot be less than 0");
+            }
+
+            if (ConnectionTimeout < 0)
+            {
+                messages.Add("ConnectionTimeout cannot be less than 0");
+            }
+
+            if (HeartbeatDelay < 0)
+            {
+                messages.Add("HeartbeatDelay cannot be less than 0");
+            }
+
+            if (HandshakeResendDelay < 0)
+            {
+                messages.Add("HandshakeResendDelay cannot be less than 0");
+            }
+
+            if (MaxHandshakeResends < 0)
+            {
+                messages.Add("MaxHandshakeResends cannot be less than 0");
+            }
+
+            if (ConnectionRequestMinResendDelay < 0)
+            {
+                messages.Add("ConnectionRequestMinResendDelay cannot be less than 0");
+            }
+
+            if (MaxConnectionRequestResends < 0)
+            {
+                messages.Add("MaxConnectionRequestResends cannot be less than 0");
+            }
+
+            if (ConnectionRequestTimeout < 0)
+            {
+                messages.Add("ConnectionRequestTimeout cannot be less than 0");
+            }
+
+            if (ChallengeDifficulty < 0)
+            {
+                messages.Add("ChallengeDifficulty cannot be less than 0");
+            }
+
+            if (ChallengeDifficulty > byte.MaxValue)
+            {
+                messages.Add("ChallengeDifficulty cannot be greater than " + byte.MaxValue);
+            }
+
+            if (ConnectionChallengeHistory < 0)
+            {
+                messages.Add("ConnectionChallengeHistory cannot  be less than 0");
+            }
+
+            if (ConnectionChallengeTimeWindow < 1)
+            {
+                messages.Add("ConnectionChallengeTimeWindow cannot be less than 1");
+            }
+
+            if (AmplificationPreventionHandshakePadding < 0)
+            {
+                messages.Add("AmplificationPreventionHandshakePadding cannot be less than 0");
+            }
+
+            if (ReliabilityWindowSize < 1)
+            {
+                messages.Add("ReliabilityWindowSize cannot be less than 1");
+            }
+
+            if (ReliableAckFlowWindowSize < 1)
+            {
+                messages.Add("ReliableAckFlowWindowSize cannot be less than 1");
+            }
+
+            if (ReliabilityMaxResendAttempts < 0)
+            {
+                messages.Add("ReliabilityMaxResendAttempts cannot be less than 0");
+            }
+
+            if (ReliabilityResendRoundtripMultiplier < 0)
+            {
+                messages.Add("ReliabilityResendRoundtripMultiplier cannot be less than 0");
+            }
+
+            if (ReliabilityMinPacketResendDelay < 0)
+            {
+                messages.Add("ReliabilityMinPacketResendDelay cannot be less than 0");
+            }
+
+            if (ReliabilityMinAckResendDelay < 0)
+            {
+                messages.Add("ReliabilityMinAckResendDelay cannot be less than 0");
+            }
+
+            if (SimulatorConfig.DropPercentage < 0)
+            {
+                messages.Add("SimulatorConfig.DropPercentage cannot be less than 0");
+            }
+
+            if (SimulatorConfig.DropPercentage > 1)
+            {
+                messages.Add("SimulatorConfig.DropPercentage cannot be greater than 1");
+            }
+
+            if (SimulatorConfig.MinLatency < 0)
+            {
+                messages.Add("SimulatorConfig.MinLatency cannot be less than 0");
+            }
+
+            if (SimulatorConfig.MaxLatency < 0)
+            {
+                messages.Add("SimulatorConfig.MaxLatency cannot be less than 0");
+            }
+
+            if (SimulatorConfig.MaxLatency < SimulatorConfig.MinLatency)
+            {
+                messages.Add("SimulatorConfig.MaxLatency cannot be less than SimulatorConfig.MinLatency");
+            }
+
+            if (EventQueueSize < 1)
+            {
+                messages.Add("EventQueueSize cannot be less than 1");
+            }
+
+            if (ProcessingQueueSize < 1)
+            {
+                messages.Add("ProcessingQueueSize cannot be less than 1");
+            }
+
+            if (HeapPointersPoolSize < 0)
+            {
+                messages.Add("HeapPointersPoolSize cannot be less than 0");
+            }
+
+            if (HeapMemoryPoolSize < 0)
+            {
+                messages.Add("HeapMemoryPoolSize cannot be less than 0");
+            }
+
+            if (MemoryWrapperPoolSize < 0)
+            {
+                messages.Add("MemoryWrapperPoolSize cannot be less than 0");
+            }
+
+            if (ChannelPoolSize < 0)
+            {
+                messages.Add("ChannelPoolSize cannot be less than 0");
             }
 
             return messages;

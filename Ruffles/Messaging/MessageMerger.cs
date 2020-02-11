@@ -9,7 +9,7 @@ namespace Ruffles.Messaging
         private readonly byte[] _buffer;
         private int _position;
         private NetTime _lastFlushTime;
-        private readonly ulong _flushDelay;
+        private readonly int _flushDelay;
         private int _size;
 
         private readonly int _maxSize;
@@ -17,7 +17,7 @@ namespace Ruffles.Messaging
 
         private readonly object _lock = new object();
 
-        internal MessageMerger(int maxSize, int startSize, ulong flushDelay)
+        internal MessageMerger(int maxSize, int startSize, int flushDelay)
         {
             _buffer = new byte[maxSize];
             _buffer[0] = HeaderPacker.Pack(MessageType.Merge);
