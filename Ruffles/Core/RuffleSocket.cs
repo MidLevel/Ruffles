@@ -16,9 +16,6 @@ using Ruffles.Simulation;
 using Ruffles.Time;
 using Ruffles.Utils;
 
-// TODO: Make sure only connection receiver send hails to prevent a hacked client sending messed up channel configs and the receiver applying them.
-// Might actually already be enforced via the state? Verify
-
 namespace Ruffles.Core
 {
     /// <summary>
