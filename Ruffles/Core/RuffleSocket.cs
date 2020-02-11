@@ -1255,7 +1255,7 @@ namespace Ruffles.Core
                         if (payload.Count < 9)
                         {
                             // The message is not large enough to contain all the data neccecary. Wierd client?
-                            // TODO: Handle
+                            if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Client " + endpoint + " sent a challenge response that was too small to contain all the data");
                             return;
                         }
 
