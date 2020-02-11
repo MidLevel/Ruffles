@@ -192,7 +192,7 @@ namespace Ruffles.Channeling.Channels
                 HeapPointers pointers = memoryManager.AllocHeapPointers(1);
 
                 // Point the first pointer to the memory
-                pointers.Pointers[0] = memoryManager.AllocMemoryWrapper(memory);
+                pointers.Pointers[0] = memory;
 
                 // Send the message to the router. Tell the router to NOT dealloc the memory as the channel needs it for resend purposes.
                 ChannelRouter.SendMessage(pointers, false, connection, noMerge, memoryManager);
