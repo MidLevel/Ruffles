@@ -346,6 +346,16 @@ namespace Ruffles.Configuration
                 messages.Add("DualListenPort cannot be less than 0. Use 0 to get a random port");
             }
 
+            if (IPv4ListenAddress == null)
+            {
+                messages.Add("IPv4ListenAddress cannot be null");
+            }
+
+            if (IPv6ListenAddress == null)
+            {
+                messages.Add("IPv6ListenAddress cannot be null");
+            }
+
             if (LogicDelay < 0)
             {
                 messages.Add("LogicDelay cannot be less than 0. Use 0 for no delay");
