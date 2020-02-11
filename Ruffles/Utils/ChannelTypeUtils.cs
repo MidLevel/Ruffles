@@ -1,5 +1,4 @@
-﻿using System;
-using Ruffles.Channeling;
+﻿using Ruffles.Channeling;
 
 namespace Ruffles.Utils
 {
@@ -7,7 +6,14 @@ namespace Ruffles.Utils
     {
         internal static bool IsValidChannelType(byte channelType)
         {
-            return channelType <= 7;
+            return channelType == (byte)ChannelType.Reliable ||
+                   channelType == (byte)ChannelType.Unreliable ||
+                   channelType == (byte)ChannelType.UnreliableOrdered ||
+                   channelType == (byte)ChannelType.ReliableSequenced ||
+                   channelType == (byte)ChannelType.UnreliableRaw ||
+                   channelType == (byte)ChannelType.ReliableSequencedFragmented ||
+                   channelType == (byte)ChannelType.ReliableOrdered ||
+                   channelType == (byte)ChannelType.ReliableFragmented;
         }
 
         internal static bool IsValidChannelType(ChannelType channelType)
@@ -24,52 +30,12 @@ namespace Ruffles.Utils
 
         internal static byte ToByte(ChannelType channelType)
         {
-            switch (channelType)
-            {
-                case ChannelType.Reliable:
-                    return 0;
-                case ChannelType.Unreliable:
-                    return 1;
-                case ChannelType.UnreliableOrdered:
-                    return 2;
-                case ChannelType.ReliableSequenced:
-                    return 3;
-                case ChannelType.UnreliableRaw:
-                    return 4;
-                case ChannelType.ReliableSequencedFragmented:
-                    return 5;
-                case ChannelType.ReliableOrdered:
-                    return 6;
-                case ChannelType.ReliableFragmented:
-                    return 7;
-                default:
-                    throw new ArgumentException("Invalid channel type", nameof(channelType));
-            }
+            return (byte)channelType;
         }
 
         internal static ChannelType FromByte(byte channelType)
         {
-            switch (channelType)
-            {
-                case 0:
-                    return ChannelType.Reliable;
-                case 1:
-                    return ChannelType.Unreliable;
-                case 2:
-                    return ChannelType.UnreliableOrdered;
-                case 3:
-                    return ChannelType.ReliableSequenced;
-                case 4:
-                    return ChannelType.UnreliableRaw;
-                case 5:
-                    return ChannelType.ReliableSequencedFragmented;
-                case 6:
-                    return ChannelType.ReliableOrdered;
-                case 7:
-                    return ChannelType.ReliableFragmented;
-                default:
-                    throw new ArgumentException("Invalid channel type", nameof(channelType));
-            }
+            return (ChannelType)channelType;
         }
     }
 }

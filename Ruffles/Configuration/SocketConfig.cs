@@ -42,7 +42,7 @@ namespace Ruffles.Configuration
         /// <summary>
         /// The channels to pool.
         /// </summary>
-        public ChannelType PooledChannels = (ChannelType)~0; // Use ~0 to make Unity's Serialization happy.
+        public PooledChannelType PooledChannels = PooledChannelType.All;
 
         // Connection
         /// <summary>

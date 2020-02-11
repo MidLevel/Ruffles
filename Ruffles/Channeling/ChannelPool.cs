@@ -21,42 +21,42 @@ namespace Ruffles.Channeling
         {
             if (config.ReuseChannels)
             {
-                if ((config.PooledChannels & ChannelType.Reliable) == ChannelType.Reliable)
+                if ((config.PooledChannels & PooledChannelType.Reliable) == PooledChannelType.Reliable)
                 {
                     _reliableChannels = new ConcurrentCircularQueue<ReliableChannel>(config.ChannelPoolSize);
                 }
 
-                if ((config.PooledChannels & ChannelType.ReliableFragmented) == ChannelType.ReliableFragmented)
+                if ((config.PooledChannels & PooledChannelType.ReliableFragmented) == PooledChannelType.ReliableFragmented)
                 {
                     _reliableFragmentedChannels = new ConcurrentCircularQueue<ReliableFragmentedChannel>(config.ChannelPoolSize);
                 }
 
-                if ((config.PooledChannels & ChannelType.ReliableOrdered) == ChannelType.ReliableOrdered)
+                if ((config.PooledChannels & PooledChannelType.ReliableOrdered) == PooledChannelType.ReliableOrdered)
                 {
                     _reliableOrderedChannels = new ConcurrentCircularQueue<ReliableOrderedChannel>(config.ChannelPoolSize);
                 }
 
-                if ((config.PooledChannels & ChannelType.ReliableSequenced) == ChannelType.ReliableSequenced)
+                if ((config.PooledChannels & PooledChannelType.ReliableSequenced) == PooledChannelType.ReliableSequenced)
                 {
                     _reliableSequnecedChannels = new ConcurrentCircularQueue<ReliableSequencedChannel>(config.ChannelPoolSize);
                 }
 
-                if ((config.PooledChannels & ChannelType.ReliableSequencedFragmented) == ChannelType.ReliableSequencedFragmented)
+                if ((config.PooledChannels & PooledChannelType.ReliableSequencedFragmented) == PooledChannelType.ReliableSequencedFragmented)
                 {
                     _reliableSequencedFragmentedChannels = new ConcurrentCircularQueue<ReliableSequencedFragmentedChannel>(config.ChannelPoolSize);
                 }
 
-                if ((config.PooledChannels & ChannelType.Unreliable) == ChannelType.Unreliable)
+                if ((config.PooledChannels & PooledChannelType.Unreliable) == PooledChannelType.Unreliable)
                 {
                     _unreliableChannels = new ConcurrentCircularQueue<UnreliableChannel>(config.ChannelPoolSize);
                 }
 
-                if ((config.PooledChannels & ChannelType.UnreliableOrdered) == ChannelType.UnreliableOrdered)
+                if ((config.PooledChannels & PooledChannelType.UnreliableOrdered) == PooledChannelType.UnreliableOrdered)
                 {
                     _unreliableOrderedChannels = new ConcurrentCircularQueue<UnreliableOrderedChannel>(config.ChannelPoolSize);
                 }
 
-                if ((config.PooledChannels & ChannelType.UnreliableRaw) == ChannelType.UnreliableRaw)
+                if ((config.PooledChannels & PooledChannelType.UnreliableRaw) == PooledChannelType.UnreliableRaw)
                 {
                     _unreliableRawChannels = new ConcurrentCircularQueue<UnreliableRawChannel>(config.ChannelPoolSize);
                 }
