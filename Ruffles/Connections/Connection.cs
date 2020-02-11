@@ -222,9 +222,9 @@ namespace Ruffles.Connections
         /// <param name="payload">The payload to send.</param>
         /// <param name="channelId">The channel index to send the payload over.</param>
         /// <param name="noMerge">If set to <c>true</c> the message will not be merged.</param>
-        public bool Send(ArraySegment<byte> payload, byte channelId, bool noMerge)
+        public bool Send(ArraySegment<byte> payload, byte channelId, bool noMerge, ulong notificationKey)
         {
-            return HandleChannelSend(payload, channelId, noMerge);
+            return HandleChannelSend(payload, channelId, noMerge, notificationKey);
         }
 
         internal void SendInternal(ArraySegment<byte> payload, bool noMerge)
@@ -254,7 +254,7 @@ namespace Ruffles.Connections
             }
         }
 
-        internal bool HandleChannelSend(ArraySegment<byte> data, byte channelId, bool noMerge)
+        internal bool HandleChannelSend(ArraySegment<byte> data, byte channelId, bool noMerge, ulong notificationKey)
         {
             _stateLock.EnterReadLock();
 
@@ -263,7 +263,7 @@ namespace Ruffles.Connections
                 if (State == ConnectionState.Connected)
                 {
                     // Send the data
-                    ChannelRouter.CreateOutgoingMessage(data, this, channelId, noMerge);
+                    ChannelRouter.CreateOutgoingMessage(data, this, channelId, noMerge, notificationKey);
 
                     return true;
                 }

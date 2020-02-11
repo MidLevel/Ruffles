@@ -31,7 +31,7 @@ namespace Ruffles.Channeling.Channels
             this.config = config;
         }
 
-        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             if (payload.Count > connection.MTU)
             {

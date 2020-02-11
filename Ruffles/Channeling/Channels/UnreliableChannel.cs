@@ -34,7 +34,7 @@ namespace Ruffles.Channeling.Channels
             _incomingAckedPackets = new SlidingWindow<bool>(config.ReliabilityWindowSize);
         }
 
-        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             if (payload.Count > connection.MTU)
             {

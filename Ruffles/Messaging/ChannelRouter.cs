@@ -130,7 +130,7 @@ namespace Ruffles.Messaging
             memoryManager.DeAlloc(pointers);
         }
 
-        internal static void CreateOutgoingMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge)
+        internal static void CreateOutgoingMessage(ArraySegment<byte> payload, Connection connection, byte channelId, bool noMerge, ulong notificationKey)
         {
             if (channelId < 0 || channelId >= connection.Channels.Length)
             {
@@ -141,12 +141,30 @@ namespace Ruffles.Messaging
 
             if (channel != null)
             {
-                channel.CreateOutgoingMessage(payload, noMerge);
+                channel.CreateOutgoingMessage(payload, noMerge, notificationKey);
             }
             else
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Sending packet failed because the channel is not assigned");
             }
+        }
+
+        internal static void HandlePacketAckedByRemote(Connection connection, byte channelId, ulong notificationKey)
+        {
+            connection.Socket.PublishEvent(new NetworkEvent()
+            {
+                AllowUserRecycle = false,
+                ChannelId = channelId,
+                Connection = connection,
+                NotificationKey = notificationKey,
+                Socket = connection.Socket,
+                Data = new ArraySegment<byte>(),
+                EndPoint = connection.EndPoint,
+                InternalMemory = null,
+                MemoryManager = null,
+                SocketReceiveTime = NetTime.Now,
+                Type = NetworkEventType.AckNotification
+            });
         }
     }
 }

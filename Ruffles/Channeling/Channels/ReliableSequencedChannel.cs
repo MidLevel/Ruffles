@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Ruffles.Channeling.Channels.Shared;
 using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
@@ -12,46 +13,6 @@ namespace Ruffles.Channeling.Channels
 {
     internal class ReliableSequencedChannel : IChannel
     {
-        internal struct PendingOutgoingPacket : IMemoryReleasable
-        {
-            public bool IsAlloced => Memory != null && !Memory.IsDead;
-
-            public HeapMemory Memory;
-            public NetTime LastSent;
-            public NetTime FirstSent;
-            public ushort Attempts;
-
-            public void DeAlloc(MemoryManager memoryManager)
-            {
-                if (IsAlloced)
-                {
-                    memoryManager.DeAlloc(Memory);
-                }
-            }
-        }
-
-        internal struct PendingIncomingPacket : IMemoryReleasable
-        {
-            public bool IsAlloced => Memory != null && !Memory.IsDead;
-
-            public ushort Sequence;
-            public HeapMemory Memory;
-
-            public void DeAlloc(MemoryManager memoryManager)
-            {
-                if (IsAlloced)
-                {
-                    memoryManager.DeAlloc(Memory);
-                }
-            }
-        }
-
-        private struct PendingSend
-        {
-            public HeapMemory Memory;
-            public bool NoMerge;
-        }
-
         // Incoming sequencing
         private ushort _incomingLowestAckedSequence;
         private readonly HeapableFixedDictionary<PendingIncomingPacket> _receiveSequencer;
@@ -160,8 +121,7 @@ namespace Ruffles.Channeling.Channels
                         // Add to sequencer
                         _receiveSequencer.Set(sequence, new PendingIncomingPacket()
                         {
-                            Memory = memory,
-                            Sequence = sequence
+                            Memory = memory
                         });
 
                         // Send ack
@@ -173,15 +133,15 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             lock (_sendLock)
             {
-                CreateOutgoingMessageInternal(payload, noMerge);
+                CreateOutgoingMessageInternal(payload, noMerge, notificationKey);
             }
         }
 
-        private void CreateOutgoingMessageInternal(ArraySegment<byte> payload, bool noMerge)
+        private void CreateOutgoingMessageInternal(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             if (payload.Count > connection.MTU)
             {
@@ -203,7 +163,8 @@ namespace Ruffles.Channeling.Channels
                 _pendingSends.Enqueue(new PendingSend()
                 {
                     Memory = memory,
-                    NoMerge = noMerge
+                    NoMerge = noMerge,
+                    NotificationKey = notificationKey
                 });
             }
             else
@@ -231,7 +192,8 @@ namespace Ruffles.Channeling.Channels
                     Attempts = 1,
                     LastSent = NetTime.Now,
                     FirstSent = NetTime.Now,
-                    Memory = memory
+                    Memory = memory,
+                    NotificationKey = notificationKey
                 });
 
                 // Allocate pointers
@@ -281,6 +243,9 @@ namespace Ruffles.Channeling.Channels
             {
                 if (_sendSequencer.TryGet(sequence, out PendingOutgoingPacket value))
                 {
+                    // Send notification to user that the packet was acked
+                    ChannelRouter.HandlePacketAckedByRemote(connection, channelId, value.NotificationKey);
+
                     // Dealloc the memory held by the sequencer for the packet
                     value.DeAlloc(memoryManager);
 
@@ -315,7 +280,7 @@ namespace Ruffles.Channeling.Channels
                     PendingSend pending = _pendingSends.Dequeue();
 
                     // Sequence it
-                    CreateOutgoingMessageInternal(new ArraySegment<byte>(pending.Memory.Buffer, (int)pending.Memory.VirtualOffset, (int)pending.Memory.VirtualCount), pending.NoMerge);
+                    CreateOutgoingMessageInternal(new ArraySegment<byte>(pending.Memory.Buffer, (int)pending.Memory.VirtualOffset, (int)pending.Memory.VirtualCount), pending.NoMerge, pending.NotificationKey);
 
                     // Dealloc
                     memoryManager.DeAlloc(pending.Memory);
@@ -397,7 +362,8 @@ namespace Ruffles.Channeling.Channels
                                 Attempts = (ushort)(value.Attempts + 1),
                                 LastSent = NetTime.Now,
                                 FirstSent = value.FirstSent,
-                                Memory = value.Memory
+                                Memory = value.Memory,
+                                NotificationKey = value.NotificationKey
                             });
 
                             connection.SendInternal(new ArraySegment<byte>(value.Memory.Buffer, (int)value.Memory.VirtualOffset, (int)value.Memory.VirtualCount), false);

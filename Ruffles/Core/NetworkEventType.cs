@@ -32,6 +32,10 @@
         /// <summary>
         /// An endpoint sent broadcast data.
         /// </summary>
-        BroadcastData
+        BroadcastData,
+        /// <summary>
+        /// A packet was acked by the remote.
+        /// </summary>
+        AckNotification
     }
 }

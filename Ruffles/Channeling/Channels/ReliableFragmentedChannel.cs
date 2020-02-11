@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Ruffles.Channeling.Channels.Shared;
 using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
@@ -14,166 +15,16 @@ namespace Ruffles.Channeling.Channels
     // TODO: Remove array allocs
     internal class ReliableFragmentedChannel : IChannel
     {
-        internal struct PendingOutgoingPacket : IMemoryReleasable
-        {
-            public bool IsAlloced
-            {
-                get
-                {
-                    return Fragments != null;
-                }
-            }
-
-            public HeapPointers Fragments;
-
-            public bool AllFragmentsAlive
-            {
-                get
-                {
-                    if (Fragments == null)
-                    {
-                        return false;
-                    }
-
-                    for (int i = 0; i < Fragments.VirtualCount; i++)
-                    {
-                        if (!((PendingOutgoingFragment)Fragments.Pointers[Fragments.VirtualOffset + i]).Alive)
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
-            }
-
-            public void DeAlloc(MemoryManager memoryManager)
-            {
-                if (IsAlloced)
-                {
-                    for (int i = 0; i < Fragments.VirtualCount; i++)
-                    {
-                        if (((PendingOutgoingFragment)Fragments.Pointers[Fragments.VirtualOffset + i]).Alive && ((PendingOutgoingFragment)Fragments.Pointers[Fragments.VirtualOffset + i]).IsAlloced)
-                        {
-                            ((PendingOutgoingFragment)Fragments.Pointers[Fragments.VirtualOffset + i]).DeAlloc(memoryManager);
-                        }
-                    }
-
-                    // Dealloc the pointers
-                    memoryManager.DeAlloc(Fragments);
-                }
-            }
-        }
-
-
-        internal struct PendingOutgoingFragment : IMemoryReleasable
-        {
-            public bool IsAlloced => Memory != null && !Memory.IsDead;
-
-            public HeapMemory Memory;
-            public NetTime LastSent;
-            public NetTime FirstSent;
-            public ushort Attempts;
-            public bool Alive;
-
-            public void DeAlloc(MemoryManager memoryManager)
-            {
-                if (IsAlloced)
-                {
-                    memoryManager.DeAlloc(Memory);
-                }
-            }
-        }
-
-        internal struct PendingIncomingPacket : IMemoryReleasable
-        {
-            public bool IsAlloced
-            {
-                get
-                {
-                    return Fragments != null;
-                }
-            }
-
-            public bool IsComplete
-            {
-                get
-                {
-                    if (Fragments == null || Size == null || Fragments.VirtualCount < Size)
-                    {
-                        return false;
-                    }
-
-                    for (int i = 0; i < Fragments.VirtualCount; i++)
-                    {
-                        if (Fragments.Pointers[Fragments.VirtualOffset + i] == null || ((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]).IsDead)
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
-            }
-
-            public uint TotalByteSize
-            {
-                get
-                {
-                    uint byteSize = 0;
-
-                    if (!IsComplete)
-                    {
-                        // TODO: Throw
-                        return byteSize;
-                    }
-
-
-                    for (int i = 0; i < Fragments.VirtualCount; i++)
-                    {
-                        byteSize += ((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]).VirtualCount;
-                    }
-
-                    return byteSize;
-                }
-            }
-
-            public ushort? Size;
-            public HeapPointers Fragments;
-
-            public void DeAlloc(MemoryManager memoryManager)
-            {
-                if (IsAlloced)
-                {
-                    for (int i = 0; i < Fragments.VirtualCount; i++)
-                    {
-                        if (Fragments.Pointers[Fragments.VirtualOffset + i] != null && !((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]).IsDead)
-                        {
-                            memoryManager.DeAlloc((HeapMemory)Fragments.Pointers[Fragments.VirtualOffset + i]);
-                        }
-                    }
-
-                    memoryManager.DeAlloc(Fragments);
-                }
-            }
-        }
-
-        private struct PendingSend
-        {
-            public HeapMemory Memory;
-            public bool NoMerge;
-        }
-
         // Incoming sequencing
         private readonly HashSet<ushort> _incomingAckedSequences = new HashSet<ushort>();
         private ushort _incomingLowestAckedSequence;
-        private readonly HeapableFixedDictionary<PendingIncomingPacket> _receiveSequencer;
+        private readonly HeapableFixedDictionary<PendingIncomingPacketFragmented> _receiveSequencer;
         private readonly object _receiveLock = new object();
 
         // Outgoing sequencing
         private ushort _lastOutgoingSequence;
         private ushort _outgoingLowestAckedSequence;
-        private readonly HeapableFixedDictionary<PendingOutgoingPacket> _sendSequencer;
+        private readonly HeapableFixedDictionary<PendingOutgoingPacketFragmented> _sendSequencer;
         private readonly Queue<PendingSend> _pendingSends = new Queue<PendingSend>();
         private readonly object _sendLock = new object();
 
@@ -191,8 +42,8 @@ namespace Ruffles.Channeling.Channels
             this.memoryManager = memoryManager;
 
             // Alloc the in flight windows for receive and send
-            _receiveSequencer = new HeapableFixedDictionary<PendingIncomingPacket>(config.ReliabilityWindowSize, memoryManager);
-            _sendSequencer = new HeapableFixedDictionary<PendingOutgoingPacket>(config.ReliabilityWindowSize, memoryManager);
+            _receiveSequencer = new HeapableFixedDictionary<PendingIncomingPacketFragmented>(config.ReliabilityWindowSize, memoryManager);
+            _sendSequencer = new HeapableFixedDictionary<PendingOutgoingPacketFragmented>(config.ReliabilityWindowSize, memoryManager);
         }
 
         public HeapPointers HandleIncomingMessagePoll(ArraySegment<byte> payload)
@@ -217,7 +68,7 @@ namespace Ruffles.Channeling.Channels
                 // If the sequence is older than the last one we sent to user OR the packet is already acked OR the sequence is alive and its complete OR (the sequence is alive AND the fragments is alloced AND the alloced fragment count is larger than the fragment (I.E, the fragment is actually alloced) AND the fragment is not null AND the fragment is not dead))
                 if (SequencingUtils.Distance(sequence, _incomingLowestAckedSequence, sizeof(ushort)) <= 0 ||
                     (_incomingAckedSequences.Contains(sequence)) ||
-                    (_receiveSequencer.TryGet(sequence, out PendingIncomingPacket value) && (value.IsComplete || (value.Fragments != null && value.Fragments.VirtualCount > fragment && value.Fragments.Pointers[value.Fragments.VirtualOffset + fragment] != null && !((HeapMemory)value.Fragments.Pointers[value.Fragments.VirtualOffset + fragment]).IsDead))))
+                    (_receiveSequencer.TryGet(sequence, out PendingIncomingPacketFragmented value) && (value.IsComplete || (value.Fragments.VirtualCount > fragment && value.Fragments.Pointers[value.Fragments.VirtualOffset + fragment] != null))))
                 {
                     // We have already acked this message. Ack again
 
@@ -243,7 +94,7 @@ namespace Ruffles.Channeling.Channels
 
                         HeapPointers fragmentPointers = memoryManager.AllocHeapPointers((uint)fragment + 1);
 
-                        value = new PendingIncomingPacket()
+                        value = new PendingIncomingPacketFragmented()
                         {
                             Fragments = fragmentPointers,
                             Size = isFinal ? (ushort?)(fragment + 1) : null
@@ -268,7 +119,7 @@ namespace Ruffles.Channeling.Channels
                             memoryManager.DeAlloc(value.Fragments);
 
                             // Update the index
-                            value = new PendingIncomingPacket()
+                            value = new PendingIncomingPacketFragmented()
                             {
                                 Fragments = newPointers,
                                 Size = isFinal ? (ushort?)(fragment + 1) : value.Size
@@ -284,7 +135,7 @@ namespace Ruffles.Channeling.Channels
                             value.Fragments.VirtualCount = (uint)fragment + 1;
 
                             // Update the struct to set the size if it has changed (TODO: Check if needed)
-                            value = new PendingIncomingPacket()
+                            value = new PendingIncomingPacketFragmented()
                             {
                                 Fragments = value.Fragments,
                                 Size = isFinal ? (ushort?)(fragment + 1) : value.Size
@@ -295,7 +146,7 @@ namespace Ruffles.Channeling.Channels
                     }
 
                     // If the fragment is null OR the fragment is DEAD
-                    if (value.Fragments.Pointers[value.Fragments.VirtualOffset + fragment] == null || ((HeapMemory)value.Fragments.Pointers[value.Fragments.VirtualOffset + fragment]).IsDead)
+                    if (value.Fragments.Pointers[value.Fragments.VirtualOffset + fragment] == null)
                     {
                         // Alloc some memory for the fragment
                         HeapMemory memory = memoryManager.AllocHeapMemory((uint)payload.Count - 4);
@@ -373,15 +224,15 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             lock (_sendLock)
             {
-                CreateOutgoingMessageInternal(payload, noMerge);
+                CreateOutgoingMessageInternal(payload, noMerge, notificationKey);
             }
         }
 
-        private void CreateOutgoingMessageInternal(ArraySegment<byte> payload, bool noMerge)
+        private void CreateOutgoingMessageInternal(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             // Calculate the amount of fragments required
             int fragmentsRequired = (payload.Count + (connection.MTU - 1)) / connection.MTU;
@@ -406,7 +257,8 @@ namespace Ruffles.Channeling.Channels
                 _pendingSends.Enqueue(new PendingSend()
                 {
                     Memory = memory,
-                    NoMerge = noMerge
+                    NoMerge = noMerge,
+                    NotificationKey = notificationKey
                 });
             }
             else
@@ -454,7 +306,6 @@ namespace Ruffles.Channeling.Channels
                     // Add the memory to the outgoing sequencer array
                     outgoingFragments.Pointers[outgoingFragments.VirtualOffset + i] = new PendingOutgoingFragment()
                     {
-                        Alive = true,
                         Attempts = 1,
                         LastSent = NetTime.Now,
                         FirstSent = NetTime.Now,
@@ -463,9 +314,10 @@ namespace Ruffles.Channeling.Channels
                 }
 
                 // Add the memory to the outgoing sequencer
-                _sendSequencer.Set(_lastOutgoingSequence, new PendingOutgoingPacket()
+                _sendSequencer.Set(_lastOutgoingSequence, new PendingOutgoingPacketFragmented()
                 {
-                    Fragments = outgoingFragments
+                    Fragments = outgoingFragments,
+                    NotificationKey = notificationKey
                 });
 
                 // Send the message to the router. Tell the router to NOT dealloc the memory as the channel needs it for resend purposes.
@@ -486,7 +338,7 @@ namespace Ruffles.Channeling.Channels
 
             lock (_sendLock)
             {
-                if (_sendSequencer.TryGet(sequence, out PendingOutgoingPacket value) && value.Fragments.VirtualCount > fragment && ((PendingOutgoingFragment)value.Fragments.Pointers[fragment]).Alive)
+                if (_sendSequencer.TryGet(sequence, out PendingOutgoingPacketFragmented value) && value.Fragments.VirtualCount > fragment && value.Fragments.Pointers[fragment] != null)
                 {
                     // Dealloc the memory held by the sequencer for the packet
                     ((PendingOutgoingFragment)value.Fragments.Pointers[fragment]).DeAlloc(memoryManager);
@@ -500,15 +352,12 @@ namespace Ruffles.Channeling.Channels
                     connection.AddRoundtripSample(roundtrip);
 
                     // Kill the fragment packet
-                    value.Fragments.Pointers[fragment] = new PendingOutgoingFragment()
-                    {
-                        Alive = false
-                    };
+                    value.Fragments.Pointers[fragment] = null;
 
                     bool hasAllocatedAndAliveFragments = false;
                     for (int i = 0; i < value.Fragments.VirtualCount; i++)
                     {
-                        if (value.Fragments.Pointers[i] != null && ((PendingOutgoingFragment)value.Fragments.Pointers[i]).Alive)
+                        if (value.Fragments.Pointers[i] != null)
                         {
                             hasAllocatedAndAliveFragments = true;
                             break;
@@ -517,6 +366,9 @@ namespace Ruffles.Channeling.Channels
 
                     if (!hasAllocatedAndAliveFragments)
                     {
+                        // Notify user that the packet was acked
+                        ChannelRouter.HandlePacketAckedByRemote(connection, channelId, value.NotificationKey);
+
                         // Dealloc the wrapper packet
                         value.DeAlloc(memoryManager);
 
@@ -544,7 +396,7 @@ namespace Ruffles.Channeling.Channels
                     PendingSend pending = _pendingSends.Dequeue();
 
                     // Sequence it
-                    CreateOutgoingMessageInternal(new ArraySegment<byte>(pending.Memory.Buffer, (int)pending.Memory.VirtualOffset, (int)pending.Memory.VirtualCount), pending.NoMerge);
+                    CreateOutgoingMessageInternal(new ArraySegment<byte>(pending.Memory.Buffer, (int)pending.Memory.VirtualOffset, (int)pending.Memory.VirtualCount), pending.NoMerge, pending.NotificationKey);
 
                     // Dealloc
                     memoryManager.DeAlloc(pending.Memory);
@@ -606,11 +458,11 @@ namespace Ruffles.Channeling.Channels
             {
                 for (ushort i = (ushort)(_outgoingLowestAckedSequence + 1); SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) < 0; i++)
                 {
-                    if (_sendSequencer.TryGet(i, out PendingOutgoingPacket value))
+                    if (_sendSequencer.TryGet(i, out PendingOutgoingPacketFragmented value))
                     {
                         for (int j = 0; j < value.Fragments.VirtualCount; j++)
                         {
-                            if (value.Fragments.Pointers[j] != null && ((PendingOutgoingFragment)value.Fragments.Pointers[j]).Alive)
+                            if (value.Fragments.Pointers[j] != null)
                             {
                                 if ((NetTime.Now - ((PendingOutgoingFragment)value.Fragments.Pointers[j]).LastSent).TotalMilliseconds > connection.SmoothRoundtrip * config.ReliabilityResendRoundtripMultiplier && (NetTime.Now - ((PendingOutgoingFragment)value.Fragments.Pointers[j]).LastSent).TotalMilliseconds > config.ReliabilityMinPacketResendDelay)
                                 {
@@ -623,7 +475,6 @@ namespace Ruffles.Channeling.Channels
 
                                     value.Fragments.Pointers[j] = new PendingOutgoingFragment()
                                     {
-                                        Alive = true,
                                         Attempts = (ushort)(((PendingOutgoingFragment)value.Fragments.Pointers[j]).Attempts + 1),
                                         LastSent = NetTime.Now,
                                         FirstSent = ((PendingOutgoingFragment)value.Fragments.Pointers[j]).FirstSent,

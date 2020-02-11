@@ -23,7 +23,7 @@ namespace Ruffles.Channeling.Channels
             this.memoryManager = memoryManager;
         }
 
-        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             if (payload.Count > connection.MTU)
             {

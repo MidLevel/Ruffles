@@ -48,6 +48,11 @@ namespace Ruffles.Core
         /// </summary>
         /// <value>The endpoint the message was sent from.</value>
         public EndPoint EndPoint { get; internal set; }
+        /// <summary>
+        /// Gets the notification key.
+        /// </summary>
+        /// <value>The notification key.</value>
+        public ulong NotificationKey { get; internal set; }
 
         internal HeapMemory InternalMemory;
         internal MemoryManager MemoryManager;

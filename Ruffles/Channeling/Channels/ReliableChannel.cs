@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Ruffles.Channeling.Channels.Shared;
 using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Connections;
@@ -12,30 +13,6 @@ namespace Ruffles.Channeling.Channels
 {
     internal class ReliableChannel : IChannel
     {
-        private struct PendingOutgoingPacket : IMemoryReleasable
-        {
-            public bool IsAlloced => Memory != null && !Memory.IsDead;
-
-            public HeapMemory Memory;
-            public NetTime LastSent;
-            public NetTime FirstSent;
-            public ushort Attempts;
-
-            public void DeAlloc(MemoryManager memoryManager)
-            {
-                if (IsAlloced)
-                {
-                    memoryManager.DeAlloc(Memory);
-                }
-            }
-        }
-
-        private struct PendingSend
-        {
-            public HeapMemory Memory;
-            public bool NoMerge;
-        }
-
         // Incoming sequencing
         private readonly HashSet<ushort> _incomingAckedSequences = new HashSet<ushort>();
         private ushort _incomingLowestAckedSequence;
@@ -127,15 +104,15 @@ namespace Ruffles.Channeling.Channels
             }
         }
 
-        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge)
+        public void CreateOutgoingMessage(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             lock (_sendLock)
             {
-                CreateOutgoingMessageInternal(payload, noMerge);
+                CreateOutgoingMessageInternal(payload, noMerge, notificationKey);
             }
         }
 
-        private void CreateOutgoingMessageInternal(ArraySegment<byte> payload, bool noMerge)
+        private void CreateOutgoingMessageInternal(ArraySegment<byte> payload, bool noMerge, ulong notificationKey)
         {
             if (payload.Count > connection.MTU)
             {
@@ -157,7 +134,8 @@ namespace Ruffles.Channeling.Channels
                 _pendingSends.Enqueue(new PendingSend()
                 {
                     Memory = memory,
-                    NoMerge = noMerge
+                    NoMerge = noMerge,
+                    NotificationKey = notificationKey
                 });
             }
             else
@@ -185,7 +163,8 @@ namespace Ruffles.Channeling.Channels
                     Attempts = 1,
                     LastSent = NetTime.Now,
                     FirstSent = NetTime.Now,
-                    Memory = memory
+                    Memory = memory,
+                    NotificationKey = notificationKey
                 });
 
                 // Allocate pointers
@@ -235,6 +214,9 @@ namespace Ruffles.Channeling.Channels
             {
                 if (_sendSequencer.TryGet(sequence, out PendingOutgoingPacket value))
                 {
+                    // Notify the user about the ack
+                    ChannelRouter.HandlePacketAckedByRemote(connection, channelId, value.NotificationKey);
+
                     // Dealloc the memory held by the sequencer
                     memoryManager.DeAlloc(value.Memory);
 
@@ -269,7 +251,7 @@ namespace Ruffles.Channeling.Channels
                     PendingSend pending = _pendingSends.Dequeue();
 
                     // Sequence it
-                    CreateOutgoingMessageInternal(new ArraySegment<byte>(pending.Memory.Buffer, (int)pending.Memory.VirtualOffset, (int)pending.Memory.VirtualCount), pending.NoMerge);
+                    CreateOutgoingMessageInternal(new ArraySegment<byte>(pending.Memory.Buffer, (int)pending.Memory.VirtualOffset, (int)pending.Memory.VirtualCount), pending.NoMerge, pending.NotificationKey);
 
                     // Dealloc
                     memoryManager.DeAlloc(pending.Memory);
@@ -299,7 +281,8 @@ namespace Ruffles.Channeling.Channels
                                 Attempts = (ushort)(value.Attempts + 1),
                                 LastSent = NetTime.Now,
                                 FirstSent = value.FirstSent,
-                                Memory = value.Memory
+                                Memory = value.Memory,
+                                NotificationKey = value.NotificationKey
                             });
 
                             connection.SendInternal(new ArraySegment<byte>(value.Memory.Buffer, (int)value.Memory.VirtualOffset, (int)value.Memory.VirtualCount), false);
