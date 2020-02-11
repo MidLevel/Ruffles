@@ -1337,7 +1337,6 @@ namespace Ruffles.Core
                     {
                         if (!Config.EnableHeartbeats)
                         {
-                            // TODO: Handle
                             // This is a missmatch.
                             if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Heartbeat received from " + endpoint + " but the we do not have heartbeats enabled. Configuration missmatch?");
                             return;
