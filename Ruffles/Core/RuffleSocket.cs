@@ -543,7 +543,6 @@ namespace Ruffles.Core
                 catch (SocketException e)
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to enable DontFragment: " + e);
-                    // TODO: Handle
                     // This shouldnt happen when the OS supports it.
                     // This is used for path MTU to do application level fragmentation
                 }
@@ -617,7 +616,6 @@ namespace Ruffles.Core
                                 catch (SocketException e)
                                 {
                                     if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Socket bind failed after setting dual mode with exception: " + e);
-                                    // TODO: Handle
                                     return false;
                                 }
 
