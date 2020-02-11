@@ -23,6 +23,11 @@ namespace Ruffles.Connections
     public class Connection
     {
         /// <summary>
+        /// Gets the connection identifier. This is safe to be used in user dictionaries.
+        /// </summary>
+        /// <value>The connection identifier.</value>
+        public ulong Id { get; }
+        /// <summary>
         /// Gets the connection state.
         /// </summary>
         /// <value>The connection state.</value>
@@ -155,7 +160,7 @@ namespace Ruffles.Connections
 
         private readonly ReaderWriterLockSlim _stateLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
 
-        internal Connection(ConnectionState state, EndPoint endpoint, RuffleSocket socket)
+        internal Connection(ulong id, ConnectionState state, EndPoint endpoint, RuffleSocket socket)
         {
 #if ALLOW_CONNECTION_STUB
             if (IsStub)
@@ -164,7 +169,7 @@ namespace Ruffles.Connections
                 return;
             }
 #endif               
-
+            this.Id = id;
             this.Socket = socket;
             this.EndPoint = endpoint;
             this.MTU = Config.MinimumMTU;
@@ -1227,7 +1232,7 @@ namespace Ruffles.Connections
         // Used by Test project
         internal static Connection Stub(SocketConfig config)
         {
-            return new Connection(ConnectionState.Connected, new IPEndPoint(IPAddress.Any, 0), new RuffleSocket(config))
+            return new Connection(0, ConnectionState.Connected, new IPEndPoint(IPAddress.Any, 0), new RuffleSocket(config))
             {
                 IsStub = true,
                 MTU = config.MinimumMTU

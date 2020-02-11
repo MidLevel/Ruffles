@@ -29,6 +29,8 @@ namespace Ruffles.Core
         // Separate connections and pending to prevent something like a slorris attack
         private readonly Dictionary<EndPoint, Connection> _addressConnectionLookup = new Dictionary<EndPoint, Connection>();
         private Connection _headConnection;
+        private ulong _connectionIdCounter = 0;
+        private readonly Queue<ulong> _releasedConnectionIds = new Queue<ulong>();
 
         // Lock for adding or removing connections. This is done to allow for a quick ref to be gained on the user thread when connecting.
         private readonly ReaderWriterLockSlim _connectionsLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
@@ -296,6 +298,11 @@ namespace Ruffles.Core
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("NetTime does not support high resolution. This might impact Ruffles performance");
             }
+
+            // Reset the connectionId counter
+            _connectionIdCounter = 0;
+            // Reset the releasedConnectionIds collection
+            _releasedConnectionIds.Clear();
 
             if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Socket initialized");
         }
@@ -1524,6 +1531,30 @@ namespace Ruffles.Core
                     }
 
                     connection.PreviousConnection = null;
+
+                    if (((ulong)_releasedConnectionIds.Count + 1) == _connectionIdCounter)
+                    {
+                        // If the counter is equal to the amount of released + 1. This means all have been released and we can safely clear the queue and reset the counter.
+                        // This is a meassure to save some memory. 
+                        // TODO: Improve: If 100 connections join, the last 99 leave. The queue will have 99 entries and the counter will be 100. It would be better if the counter was decreased to 1 and the 99 entries dropped.
+
+                        _connectionIdCounter = 0;
+                        _releasedConnectionIds.Clear();
+                    }
+                    else if (_connectionIdCounter == connection.Id + 1)
+                    {
+                        // This was the last connection to be added. Instead of enqueueing, we can just decrease the counter
+                        _connectionIdCounter--;
+                    }
+                    else
+                    {
+                        // Add the released connectionId
+                        _releasedConnectionIds.Enqueue(connection.Id);
+                    }
+                }
+                else
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Could not find endpoint to remove: " + connection.EndPoint);
                 }
             }
             finally
@@ -1545,8 +1576,19 @@ namespace Ruffles.Core
                     return null;
                 }
 
+                // Get a connectionId
+                ulong connectionId;
+                if (_releasedConnectionIds.Count > 0)
+                {
+                    connectionId = _releasedConnectionIds.Dequeue();
+                }
+                else
+                {
+                    connectionId = _connectionIdCounter++;
+                }
+
                 // Alloc on the heap
-                Connection connection = new Connection(state, endpoint, this);
+                Connection connection = new Connection(connectionId, state, endpoint, this);
 
                 // Add lookup
                 _addressConnectionLookup.Add(endpoint, connection);
