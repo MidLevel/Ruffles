@@ -22,6 +22,10 @@ namespace Ruffles.Configuration
         /// If this gets full no more events can be processed and the application will freeze until it is polled.
         /// </summary>
         public int EventQueueSize = 1024 * 8;
+        /// <summary>
+        /// The size of the processing queue.
+        /// If this gets full. Packet processing will be stalled until the ProcessorThreads can catch up.
+        /// </summary>
         public int ProcessingQueueSize = 1024 * 8;
         /// <summary>
         /// The pool size of the HeapPointers pool.
