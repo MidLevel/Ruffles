@@ -67,5 +67,17 @@ namespace Ruffles.Simulation
                 }
             }
         }
+
+        internal void Flush()
+        {
+            lock (_lock)
+            {
+                while (_packets.Keys.Count > 0)
+                {
+                    sendDelegate(_packets[_packets.Keys[0]].Connection.EndPoint, new ArraySegment<byte>(_packets[_packets.Keys[0]].Data, 0, _packets[_packets.Keys[0]].Data.Length));
+                    _packets.RemoveAt(0);
+                }
+            }
+        }
     }
 }

@@ -383,7 +383,7 @@ namespace Ruffles.Core
         }
 
         /// <summary>
-        /// Stops the socket.
+        /// Stops the socket. This will flush all the events to the UserQueue allowing you to Poll them.
         /// </summary>
         public void Stop()
         {
@@ -394,16 +394,12 @@ namespace Ruffles.Core
                     throw new InvalidOperationException("Cannot stop a non running socket");
                 }
 
-                // Disconnect all clients
-                for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
-                {
-                    connection.DisconnectInternal(true, false);
-                }
-
+                // Stop all the threads
                 IsRunning = false;
 
                 int threadCount = _threads.Count;
 
+                // Wait for all the threads to exit
                 for (int i = _threads.Count - 1; i >= 0; i--)
                 {
                     if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Joining " + _threads[i].Name);
@@ -413,11 +409,31 @@ namespace Ruffles.Core
                 }
 
                 if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Joined " + threadCount + " threads");
+
+                // Empty the processing queue. This will consume all the unconsumed packets and they will be handled
+                // This has to be done before we call DisconnectInternal in order for all packets to be processed.
+                if (_processingQueue != null)
+                {
+                    EmptyPacketProcessingQueue();
+                }
+
+                // Disconnect all clients. This will send all the finals
+                for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
+                {
+                    connection.DisconnectInternal(true, false);
+                }
+
+                // Flush the simulator. Do this last to prevent any last packets sent by the connections to be dropped.
+                if (Simulator != null)
+                {
+                    Simulator.Flush();
+                }
             }
         }
 
         /// <summary>
-        /// Shuts the socket down.
+        /// Shuts the socket down. This will clear the UserQueue which means Poll will not return any elements.
+        /// If you want the final packets. Call Stop, then Poll, then Shutdown.
         /// </summary>
         public void Shutdown()
         {
@@ -963,21 +979,26 @@ namespace Ruffles.Core
         {
             while (IsRunning)
             {
-                try
-                {
-                    while (_processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
-                    {
-                        // Process packet
-                        HandlePacket(new ArraySegment<byte>(packet.Item1.Buffer, (int)packet.Item1.VirtualOffset, (int)packet.Item1.VirtualCount), packet.Item2, true);
+                EmptyPacketProcessingQueue();
+            }
+        }
 
-                        // Dealloc the memory
-                        MemoryManager.DeAlloc(packet.Item1);
-                    }
-                }
-                catch (Exception e)
+        private void EmptyPacketProcessingQueue()
+        {
+            try
+            {
+                while (_processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when processing packet: " + e);
+                    // Process packet
+                    HandlePacket(new ArraySegment<byte>(packet.Item1.Buffer, (int)packet.Item1.VirtualOffset, (int)packet.Item1.VirtualCount), packet.Item2, true);
+
+                    // Dealloc the memory
+                    MemoryManager.DeAlloc(packet.Item1);
                 }
+            }
+            catch (Exception e)
+            {
+                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when processing packet: " + e);
             }
         }
 
