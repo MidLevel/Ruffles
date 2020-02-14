@@ -96,14 +96,16 @@ namespace Ruffles.Example
 
                 if (serverEvent.Type != NetworkEventType.Nothing)
                 {
-                    if (serverEvent.Type != NetworkEventType.Data)
-                    {
-                        Console.WriteLine("ServerEvent: " + serverEvent.Type);
-                    }
+                    Console.WriteLine("ServerEvent: " + serverEvent.Type);
 
                     if (serverEvent.Type == NetworkEventType.Connect)
                     {
                         clientConnection = serverEvent.Connection;
+                    }
+
+                    if (serverEvent.Type == NetworkEventType.AckNotification)
+                    {
+                        Console.WriteLine("The remote acked message id: " + serverEvent.NotificationKey);
                     }
                 }
 
@@ -111,10 +113,7 @@ namespace Ruffles.Example
 
                 if (clientEvent.Type != NetworkEventType.Nothing)
                 {
-                    if (clientEvent.Type != NetworkEventType.Data)
-                    {
-                        Console.WriteLine("ClientEvent: " + clientEvent.Type);
-                    }
+                    Console.WriteLine("ClientEvent: " + clientEvent.Type);
 
                     if (clientEvent.Type == NetworkEventType.Connect)
                     {
@@ -133,7 +132,7 @@ namespace Ruffles.Example
                 if (serverConnection != null && clientConnection != null && serverConnection.State == ConnectionState.Connected && clientConnection.State == ConnectionState.Connected && (DateTime.Now - lastSent).TotalSeconds >= (1f / 1))
                 {
                     byte[] helloReliable = Encoding.ASCII.GetBytes("This message was sent over a reliable channel" + messageCounter);
-                    clientConnection.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), 1, false);
+                    clientConnection.Send(new ArraySegment<byte>(helloReliable, 0, helloReliable.Length), 1, false, (ulong)messageCounter);
                     Console.WriteLine("Sending packet: " + messageCounter);
 
                     messageCounter++;
