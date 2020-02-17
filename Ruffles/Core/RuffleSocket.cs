@@ -731,7 +731,7 @@ namespace Ruffles.Core
         /// <param name="endpoint">The endpoint to connect to.</param>
         public Connection Connect(IPEndPoint endpoint)
         {
-            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect (now) to " + endpoint);
+            if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect to " + endpoint);
 
             ulong unixTimestamp = 0;
             ulong iv = 0;
