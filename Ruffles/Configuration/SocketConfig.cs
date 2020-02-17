@@ -317,7 +317,7 @@ namespace Ruffles.Configuration
                 messages.Add("Cannot have more than " + Constants.MAX_CHANNELS + " channels");
             }
 
-            if (SocketThreads <= 0)
+            if (SocketThreads < 1)
             {
                 messages.Add("SocketThreads cannot be less than 1");
             }
