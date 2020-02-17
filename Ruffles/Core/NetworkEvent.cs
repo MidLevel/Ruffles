@@ -47,7 +47,7 @@ namespace Ruffles.Core
         /// Gets the endpoint the message was sent from.
         /// </summary>
         /// <value>The endpoint the message was sent from.</value>
-        public EndPoint EndPoint { get; internal set; }
+        public IPEndPoint EndPoint { get; internal set; }
         /// <summary>
         /// Gets the notification key.
         /// </summary>

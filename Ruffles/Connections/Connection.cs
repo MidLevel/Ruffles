@@ -44,12 +44,12 @@ namespace Ruffles.Connections
         /// Gets the current connection end point.
         /// </summary>
         /// <value>The connection end point.</value>
-        public readonly EndPoint EndPoint;
+        public IPEndPoint EndPoint { get; }
         /// <summary>
         /// Gets the RuffleSocket the connection belongs to.
         /// </summary>
         /// <value>The RuffleSocket the connection belongs to.</value>
-        public readonly RuffleSocket Socket;
+        public RuffleSocket Socket { get; }
 
         private ulong ConnectionChallenge { get; set; }
         private byte ChallengeDifficulty { get; set; }
@@ -160,7 +160,7 @@ namespace Ruffles.Connections
 
         private readonly ReaderWriterLockSlim _stateLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
 
-        internal Connection(ulong id, ConnectionState state, EndPoint endpoint, RuffleSocket socket)
+        internal Connection(ulong id, ConnectionState state, IPEndPoint endpoint, RuffleSocket socket)
         {
 #if ALLOW_CONNECTION_STUB
             if (IsStub)

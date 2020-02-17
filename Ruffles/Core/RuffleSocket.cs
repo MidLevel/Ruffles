@@ -24,7 +24,7 @@ namespace Ruffles.Core
     public sealed class RuffleSocket
     {
         // Separate connections and pending to prevent something like a slorris attack
-        private readonly Dictionary<EndPoint, Connection> _addressConnectionLookup = new Dictionary<EndPoint, Connection>();
+        private readonly Dictionary<IPEndPoint, Connection> _addressConnectionLookup = new Dictionary<IPEndPoint, Connection>();
         private Connection _headConnection;
         private ulong _connectionIdCounter = 0;
         private readonly Queue<ulong> _releasedConnectionIds = new Queue<ulong>();
@@ -79,7 +79,7 @@ namespace Ruffles.Core
         private ConcurrentCircularQueue<NetworkEvent> _userEventQueue;
 
         // Processing queue
-        private ConcurrentCircularQueue<NetTuple<HeapMemory, EndPoint>> _processingQueue;
+        private ConcurrentCircularQueue<NetTuple<HeapMemory, IPEndPoint>> _processingQueue;
 
         /// <summary>
         /// Gets a syncronization event that is set when a event is received.
@@ -102,7 +102,7 @@ namespace Ruffles.Core
         /// Gets the local IPv4 listening endpoint.
         /// </summary>
         /// <value>The local IPv4 endpoint.</value>
-        public EndPoint LocalIPv4EndPoint
+        public IPEndPoint LocalIPv4EndPoint
         {
             get
             {
@@ -111,7 +111,7 @@ namespace Ruffles.Core
                     return new IPEndPoint(IPAddress.None, 0);
                 }
 
-                return _ipv4Socket.LocalEndPoint;
+                return (IPEndPoint)_ipv4Socket.LocalEndPoint;
             }
         }
 
@@ -119,7 +119,7 @@ namespace Ruffles.Core
         /// Gets the local IPv6 listening endpoint.
         /// </summary>
         /// <value>The local IPv6 endpoint.</value>
-        public EndPoint LocalIPv6EndPoint
+        public IPEndPoint LocalIPv6EndPoint
         {
             get
             {
@@ -128,7 +128,7 @@ namespace Ruffles.Core
                     return new IPEndPoint(IPAddress.IPv6None, 0);
                 }
 
-                return _ipv6Socket.LocalEndPoint;
+                return (IPEndPoint)_ipv6Socket.LocalEndPoint;
             }
         }
 
@@ -268,7 +268,7 @@ namespace Ruffles.Core
             if (Config.ProcessingThreads > 0)
             {
                 if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Allocating " + Config.ProcessingQueueSize + " processing slots");
-                _processingQueue = new ConcurrentCircularQueue<NetTuple<HeapMemory, EndPoint>>(Config.ProcessingQueueSize);
+                _processingQueue = new ConcurrentCircularQueue<NetTuple<HeapMemory, IPEndPoint>>(Config.ProcessingQueueSize);
             }
             else
             {
@@ -467,7 +467,7 @@ namespace Ruffles.Core
                 // Release user queue
                 _userEventQueue = null;
 
-                while (_processingQueue != null && _processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
+                while (_processingQueue != null && _processingQueue.TryDequeue(out NetTuple<HeapMemory, IPEndPoint> packet))
                 {
                     // Dealloc all the pending memory to prevent leak detection
                     MemoryManager.DeAlloc(packet.Item1);
@@ -729,7 +729,7 @@ namespace Ruffles.Core
         /// </summary>
         /// <returns>The pending connection.</returns>
         /// <param name="endpoint">The endpoint to connect to.</param>
-        public Connection Connect(EndPoint endpoint)
+        public Connection Connect(IPEndPoint endpoint)
         {
             if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogInfo("Attempting to connect (now) to " + endpoint);
 
@@ -762,7 +762,7 @@ namespace Ruffles.Core
             return ConnectInternal(endpoint, unixTimestamp, additionsRequired, iv);
         }
 
-        private Connection ConnectInternal(EndPoint endpoint, ulong unixTimestamp, ulong counter, ulong iv)
+        private Connection ConnectInternal(IPEndPoint endpoint, ulong unixTimestamp, ulong counter, ulong iv)
         {
             Connection connection = AddNewConnection(endpoint, ConnectionState.RequestingConnection);
 
@@ -869,8 +869,8 @@ namespace Ruffles.Core
             logicWatch.Stop();
         }
 
-        private readonly EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
-        private readonly EndPoint _fromIPv6Endpoint = new IPEndPoint(IPAddress.IPv6Any, 0);
+        private readonly IPEndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
+        private readonly IPEndPoint _fromIPv6Endpoint = new IPEndPoint(IPAddress.IPv6Any, 0);
 
         private void StartSocketLogic()
         {
@@ -929,12 +929,12 @@ namespace Ruffles.Core
                             memory.VirtualCount = (uint)size;
 
                             // Process off thread
-                            _processingQueue.Enqueue(new NetTuple<HeapMemory, EndPoint>(memory, _endpoint));
+                            _processingQueue.Enqueue(new NetTuple<HeapMemory, IPEndPoint>(memory, (IPEndPoint)_endpoint));
                         }
                         else
                         {
                             // Process on thread
-                            HandlePacket(new ArraySegment<byte>(receiveBuffer, 0, size), _endpoint, true);
+                            HandlePacket(new ArraySegment<byte>(receiveBuffer, 0, size), (IPEndPoint)_endpoint, true);
                         }
                     }
                     catch (SocketException e)
@@ -983,7 +983,7 @@ namespace Ruffles.Core
         {
             try
             {
-                while (_processingQueue.TryDequeue(out NetTuple<HeapMemory, EndPoint> packet))
+                while (_processingQueue.TryDequeue(out NetTuple<HeapMemory, IPEndPoint> packet))
                 {
                     // Process packet
                     HandlePacket(new ArraySegment<byte>(packet.Item1.Buffer, (int)packet.Item1.VirtualOffset, (int)packet.Item1.VirtualCount), packet.Item2, true);
@@ -1024,7 +1024,7 @@ namespace Ruffles.Core
             };
         }
 
-        internal bool SendRaw(EndPoint endpoint, ArraySegment<byte> payload)
+        internal bool SendRaw(IPEndPoint endpoint, ArraySegment<byte> payload)
         {
             try
             {
@@ -1055,7 +1055,7 @@ namespace Ruffles.Core
         }
 
         private readonly List<ArraySegment<byte>> _mergeSegmentResults = new List<ArraySegment<byte>>();
-        internal void HandlePacket(ArraySegment<byte> payload, EndPoint endpoint, bool allowMergeUnpack)
+        internal void HandlePacket(ArraySegment<byte> payload, IPEndPoint endpoint, bool allowMergeUnpack)
         {
             if (payload.Count < 1)
             {
@@ -1468,7 +1468,7 @@ namespace Ruffles.Core
             }
         }
 
-        internal Connection GetConnection(EndPoint endpoint)
+        internal Connection GetConnection(IPEndPoint endpoint)
         {
             // Lock to prevent grabbing a half dead connection
             _connectionsLock.EnterReadLock();
@@ -1548,7 +1548,7 @@ namespace Ruffles.Core
             }
         }
 
-        internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
+        internal Connection AddNewConnection(IPEndPoint endpoint, ConnectionState state)
         {
             // Lock when adding connection to prevent grabbing a half alive connection.
             _connectionsLock.EnterWriteLock();
