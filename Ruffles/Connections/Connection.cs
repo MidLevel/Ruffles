@@ -52,7 +52,7 @@ namespace Ruffles.Connections
         public readonly RuffleSocket Socket;
 
         private ulong ConnectionChallenge { get; set; }
-        private int ChallengeDifficulty { get; set; }
+        private byte ChallengeDifficulty { get; set; }
         private ulong ChallengeAnswer { get; set; }
 
         /// <summary>
@@ -186,7 +186,7 @@ namespace Ruffles.Connections
             this.HandshakeResendAttempts = 0;
             this.ChallengeAnswer = 0;
             this.ConnectionChallenge = RandomProvider.GetRandomULong();
-            this.ChallengeDifficulty = Config.ChallengeDifficulty;
+            this.ChallengeDifficulty = (byte)Config.ChallengeDifficulty;
             this.PreConnectionChallengeTimestamp = 0;
             this.PreConnectionChallengeCounter = 0;
             this.PreConnectionChallengeIV = 0;
@@ -645,29 +645,30 @@ namespace Ruffles.Connections
                 {
                     LastMessageIn = NetTime.Now;
 
-                    ulong additionsRequired = 0;
-                    ulong workingValue = challenge;
-
                     // Solve the hashcash
-                    // TODO: Solve thread
-                    while (difficulty > 0 && ((workingValue << ((sizeof(ulong) * 8) - difficulty)) >> ((sizeof(ulong) * 8) - difficulty)) != 0)
+                    if (HashCash.TrySolve(challenge, difficulty, ulong.MaxValue, out ulong additionsRequired))
                     {
-                        additionsRequired++;
-                        workingValue = HashProvider.GetStableHash64(challenge + additionsRequired);
+                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Solved the challenge");
+
+                        // Set the solved results
+                        ConnectionChallenge = challenge;
+                        ChallengeDifficulty = difficulty;
+                        ChallengeAnswer = additionsRequired;
+
+                        // Set resend values
+                        HandshakeResendAttempts = 0;
+                        HandshakeStarted = NetTime.Now;
+                        HandshakeLastSendTime = NetTime.Now;
+                        State = ConnectionState.SolvingChallenge;
+
+                        // Send the response
+                        SendChallengeResponse();
                     }
-
-                    ConnectionChallenge = challenge;
-                    ChallengeDifficulty = difficulty;
-                    ChallengeAnswer = additionsRequired;
-
-                    // Set resend values
-                    HandshakeResendAttempts = 0;
-                    HandshakeStarted = NetTime.Now;
-                    HandshakeLastSendTime = NetTime.Now;
-                    State = ConnectionState.SolvingChallenge;
-
-                    // Send the response
-                    SendChallengeResponse();
+                    else
+                    {
+                        // Failed to solve
+                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to solve the challenge");
+                    }
                 }
             }
             finally
@@ -684,10 +685,8 @@ namespace Ruffles.Connections
             {
                 if (State == ConnectionState.RequestingChallenge)
                 {
-                    ulong claimedCollision = ConnectionChallenge + proposedSolution;
-
                     // Check if it is solved
-                    bool isCollided = ChallengeDifficulty == 0 || ((HashProvider.GetStableHash64(claimedCollision) << ((sizeof(ulong) * 8) - ChallengeDifficulty)) >> ((sizeof(ulong) * 8) - ChallengeDifficulty)) == 0;
+                    bool isCollided = HashCash.Validate(ConnectionChallenge, proposedSolution, ChallengeDifficulty);
 
                     if (isCollided)
                     {

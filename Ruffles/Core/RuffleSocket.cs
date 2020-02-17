@@ -735,7 +735,7 @@ namespace Ruffles.Core
 
             ulong unixTimestamp = 0;
             ulong iv = 0;
-            ulong counter = 0;
+            ulong additionsRequired = 0;
 
             if (Config.TimeBasedConnectionChallenge)
             {
@@ -748,24 +748,18 @@ namespace Ruffles.Core
                 iv = RandomProvider.GetRandomULong();
 
                 // Find collision
-                ulong hash;
-                do
+                if (HashCash.TrySolve(unixTimestamp + iv, (byte)Config.ChallengeDifficulty, ulong.MaxValue, out additionsRequired))
                 {
-                    // Attempt to calculate a new hash collision
-                    hash = HashProvider.GetStableHash64(unixTimestamp, counter, iv);
-
-                    // Increment counter
-                    counter++;
+                    if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + additionsRequired + " attempts. [IV=" + iv + "] [Time=" + unixTimestamp + "]");
                 }
-                while ((hash << (sizeof(ulong) * 8 - Config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - Config.ChallengeDifficulty) != 0);
-
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Found hash collision after " + counter + " attempts. [Counter=" + (counter - 1) + "] [IV=" + iv + "] [Time=" + unixTimestamp + "] [Hash=" + hash + "]");
-
-                // Make counter 1 less
-                counter--;
+                else
+                {
+                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to find hash collision. [IV=" + iv + "] [Time=" + unixTimestamp + "]");
+                    return null;
+                }
             }
 
-            return ConnectInternal(endpoint, unixTimestamp, counter, iv);
+            return ConnectInternal(endpoint, unixTimestamp, additionsRequired, iv);
         }
 
         private Connection ConnectInternal(EndPoint endpoint, ulong unixTimestamp, ulong counter, ulong iv)
@@ -1184,16 +1178,13 @@ namespace Ruffles.Core
                                 }
                             }
 
-                            // Calculate the hash the user claims have a collision
-                            ulong claimedHash = HashProvider.GetStableHash64(challengeUnixTime, counter, userIv);
+                            // Check if the hash collision they provided is valid
+                            bool isValid = HashCash.Validate(challengeUnixTime + userIv, counter, (byte)Config.ChallengeDifficulty);
 
-                            // Check if the hash collides
-                            bool isCollided = ((claimedHash << (sizeof(ulong) * 8 - Config.ChallengeDifficulty)) >> (sizeof(ulong) * 8 - Config.ChallengeDifficulty)) == 0;
-
-                            if (!isCollided)
+                            if (!isValid)
                             {
                                 // They failed the challenge
-                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They submitted an invalid answer. [ClaimedHash=" + claimedHash + "] [Counter=" + counter + "] [IV=" + userIv + "] [Time=" + challengeUnixTime + "]");
+                                if (Logging.CurrentLogLevel <= LogLevel.Info) Logging.LogWarning("Client " + endpoint + " failed the connection request. They submitted an invalid answer. [Counter=" + counter + "] [IV=" + userIv + "] [Time=" + challengeUnixTime + "]");
                                 return;
                             }
                         }
