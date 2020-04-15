@@ -10,16 +10,16 @@ Ruffles is a fully managed UDP library designed for high performance and low lat
 ## Why another reliable UDP library?
 There are many RUDP libraries such as ENET, Lidgren, LiteNetLib. While many of them are great, Ruffles aims to fill in one niche that is largely not filled, that being lightweight fully managed libraries.
 
-To compare to the examples above, ENET is amazing and is pretty much what Ruffles want to be, but it's unmanaged. Lidgren, LiteNetLib and many other managed libraries can feel too bloated and contain many features that are unnecessary and they are often much slower.
+To compare to the examples above, ENET is amazing and is pretty much what Ruffles wants to be, but it's unmanaged. Lidgren, LiteNetLib and many other managed libraries can feel too bloated and contain many features that are unnecessary and they are often much slower.
 
 
 ## Features
-Ruffles have many features that other libs lacks. See below for a summary and a detailed explanation of each.
+Ruffles has many features that other libs lack. See below for a summary and a detailed explanation of each.
 
 * Connection challenge
 * DOS amplification prevention
 * Slot filling prevention
-* Connection managment
+* Connection management
 * High performance and garbage free
 * Channeling
 * Threaded by default
@@ -33,7 +33,7 @@ Ruffles have many features that other libs lacks. See below for a summary and a 
 * Path MTU discovery
 
 ### Connection Challenge
-The Ruffle protocol requires a challenge to be completed before a connection can be established. Currently, the challenge is a hashcash like challenge that is supplied by the server, brute force solved by the client and submitted. (Uses Fowler-Noll-Vo hash function instead of SHA1 currently).
+The Ruffles protocol requires a challenge to be completed before a connection can be established. Currently, the challenge is a hashcash like challenge that is supplied by the server, brute force solved by the client and submitted. (Uses Fowler-Noll-Vo hash function instead of SHA1 currently).
 
 ### DOS Amplification Prevention
 DOS amplification is prevented by requiring unproportional connection message sizes. In addition, because of the connection challenge it's not computationally feasible to attack on Layer 4.
@@ -47,7 +47,7 @@ With these security mitigations, the only way to bring the server down is to exh
 Ruffles handles all connection management for you. It's a fully connection oriented protocol with heartbeat keepalive packets sent to ensure the connection is alive.
 
 ### High Performance
-Ruffles is fully garbage free, this is accomplished with a custom memory allocator in GC space. This ensures no memory is leaked to the garbage collector unless for resizing purposes. This makes Ruffles blazing fast. It also avoids memory copies as much as possible. Because Ruffles still runs in GC space, any memory leaks in Ruffles will be handled by the garbage collector and the user will be notified as the memorys destructor is called along with a stacktrace of where the leaked memory was originally allocated. See [Implementation](https://github.com/MidLevel/Ruffles/blob/master/Ruffles/Memory/ManagedMemory.cs#L17).
+Ruffles is fully garbage free, this is accomplished with a custom memory allocator in GC space. This ensures no memory is leaked to the garbage collector unless for resizing purposes. This makes Ruffles blazing fast. It also avoids memory copies as much as possible. Because Ruffles still runs in GC space, any memory leaks in Ruffles will be handled by the garbage collector and the user will be notified as the memory's destructor is called along with a stacktrace of where the leaked memory was originally allocated. See [Implementation](https://github.com/MidLevel/Ruffles/blob/master/Ruffles/Memory/ManagedMemory.cs#L17).
 
 ### Reliability and Sequencing
 There are currently a few ways of sending messages in Ruffles. The types are:
@@ -58,20 +58,20 @@ All messages are guaranteed to be delivered with the order also being guaranteed
 #### ReliableSequencedFragmented
 All messages are guaranteed to be delivered with the order also being guaranteed, duplicates are dropped. Uses a fixed sliding window. Allows large messages to be fragmented.
 #### Unreliable
-Delivery is not guaranteed, nor is the order. Duplicates are dropped.
+Delivery is not guaranteed nor is the order. Duplicates are dropped.
 #### UnreliableOrdered
-Delivery is not guaranteed but the order is. Older packets and duplicate packets are dropped.
+Delivery is not guaranteed but the order is. Older packets and duplicates are dropped.
 #### UnreliableRaw
 Delivery is not guaranteed nor is the order. Duplicates are not dropped.
 #### UnconnectedMessages
 Raw UDP packets that does not require a connection.
 #### ReliableOrdered
-All messages are not guaranteed to be delivered. If you send multiple messages, at least one is guranteed to arrive. If you send a single message, it is guaranteed to arrive. Messages will always been in order. Duplicates are dropped.
+All messages are not guaranteed to be delivered. If you send multiple messages, at least one is guranteed to arrive. If you send a single message, it is guaranteed to arrive. Messages will always be in order. Duplicates are dropped.
 #### ReliableFragmented
 All messages are guaranteed to be delivered, the order is not guaranteed, duplicates are dropped. Uses a fixed sliding window. Allows large messages to be fragmented.
 
 ### Threading
-Ruffles is nativley multi threaded and uses a background worker thread by default to handle network I/O.
+Ruffles is natively multi threaded and uses a background worker thread by default to handle network I/O.
 
 ### Thread Safe
 All public APIs in Ruffles are designed to be thread safe and can be accessed from any thread.
@@ -92,7 +92,7 @@ Packets can be sent as ReliableSequencedFragmented or ReliableFragmented which a
 Ack packets are merged into bitfields to make them much more compact.
 
 ### Connection Statistics
-Detailed statistics can retrieved from connections, including the bytes sent, packets sent, round trip times and more.
+Detailed statistics can be retrieved from connections, including the bytes sent, packets sent, round trip times and more.
 
 ### Path MTU
 Automatically discovers the largest MTU possible for each connection.
