@@ -97,6 +97,12 @@ namespace Ruffles.Core
                 return _syncronizedEvent;
             }
         }
+        
+                /// <summary>
+        /// Gets a syncronization event that needs to be sent when frame end.
+        /// </summary>
+        /// <value>The syncronization event.</value>
+        public AutoResetEvent FrameSyncronizationEvent { get; } = new AutoResetEvent(false);
 
         /// <summary>
         /// Gets the local IPv4 listening endpoint.
@@ -837,13 +843,12 @@ namespace Ruffles.Core
 
         private void StartNetworkLogic()
         {
-            Stopwatch logicWatch = new Stopwatch();
-            logicWatch.Start();
-
             while (IsRunning)
             {
                 try
                 {
+                    FrameSyncronizationEvent.WaitOne();
+                    
                     if (Simulator != null)
                     {
                         Simulator.RunLoop();
@@ -854,16 +859,6 @@ namespace Ruffles.Core
                     for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
                     {
                         connection.Update();
-                    }
-
-                    int sleepMs = (Config.LogicDelay - (((int)logicWatch.ElapsedMilliseconds) - elapsed));
-
-                    logicWatch.Reset();
-                    logicWatch.Start();
-
-                    if (sleepMs > 0)
-                    {
-                        Thread.Sleep(sleepMs);
                     }
                 }
                 catch (Exception e)
