@@ -854,8 +854,6 @@ namespace Ruffles.Core
                         Simulator.RunLoop();
                     }
 
-                    int elapsed = (int)logicWatch.ElapsedMilliseconds;
-
                     for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
                     {
                         connection.Update();
@@ -866,8 +864,6 @@ namespace Ruffles.Core
                     if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when running internal loop: " + e);
                 }
             }
-
-            logicWatch.Stop();
         }
 
         private readonly EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
