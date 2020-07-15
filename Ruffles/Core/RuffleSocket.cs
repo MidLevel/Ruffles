@@ -1551,6 +1551,10 @@ namespace Ruffles.Core
                 _connectionsLock.ExitWriteLock();
             }
         }
+        
+        public void FlushMessages(){
+            FrameSyncronizationEvent.Set();
+        }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
         {
