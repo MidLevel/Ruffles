@@ -847,7 +847,7 @@ namespace Ruffles.Core
             {
                 try
                 {
-                    FrameSyncronizationEvent.WaitOne();
+                    FrameSyncronizationEvent.WaitOne(TimeSpan.FromMilliseconds(Config.LogicDelay));
                     
                     if (Simulator != null)
                     {
