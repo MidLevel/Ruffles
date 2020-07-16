@@ -97,6 +97,12 @@ namespace Ruffles.Core
                 return _syncronizedEvent;
             }
         }
+        
+                /// <summary>
+        /// Gets a syncronization event that needs to be sent when frame end.
+        /// </summary>
+        /// <value>The syncronization event.</value>
+        public AutoResetEvent FrameSyncronizationEvent { get; } = new AutoResetEvent(false);
 
         /// <summary>
         /// Gets the local IPv4 listening endpoint.
@@ -837,33 +843,20 @@ namespace Ruffles.Core
 
         private void StartNetworkLogic()
         {
-            Stopwatch logicWatch = new Stopwatch();
-            logicWatch.Start();
-
             while (IsRunning)
             {
                 try
                 {
+                    FrameSyncronizationEvent.WaitOne(TimeSpan.FromMilliseconds(Config.LogicDelay));
+                    
                     if (Simulator != null)
                     {
                         Simulator.RunLoop();
                     }
 
-                    int elapsed = (int)logicWatch.ElapsedMilliseconds;
-
                     for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
                     {
                         connection.Update();
-                    }
-
-                    int sleepMs = (Config.LogicDelay - (((int)logicWatch.ElapsedMilliseconds) - elapsed));
-
-                    logicWatch.Reset();
-                    logicWatch.Start();
-
-                    if (sleepMs > 0)
-                    {
-                        Thread.Sleep(sleepMs);
                     }
                 }
                 catch (Exception e)
@@ -871,8 +864,6 @@ namespace Ruffles.Core
                     if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when running internal loop: " + e);
                 }
             }
-
-            logicWatch.Stop();
         }
 
         private readonly EndPoint _fromIPv4Endpoint = new IPEndPoint(IPAddress.Any, 0);
@@ -1555,6 +1546,10 @@ namespace Ruffles.Core
             {
                 _connectionsLock.ExitWriteLock();
             }
+        }
+        
+        public void FlushMessages(){
+            FrameSyncronizationEvent.Set();
         }
 
         internal Connection AddNewConnection(EndPoint endpoint, ConnectionState state)
