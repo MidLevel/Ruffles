@@ -56,7 +56,7 @@ namespace Ruffles.Time
         /// <param name="milliseconds">The amount of milliseconds to add.</param>
         public NetTime AddMilliseconds(double milliseconds)
         {
-            return new NetTime(InternalTicks + (long)(milliseconds * MillisecondsPerTick));
+            return new NetTime(InternalTicks + (long)(milliseconds / MillisecondsPerTick));
         }
 
         public static TimeSpan operator -(NetTime t1, NetTime t2) => new TimeSpan(0, 0, 0, 0, (int)((t1.InternalTicks - t2.InternalTicks) * MillisecondsPerTick));
