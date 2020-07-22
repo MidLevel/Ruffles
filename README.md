@@ -31,6 +31,7 @@ Ruffles has many features that other libs lack. See below for a summary and a de
 * Ack merging
 * Connection statistics
 * Path MTU discovery
+* Bandwidth tracking
 
 ### Connection Challenge
 The Ruffles protocol requires a challenge to be completed before a connection can be established. Currently, the challenge is a hashcash like challenge that is supplied by the server, brute force solved by the client and submitted. (Uses Fowler-Noll-Vo hash function instead of SHA1 currently).
@@ -96,6 +97,9 @@ Detailed statistics can be retrieved from connections, including the bytes sent,
 
 ### Path MTU
 Automatically discovers the largest MTU possible for each connection.
+
+### Bandwidth Tracking
+Limit the amount of traffic allowed to be sent to a connection. Custom algorithms can be adapted with the IBandwidthTracker interface. 
 
 ## Roadmap
 This is stuff I want to and plan to add
