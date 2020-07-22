@@ -4,8 +4,10 @@ using System;
 using System.Diagnostics;
 using System.Net;
 using System.Threading;
+using Ruffles.BandwidthTracking;
 using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
+using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Core;
 using Ruffles.Hashing;
@@ -107,6 +109,12 @@ namespace Ruffles.Connections
         public int HighestRoundtripVarience { get; private set; }
 
         /// <summary>
+        /// Gets the current bandwidth tracker.
+        /// </summary>
+        /// <value>The current bandwidth tracker.</value>
+        public IBandwidthTracker BandwidthTracker { get; private set; }
+
+        /// <summary>
         /// Gets the maximum amount of bytes that can be sent in a single message.
         /// </summary>
         /// <value>The maximum transmission unit.</value>
@@ -193,14 +201,19 @@ namespace Ruffles.Connections
             this.PreConnectionChallengeSolved = false;
             this.State = state;
 
+            if (Config.EnableBandwidthTracking && Config.CreateBandwidthTracker != null)
+            {
+                this.BandwidthTracker = Config.CreateBandwidthTracker();
+            }
+
             if (Config.EnableHeartbeats)
             {
-                HeartbeatChannel = new UnreliableOrderedChannel(0, this, Config, MemoryManager);
+                this.HeartbeatChannel = new UnreliableOrderedChannel(0, this, Config, MemoryManager);
             }
 
             if (Config.EnablePacketMerging)
             {
-                Merger = new MessageMerger(Config.MaxMergeMessageSize, Config.MinimumMTU, Config.MaxMergeDelay);
+                this.Merger = new MessageMerger(Config.MaxMergeMessageSize, Config.MinimumMTU, Config.MaxMergeDelay);
             }
         }
 
@@ -237,20 +250,29 @@ namespace Ruffles.Connections
             }
 #endif
 
-            LastMessageOut = NetTime.Now;
-
-            bool merged = false;
-
-            if (!Socket.Config.EnablePacketMerging || noMerge || !(merged = Merger.TryWrite(payload)))
+            // Check if there is enough bandwidth to spare for the packet
+            if (BandwidthTracker == null || BandwidthTracker.TrySend(payload.Count))
             {
-                if (Socket.Simulator != null)
+                LastMessageOut = NetTime.Now;
+
+                bool merged = false;
+
+                if (!Socket.Config.EnablePacketMerging || noMerge || !(merged = Merger.TryWrite(payload)))
                 {
-                    Socket.Simulator.Add(this, payload);
+                    if (Socket.Simulator != null)
+                    {
+                        Socket.Simulator.Add(this, payload);
+                    }
+                    else
+                    {
+                        Socket.SendRaw(EndPoint, payload);
+                    }
                 }
-                else
-                {
-                    Socket.SendRaw(EndPoint, payload);
-                }
+            }
+            else
+            {
+                // Packet was dropped
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Message to connection " + this.Id + " was dropped due to bandwidth constraits");
             }
         }
 
