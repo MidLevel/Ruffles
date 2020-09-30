@@ -29,7 +29,7 @@ namespace Ruffles.Time
         /// Gets a new NetTime that represents the start time.
         /// </summary>
         /// <value>The startTime.</value>
-        public static NetTime MinValue => new NetTime(StartTime);
+        public static NetTime MinValue => new NetTime(0);
 
         private readonly long InternalTicks;
 
