@@ -903,11 +903,6 @@ namespace Ruffles.Connections
                 RunChannelUpdates();
             }
 
-            if (Config.EnableConnectionRequestResends)
-            {
-                CheckConnectionResends();
-            }
-
             if (Config.EnablePacketMerging)
             {
                 CheckMergedPackets();
