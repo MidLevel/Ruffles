@@ -35,7 +35,6 @@ cache:
 
 install:
 - ps: Install-Product node $env:nodejs_version
-- npm install
 - npm install -g semantic-release@17
 - npm install -g @semantic-release/github -D
 - npm install -g @semantic-release/exec -D
