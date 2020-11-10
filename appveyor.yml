@@ -5,6 +5,7 @@ image: Visual Studio 2017
 environment:
   nuget_key:
     secure: EL8Nm3zdLDGQ/nWbP6zZIgCA4k1yJRqmDw4qpK/LYzyl0YebTX1iREmEdUnO0KBS
+  nodejs_version: "10"
 
 configuration:
   - Release
