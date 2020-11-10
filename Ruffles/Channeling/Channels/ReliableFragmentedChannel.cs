@@ -456,7 +456,7 @@ namespace Ruffles.Channeling.Channels
         {
             lock (_sendLock)
             {
-                for (ushort i = (ushort)(_outgoingLowestAckedSequence + 1); SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) < 0; i++)
+                for (ushort i = (ushort)(_outgoingLowestAckedSequence + 1); SequencingUtils.Distance(i, _lastOutgoingSequence, sizeof(ushort)) <= 0; i++)
                 {
                     if (_sendSequencer.TryGet(i, out PendingOutgoingPacketFragmented value))
                     {
