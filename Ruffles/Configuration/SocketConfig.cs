@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Net;
+using Ruffles.BandwidthTracking;
 using Ruffles.Channeling;
 using Ruffles.Simulation;
 using Ruffles.Utils;
@@ -253,6 +255,12 @@ namespace Ruffles.Configuration
         /// </summary>
         public int ReliabilityMinAckResendDelay = 100;
 
+        // Bandwidth limitation
+        /// <summary>
+        /// Constructor delegate for creating the desired bandwidth tracker.
+        /// </summary>
+        public Func<IBandwidthTracker> CreateBandwidthTracker = () => new SimpleBandwidthTracker(1024 * 1024 * 8, 2, 0.5f); // 8 kilobytes per second allowed, resets every 2 seconds with a 50% remainder carry
+
         // Simulation
         /// <summary>
         /// Whether or not to enable the network condition simulator.
@@ -297,6 +305,10 @@ namespace Ruffles.Configuration
         /// Whether or not acks should be reported to the user.
         /// </summary>
         public bool EnableAckNotifications = true;
+        /// <summary>
+        /// Whether or not to enable bandwidth tracking.
+        /// </summary>
+        public bool EnableBandwidthTracking = true;
 
         public List<string> GetInvalidConfiguration()
         {
@@ -317,7 +329,7 @@ namespace Ruffles.Configuration
                 messages.Add("Cannot have more than " + Constants.MAX_CHANNELS + " channels");
             }
 
-            if (SocketThreads <= 0)
+            if (SocketThreads < 1)
             {
                 messages.Add("SocketThreads cannot be less than 1");
             }
@@ -568,6 +580,11 @@ namespace Ruffles.Configuration
             if (ChannelPoolSize < 0)
             {
                 messages.Add("ChannelPoolSize cannot be less than 0");
+            }
+
+            if (EnableBandwidthTracking && CreateBandwidthTracker == null)
+            {
+                messages.Add("EnableBandwidthTracking is enabled but no CreateBandwidthTracker delegate is provided");
             }
 
             return messages;

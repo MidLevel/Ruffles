@@ -192,6 +192,9 @@ namespace Ruffles.Memory
             {
                 // Failed to enqueue memory. Queue is full
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return heap memory. The queue is full. The memory will be given to the garbage collector. [HEAP MEMORY]");
+
+                // Mark as released to prevent leak warnings. This is an intentional leak.
+                memory.ReleasedToGC = true;
             }
         }
 
@@ -211,6 +214,9 @@ namespace Ruffles.Memory
             {
                 // Failed to enqueue pointers. Queue is full
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return heap pointers. The queue is full. The memory will be given to the garbage collector. [HEAP POINTERS]");
+
+                // Mark as released to prevent leak warnings. This is an intentional leak.
+                pointers.ReleasedToGC = true;
             }
         }
 
@@ -230,6 +236,9 @@ namespace Ruffles.Memory
             {
                 // Failed to enqueue pointers. Queue is full
                 if (Logging.CurrentLogLevel <= LogLevel.Warning) Logging.LogWarning("Could not return memory wrapper. The queue is full. The memory will be given to the garbage collector. [MEMORY WRAPPER]");
+
+                // Mark as released to prevent leak warnings. This is an intentional leak.
+                wrapper.ReleasedToGC = true;
             }
         }
 

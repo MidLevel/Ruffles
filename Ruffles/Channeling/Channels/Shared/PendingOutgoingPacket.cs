@@ -51,28 +51,6 @@ namespace Ruffles.Channeling.Channels.Shared
 
         public ulong NotificationKey;
         public HeapPointers Fragments;
-/*
-        public bool AllFragmentsAlive
-        {
-            get
-            {
-                if (Fragments == null)
-                {
-                    return false;
-                }
-
-                for (int i = 0; i < Fragments.VirtualCount; i++)
-                {
-                    if (!((PendingOutgoingFragment)Fragments.Pointers[Fragments.VirtualOffset + i]).Alive)
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-        }
-        */
 
         public void DeAlloc(MemoryManager memoryManager)
         {

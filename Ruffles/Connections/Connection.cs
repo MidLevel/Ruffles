@@ -4,8 +4,10 @@ using System;
 using System.Diagnostics;
 using System.Net;
 using System.Threading;
+using Ruffles.BandwidthTracking;
 using Ruffles.Channeling;
 using Ruffles.Channeling.Channels;
+using Ruffles.Collections;
 using Ruffles.Configuration;
 using Ruffles.Core;
 using Ruffles.Hashing;
@@ -44,15 +46,15 @@ namespace Ruffles.Connections
         /// Gets the current connection end point.
         /// </summary>
         /// <value>The connection end point.</value>
-        public readonly EndPoint EndPoint;
+        public IPEndPoint EndPoint { get; }
         /// <summary>
         /// Gets the RuffleSocket the connection belongs to.
         /// </summary>
         /// <value>The RuffleSocket the connection belongs to.</value>
-        public readonly RuffleSocket Socket;
+        public RuffleSocket Socket { get; }
 
         private ulong ConnectionChallenge { get; set; }
-        private int ChallengeDifficulty { get; set; }
+        private byte ChallengeDifficulty { get; set; }
         private ulong ChallengeAnswer { get; set; }
 
         /// <summary>
@@ -105,6 +107,12 @@ namespace Ruffles.Connections
         /// </summary>
         /// <value>The highest roundtrip varience.</value>
         public int HighestRoundtripVarience { get; private set; }
+
+        /// <summary>
+        /// Gets the current bandwidth tracker.
+        /// </summary>
+        /// <value>The current bandwidth tracker.</value>
+        public IBandwidthTracker BandwidthTracker { get; private set; }
 
         /// <summary>
         /// Gets the maximum amount of bytes that can be sent in a single message.
@@ -160,7 +168,7 @@ namespace Ruffles.Connections
 
         private readonly ReaderWriterLockSlim _stateLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
 
-        internal Connection(ulong id, ConnectionState state, EndPoint endpoint, RuffleSocket socket)
+        internal Connection(ulong id, ConnectionState state, IPEndPoint endpoint, RuffleSocket socket)
         {
 #if ALLOW_CONNECTION_STUB
             if (IsStub)
@@ -186,21 +194,26 @@ namespace Ruffles.Connections
             this.HandshakeResendAttempts = 0;
             this.ChallengeAnswer = 0;
             this.ConnectionChallenge = RandomProvider.GetRandomULong();
-            this.ChallengeDifficulty = Config.ChallengeDifficulty;
+            this.ChallengeDifficulty = (byte)Config.ChallengeDifficulty;
             this.PreConnectionChallengeTimestamp = 0;
             this.PreConnectionChallengeCounter = 0;
             this.PreConnectionChallengeIV = 0;
             this.PreConnectionChallengeSolved = false;
             this.State = state;
 
+            if (Config.EnableBandwidthTracking && Config.CreateBandwidthTracker != null)
+            {
+                this.BandwidthTracker = Config.CreateBandwidthTracker();
+            }
+
             if (Config.EnableHeartbeats)
             {
-                HeartbeatChannel = new UnreliableOrderedChannel(0, this, Config, MemoryManager);
+                this.HeartbeatChannel = new UnreliableOrderedChannel(0, this, Config, MemoryManager);
             }
 
             if (Config.EnablePacketMerging)
             {
-                Merger = new MessageMerger(Config.MaxMergeMessageSize, Config.MinimumMTU, Config.MaxMergeDelay);
+                this.Merger = new MessageMerger(Config.MaxMergeMessageSize, Config.MinimumMTU, Config.MaxMergeDelay);
             }
         }
 
@@ -237,20 +250,29 @@ namespace Ruffles.Connections
             }
 #endif
 
-            LastMessageOut = NetTime.Now;
-
-            bool merged = false;
-
-            if (!Socket.Config.EnablePacketMerging || noMerge || !(merged = Merger.TryWrite(payload)))
+            // Check if there is enough bandwidth to spare for the packet
+            if (BandwidthTracker == null || BandwidthTracker.TrySend(payload.Count))
             {
-                if (Socket.Simulator != null)
+                LastMessageOut = NetTime.Now;
+
+                bool merged = false;
+
+                if (!Socket.Config.EnablePacketMerging || noMerge || !(merged = Merger.TryWrite(payload)))
                 {
-                    Socket.Simulator.Add(this, payload);
+                    if (Socket.Simulator != null)
+                    {
+                        Socket.Simulator.Add(this, payload);
+                    }
+                    else
+                    {
+                        Socket.SendRaw(EndPoint, payload);
+                    }
                 }
-                else
-                {
-                    Socket.SendRaw(EndPoint, payload);
-                }
+            }
+            else
+            {
+                // Packet was dropped
+                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Message to connection " + this.Id + " was dropped due to bandwidth constraits");
             }
         }
 
@@ -645,29 +667,30 @@ namespace Ruffles.Connections
                 {
                     LastMessageIn = NetTime.Now;
 
-                    ulong additionsRequired = 0;
-                    ulong workingValue = challenge;
-
                     // Solve the hashcash
-                    // TODO: Solve thread
-                    while (difficulty > 0 && ((workingValue << ((sizeof(ulong) * 8) - difficulty)) >> ((sizeof(ulong) * 8) - difficulty)) != 0)
+                    if (HashCash.TrySolve(challenge, difficulty, ulong.MaxValue, out ulong additionsRequired))
                     {
-                        additionsRequired++;
-                        workingValue = HashProvider.GetStableHash64(challenge + additionsRequired);
+                        if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Solved the challenge");
+
+                        // Set the solved results
+                        ConnectionChallenge = challenge;
+                        ChallengeDifficulty = difficulty;
+                        ChallengeAnswer = additionsRequired;
+
+                        // Set resend values
+                        HandshakeResendAttempts = 0;
+                        HandshakeStarted = NetTime.Now;
+                        HandshakeLastSendTime = NetTime.Now;
+                        State = ConnectionState.SolvingChallenge;
+
+                        // Send the response
+                        SendChallengeResponse();
                     }
-
-                    ConnectionChallenge = challenge;
-                    ChallengeDifficulty = difficulty;
-                    ChallengeAnswer = additionsRequired;
-
-                    // Set resend values
-                    HandshakeResendAttempts = 0;
-                    HandshakeStarted = NetTime.Now;
-                    HandshakeLastSendTime = NetTime.Now;
-                    State = ConnectionState.SolvingChallenge;
-
-                    // Send the response
-                    SendChallengeResponse();
+                    else
+                    {
+                        // Failed to solve
+                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Failed to solve the challenge");
+                    }
                 }
             }
             finally
@@ -684,10 +707,8 @@ namespace Ruffles.Connections
             {
                 if (State == ConnectionState.RequestingChallenge)
                 {
-                    ulong claimedCollision = ConnectionChallenge + proposedSolution;
-
                     // Check if it is solved
-                    bool isCollided = ChallengeDifficulty == 0 || ((HashProvider.GetStableHash64(claimedCollision) << ((sizeof(ulong) * 8) - ChallengeDifficulty)) >> ((sizeof(ulong) * 8) - ChallengeDifficulty)) == 0;
+                    bool isCollided = HashCash.Validate(ConnectionChallenge, proposedSolution, ChallengeDifficulty);
 
                     if (isCollided)
                     {
@@ -880,11 +901,6 @@ namespace Ruffles.Connections
             if (Config.EnableChannelUpdates)
             {
                 RunChannelUpdates();
-            }
-
-            if (Config.EnableConnectionRequestResends)
-            {
-                CheckConnectionResends();
             }
 
             if (Config.EnablePacketMerging)

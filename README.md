@@ -31,6 +31,7 @@ Ruffles has many features that other libs lack. See below for a summary and a de
 * Ack merging
 * Connection statistics
 * Path MTU discovery
+* Bandwidth tracking
 
 ### Connection Challenge
 The Ruffles protocol requires a challenge to be completed before a connection can be established. Currently, the challenge is a hashcash like challenge that is supplied by the server, brute force solved by the client and submitted. (Uses Fowler-Noll-Vo hash function instead of SHA1 currently).
@@ -97,6 +98,9 @@ Detailed statistics can be retrieved from connections, including the bytes sent,
 ### Path MTU
 Automatically discovers the largest MTU possible for each connection.
 
+### Bandwidth Tracking
+Limit the amount of traffic allowed to be sent to a connection. Custom algorithms can be adapted with the IBandwidthTracker interface. 
+
 ## Roadmap
 This is stuff I want to and plan to add
 
@@ -117,4 +121,4 @@ Here are the features that are considered but not decided. This is to prevent bl
 The fragmented channel currently does not have any flow rate for ack resends.
 
 ## Unity Support
-Due to a Unity bug, Ruffles does not work properly in IL2CPP by default. The bug has been reported to Unity. If you need to run Ruffles with IL2CPP, compile it with the ``MILLISECONDS_SELECT`` define. This will make the Socket.Select method use a millisecond based timeout instead of microseconds.
+~~Due to a Unity bug, Ruffles does not work properly in IL2CPP by default. The bug has been reported to Unity. If you need to run Ruffles with IL2CPP, compile it with the ``MILLISECONDS_SELECT`` define. This will make the Socket.Select method use a millisecond based timeout instead of microseconds.~~ This has been patched. Feel free to use IL2CPP in your project.
