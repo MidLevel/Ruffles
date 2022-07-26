@@ -14,6 +14,12 @@ namespace Ruffles.Utils
         public static bool TryAutoHookCommonLoggers = true;
         
         /// <summary>
+        /// Gets the current log level.
+        /// </summary>
+        /// <value>The current log level.</value>
+        public static LogLevel CurrentLogLevel = LogLevel.Info;
+        
+        /// <summary>
         /// Occurs when ruffles spits out an info log.
         /// </summary>
         public static event Action<string> OnInfoLog = (value) => Console.WriteLine("[INFO] " + value);
@@ -25,12 +31,6 @@ namespace Ruffles.Utils
         /// Occurs when ruffles spits out an error log.
         /// </summary>
         public static event Action<string> OnErrorLog = (value) => Console.WriteLine("[ERROR] " + value);
-
-        /// <summary>
-        /// Gets the current log level.
-        /// </summary>
-        /// <value>The current log level.</value>
-        public static LogLevel CurrentLogLevel = LogLevel.Info;
 
         internal static void LogInfo(string value)
         {
@@ -60,79 +60,34 @@ namespace Ruffles.Utils
         {
             if (TryAutoHookCommonLoggers)
             {
-                try
-                {
-                    Type unityDebugType = Type.GetType("UnityEngine.Debug, UnityEngine.CoreModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null");
-
-                    if (unityDebugType != null)
-                    {
-                        MethodInfo infoLogMethod = unityDebugType.GetMethod("Log", BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(object) }, null);
-                        MethodInfo warningLogMethod = unityDebugType.GetMethod("LogWarning", BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(object) }, null);
-                        MethodInfo errorLogMethod = unityDebugType.GetMethod("LogError", BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(object) }, null);
-
-                        if (infoLogMethod != null)
-                        {
-                            OnInfoLog += (value) =>
-                            {
-                                infoLogMethod.Invoke(null, new object[] { value });
-                            };
-
-                            if (CurrentLogLevel <= LogLevel.Debug) LogInfo("UnityEngine.Debug.Log(object) was hooked");
-                        }
-
-                        if (warningLogMethod != null)
-                        {
-                            OnWarningLog += (value) =>
-                            {
-                                warningLogMethod.Invoke(null, new object[] { value });
-                            };
-
-                            if (CurrentLogLevel <= LogLevel.Debug) LogInfo("UnityEngine.Debug.LogWarning(object) was hooked");
-                        }
-
-                        if (errorLogMethod != null)
-                        {
-                            OnErrorLog += (value) =>
-                            {
-                                errorLogMethod.Invoke(null, new object[] { value });
-                            };
-
-                            if (CurrentLogLevel <= LogLevel.Debug) LogInfo("UnityEngine.Debug.LogError(object) was hooked");
-                        }
-                    }
-                }
-                catch (TypeLoadException)
-                {
-                    if (CurrentLogLevel <= LogLevel.Debug) LogInfo("Could not load custom logging hook from UnityEngine.Debug");
-                }
+                TryHookUnityEngineLoggers();
             }
         }
-    }
+        
+        private static void TryHookUnityEngineLoggers()
+        {
+            if (!TypeUtils.TryGetTypeByName("UnityEngine.Debug, UnityEngine.CoreModule", out var unityDebugType))
+            {
+                return;
+            }
 
-    /// <summary>
-    /// Log level
-    /// </summary>
-    public enum LogLevel
-    {
-        /// <summary>
-        /// Detailed steps of every event.
-        /// </summary>
-        Debug,
-        /// <summary>
-        /// General events such as when a client connects.
-        /// </summary>
-        Info,
-        /// <summary>
-        /// A potential problem has occured. It doesnt prevent us from continuing. This occurs for things that might be others fault, such as invalid configurations.
-        /// </summary>
-        Warning,
-        /// <summary>
-        /// An error that affects us occured. Usually means the fault of us.
-        /// </summary>
-        Error,
-        /// <summary>
-        /// Logs nothing.
-        /// </summary>
-        Nothing
+            if (unityDebugType.TryGetMethod("Log", BindingFlags.Static | BindingFlags.Public, new Type[] {typeof(object)}, out var infoLogMethod))
+            {
+                OnInfoLog += (value) => { infoLogMethod.Invoke(null, new object[] {value}); };
+                if (CurrentLogLevel <= LogLevel.Debug) LogInfo("UnityEngine.Debug.Log(object) was hooked");
+            }
+
+            if (unityDebugType.TryGetMethod("LogWarning", BindingFlags.Static | BindingFlags.Public, new Type[] {typeof(object)}, out var warningLogMethod))
+            {
+                OnWarningLog += (value) => { warningLogMethod.Invoke(null, new object[] {value}); };
+                if (CurrentLogLevel <= LogLevel.Debug) LogInfo("UnityEngine.Debug.LogWarning(object) was hooked");
+            }
+
+            if (unityDebugType.TryGetMethod("LogError", BindingFlags.Static | BindingFlags.Public, new Type[] {typeof(object)}, out var errorLogMethod))
+            {
+                OnErrorLog += (value) => { errorLogMethod.Invoke(null, new object[] {value}); };
+                if (CurrentLogLevel <= LogLevel.Debug) LogInfo("UnityEngine.Debug.LogError(object) was hooked");
+            }
+        }
     }
 }
