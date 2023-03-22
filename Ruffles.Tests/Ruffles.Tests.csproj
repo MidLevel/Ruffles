@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>Ruffles.Tests</RootNamespace>
     <LangVersion>7</LangVersion>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NUnit" Version="3.12.0" />
