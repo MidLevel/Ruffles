@@ -1016,7 +1016,7 @@ namespace Ruffles.Core
         /// <returns>The poll result.</returns>
         public NetworkEvent Poll()
         {
-            if (_userEventQueue.TryDequeue(out NetworkEvent @event))
+            if (IsRunning && _userEventQueue.TryDequeue(out NetworkEvent @event))
             {
                 return @event;
             }
