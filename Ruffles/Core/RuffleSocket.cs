@@ -906,79 +906,103 @@ namespace Ruffles.Core
                     _selectSockets.Add(_ipv6Socket);
                 }
 
-                Socket.Select(_selectSockets, null, null, socketSelect);
-
-                for (int i = 0; i < _selectSockets.Count; i++)
+                try
                 {
-                    try
+                    Socket.Select(_selectSockets, null, null, socketSelect);
+
+                    for (int i = 0; i < _selectSockets.Count; i++)
                     {
-                        // Get a endpoint reference
-                        EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork ? _fromIPv4Endpoint : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6 ? _fromIPv6Endpoint : null;
-
-                        byte[] receiveBuffer;
-                        int receiveSize;
-                        HeapMemory memory = null;
-
-                        if (Config.ProcessingThreads > 0)
+                        try
                         {
-                            // Alloc memory for the packet. Alloc max MTU
-                            memory = MemoryManager.AllocHeapMemory((uint)Config.MaximumMTU);
-                            receiveSize = (int)memory.VirtualCount;
-                            receiveBuffer = memory.Buffer;
+                            // Get a endpoint reference
+                            EndPoint _endpoint = _selectSockets[i].AddressFamily == AddressFamily.InterNetwork
+                                ?
+                                _fromIPv4Endpoint
+                                : _selectSockets[i].AddressFamily == AddressFamily.InterNetworkV6
+                                    ? _fromIPv6Endpoint
+                                    : null;
+
+                            byte[] receiveBuffer;
+                            int receiveSize;
+                            HeapMemory memory = null;
+
+                            if (Config.ProcessingThreads > 0)
+                            {
+                                // Alloc memory for the packet. Alloc max MTU
+                                memory = MemoryManager.AllocHeapMemory((uint)Config.MaximumMTU);
+                                receiveSize = (int)memory.VirtualCount;
+                                receiveBuffer = memory.Buffer;
+                            }
+                            else
+                            {
+                                receiveBuffer = _incomingBuffer;
+                                receiveSize = _incomingBuffer.Length;
+                            }
+
+                            // Receive from socket
+                            int size = _selectSockets[i].ReceiveFrom(receiveBuffer, 0, receiveSize, SocketFlags.None,
+                                ref _endpoint);
+
+                            if (Config.ProcessingThreads > 0)
+                            {
+                                // Set the size to prevent reading to end
+                                memory.VirtualCount = (uint)size;
+
+                                // Process off thread
+                                _processingQueue.Enqueue(
+                                    new NetTuple<HeapMemory, IPEndPoint>(memory, (IPEndPoint)_endpoint));
+                            }
+                            else
+                            {
+                                // Process on thread
+                                HandlePacket(new ArraySegment<byte>(receiveBuffer, 0, size), (IPEndPoint)_endpoint,
+                                    true);
+                            }
                         }
-                        else
+                        catch (SocketException e)
                         {
-                            receiveBuffer = _incomingBuffer;
-                            receiveSize = _incomingBuffer.Length;
+                            // TODO: Handle ConnectionReset and ConnectionRefused for Connect? More responsive?
+                            // ConnectionReset and ConnectionRefused are triggered by local ICMP packets. Indicates remote is not present.
+                            // MessageSize is triggered by remote ICMP. Usually during path MTU
+                            if (e.SocketErrorCode != SocketError.ConnectionReset &&
+                                e.SocketErrorCode != SocketError.ConnectionRefused &&
+                                e.SocketErrorCode != SocketError.TimedOut &&
+                                e.SocketErrorCode != SocketError.MessageSize)
+                            {
+                                if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error)
+                                    Logging.LogError("Error when receiving from socket: " + e);
+                            }
                         }
-
-                        // Receive from socket
-                        int size = _selectSockets[i].ReceiveFrom(receiveBuffer, 0, receiveSize, SocketFlags.None, ref _endpoint);
-
-                        if (Config.ProcessingThreads > 0)
+                        catch (Exception e)
                         {
-                            // Set the size to prevent reading to end
-                            memory.VirtualCount = (uint)size;
-
-                            // Process off thread
-                            _processingQueue.Enqueue(new NetTuple<HeapMemory, IPEndPoint>(memory, (IPEndPoint)_endpoint));
-                        }
-                        else
-                        {
-                            // Process on thread
-                            HandlePacket(new ArraySegment<byte>(receiveBuffer, 0, size), (IPEndPoint)_endpoint, true);
+                            if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error)
+                                Logging.LogError("Error when receiving from socket: " + e);
                         }
                     }
-                    catch (SocketException e)
+
+                    // If we have no logic thread. Run logic on receive thread
+                    if (Config.LogicThreads <= 0 && (NetTime.Now - _lastLogicRun).TotalMilliseconds > Config.LogicDelay)
                     {
-                        // TODO: Handle ConnectionReset and ConnectionRefused for Connect? More responsive?
-                        // ConnectionReset and ConnectionRefused are triggered by local ICMP packets. Indicates remote is not present.
-                        // MessageSize is triggered by remote ICMP. Usually during path MTU
-                        if (e.SocketErrorCode != SocketError.ConnectionReset && e.SocketErrorCode != SocketError.ConnectionRefused && e.SocketErrorCode != SocketError.TimedOut && e.SocketErrorCode != SocketError.MessageSize)
+                        // Run logic
+
+                        if (Simulator != null)
                         {
-                            if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                            Simulator.RunLoop();
                         }
-                    }
-                    catch (Exception e)
-                    {
-                        if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+
+                        for (Connection connection = _headConnection;
+                             connection != null;
+                             connection = connection.NextConnection)
+                        {
+                            connection.Update();
+                        }
                     }
                 }
-
-                // If we have no logic thread. Run logic on receive thread
-                if (Config.LogicThreads <= 0 && (NetTime.Now - _lastLogicRun).TotalMilliseconds > Config.LogicDelay)
+                catch (SocketException e)
                 {
-                    // Run logic
-
-                    if (Simulator != null)
-                    {
-                        Simulator.RunLoop();
-                    }
-
-                    for (Connection connection = _headConnection; connection != null; connection = connection.NextConnection)
-                    {
-                        connection.Update();
-                    }
+                    // Select cancel
+                    if (e.ErrorCode != 10004)
+                        throw e;
                 }
             }
         }
