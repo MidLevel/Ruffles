@@ -400,6 +400,18 @@ namespace Ruffles.Core
 
                 // Stop all the threads
                 IsRunning = false;
+                
+                if (_ipv4Socket != null)
+                {
+                    // Close socket, causing early exit from threads
+                    _ipv4Socket.Close();
+                }
+
+                if (_ipv6Socket != null)
+                {
+                    // Close socket, causing early exit from threads
+                    _ipv6Socket.Close();
+                }
 
                 int threadCount = _threads.Count;
 
@@ -495,7 +507,7 @@ namespace Ruffles.Core
                     _ipv6Socket.Close();
                     _ipv6Socket = null;
                 }
-
+                
                 // Release ALL memory to GC safely. If this is not done the MemoryManager will see it as a leak
                 MemoryManager.Release();
             }
@@ -582,7 +594,7 @@ namespace Ruffles.Core
             catch (Exception e)
             {
                 // Ignore error when SIO_UDP_CONNRESET is not supported
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to set SIO_UDP_CONNRESET: " + e);
+                if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Failed to set SIO_UDP_CONNRESET: " + e);
             }
 
             try
@@ -712,7 +724,7 @@ namespace Ruffles.Core
             }
             catch (Exception e)
             {
-                if (Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Error when sending broadcast: " + e);
+                if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Debug) Logging.LogInfo("Error when sending broadcast: " + e);
             }
 
             // Release memory
@@ -862,7 +874,7 @@ namespace Ruffles.Core
                 }
                 catch (Exception e)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when running internal loop: " + e);
+                    if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when running internal loop: " + e);
                 }
             }
 
@@ -944,12 +956,12 @@ namespace Ruffles.Core
                         // MessageSize is triggered by remote ICMP. Usually during path MTU
                         if (e.SocketErrorCode != SocketError.ConnectionReset && e.SocketErrorCode != SocketError.ConnectionRefused && e.SocketErrorCode != SocketError.TimedOut && e.SocketErrorCode != SocketError.MessageSize)
                         {
-                            if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                            if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
                         }
                     }
                     catch (Exception e)
                     {
-                        if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
+                        if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when receiving from socket: " + e);
                     }
                 }
 
@@ -994,7 +1006,7 @@ namespace Ruffles.Core
             }
             catch (Exception e)
             {
-                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when processing packet: " + e);
+                if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when processing packet: " + e);
             }
         }
 
@@ -1043,12 +1055,12 @@ namespace Ruffles.Core
 
                 if (e.SocketErrorCode != SocketError.MessageSize)
                 {
-                    if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
+                    if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
                 }
             }
             catch (Exception e)
             {
-                if (Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
+                if (IsRunning && Logging.CurrentLogLevel <= LogLevel.Error) Logging.LogError("Error when sending through socket: " + e);
             }
 
             return false;
