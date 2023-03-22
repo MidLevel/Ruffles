@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Ruffles.Tests</RootNamespace>
-    <TargetFrameworks>net35;net471;net45;netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>net6.0;netcoreapp2.0;netstandard2.0;netstandard2.1</TargetFrameworks>
     <LangVersion>7</LangVersion>
   </PropertyGroup>
   <ItemGroup>
