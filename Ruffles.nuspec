@@ -13,15 +13,15 @@
     <copyright>Copyright © 2019 Albin Corén</copyright>
     <tags>lightweight high performance reliable udp protocol game network networking</tags>
     <dependencies>
-      <group targetFramework="net35"/>
-      <group targetFramework="net45"/>
-      <group targetFramework="net471"/>
-      <group targetFramework="netcoreapp2.0" />
       <group targetFramework="netstandard2.0" />
+      <group targetFramework="netstandard2.1" />
   </dependencies>
   </metadata>
   <files>
     <file src="LICENCE" target="LICENCE" />
-	  <file src="Ruffles/bin/$configuration$/netstandard2.0/**" target="lib/netstandard2.0"/>
+	  <file src="Ruffles/bin/$configuration$/netstandard2.0/Ruffles.dll" target="lib/netstandard2.0/Ruffles.dll"/>
+	  <file src="Ruffles/bin/$configuration$/netstandard2.1/Ruffles.dll" target="lib/netstandard2.0/Ruffles.pdb"/>
+    <file src="Ruffles/bin/$configuration$/netstandard2.0/Ruffles.dll" target="lib/netstandard2.1/Ruffles.dll"/>
+	  <file src="Ruffles/bin/$configuration$/netstandard2.1/Ruffles.dll" target="lib/netstandard2.1/Ruffles.pdb"/>
   </files>
 </package>
